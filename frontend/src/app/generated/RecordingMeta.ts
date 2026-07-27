@@ -29,4 +29,15 @@ createdAtMs: number, durationS: number, sampleRateHz: number,
  * Fraction of frames carrying a fundamental — the quickest signal of
  * whether a take is usable.
  */
-voicedFraction: number, onsetCount: number, };
+voicedFraction: number, onsetCount: number, 
+/**
+ * Highest absolute sample in the source, 0..1.
+ */
+peak: number, 
+/**
+ * Whether the take was driven into the rails and should be recorded again.
+ *
+ * Carried on the summary, not only inside the voiceprint, so the take list
+ * can flag a bad recording without opening every voiceprint.
+ */
+clipped: boolean, };

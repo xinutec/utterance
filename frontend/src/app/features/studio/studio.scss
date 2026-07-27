@@ -96,6 +96,17 @@
       font: var(--mat-sys-body-small);
       color: var(--mat-sys-on-surface-variant);
     }
+
+    .badge {
+      // Loud enough to notice while scanning the list, since a clipped take is
+      // worth re-recording rather than analysing.
+      display: inline-block;
+      margin-left: 0.35rem;
+      padding: 0 0.35rem;
+      border-radius: 0.25rem;
+      background: var(--mat-sys-error-container);
+      color: var(--mat-sys-on-error-container);
+    }
   }
 }
 

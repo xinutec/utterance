@@ -45,6 +45,13 @@ pub struct RecordingMeta {
     /// whether a take is usable.
     pub voiced_fraction: f32,
     pub onset_count: usize,
+    /// Highest absolute sample in the source, 0..1.
+    pub peak: f32,
+    /// Whether the take was driven into the rails and should be recorded again.
+    ///
+    /// Carried on the summary, not only inside the voiceprint, so the take list
+    /// can flag a bad recording without opening every voiceprint.
+    pub clipped: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -108,6 +115,8 @@ impl Store {
             sample_rate_hz: voiceprint.source.sample_rate_hz,
             voiced_fraction: voiceprint.pitch.voiced_fraction(),
             onset_count: voiceprint.events.onset_frames.len(),
+            peak: voiceprint.source.peak,
+            clipped: voiceprint.source.is_clipped(),
         };
 
         write(&dir.join(AUDIO), audio)?;

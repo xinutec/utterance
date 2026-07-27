@@ -26,6 +26,8 @@ const META = {
   sampleRateHz: 48_000,
   voicedFraction: 0.62,
   onsetCount: 74,
+  peak: 0.71,
+  clipped: false,
 };
 
 /** A voiceprint with enough frames that the chart draws real curves. */
@@ -33,8 +35,8 @@ function voiceprint(): unknown {
   const count = 400;
   const frames = Array.from({ length: count }, (_, i) => i);
   return {
-    schemaVersion: 1,
-    source: { sampleRateHz: 48_000, channels: 1, durationS: 28.4 },
+    schemaVersion: 2,
+    source: { sampleRateHz: 48_000, channels: 1, durationS: 28.4, peak: 0.71, clippedFraction: 0 },
     frame: { analysisRateHz: 16_000, hopS: 0.01, count },
     pitch: {
       // A contour with unvoiced gaps, so the multi-stroke path is exercised.

@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 
 /// Bumped whenever the meaning of a field changes, so a stored voiceprint is
 /// never silently reinterpreted under a newer analyser.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// 2: `Source` gained `peak` and `clippedFraction`.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -23,6 +25,33 @@ pub struct Source {
     pub sample_rate_hz: u32,
     pub channels: u16,
     pub duration_s: f32,
+    /// Highest absolute sample in the source, 0..1.
+    pub peak: f32,
+    /// Fraction of source samples pinned at full scale.
+    ///
+    /// Measured on the decoded samples *before* resampling: a band-limited
+    /// resampler rounds off the flat tops that clipping produces, so a
+    /// conversion first would hide the very thing this measures.
+    pub clipped_fraction: f32,
+}
+
+/// Fraction of pinned samples above which a recording is called clipped.
+///
+/// A single sample touching full scale is a peak that happened to land there and
+/// says nothing. A tenth of a percent of the take pinned is flat-topping, which
+/// no microphone produces and only a too-hot input does.
+pub const CLIPPING_FRACTION: f32 = 0.001;
+
+impl Source {
+    /// Whether the recording was driven into the rails.
+    ///
+    /// Worth acting on rather than noting: clipping is harmonic distortion, and
+    /// the measured amplitudes of a speaker's partials are what the tuning
+    /// mapping is meant to be derived from. A clipped take corrupts precisely
+    /// the measurement this project exists to make.
+    pub fn is_clipped(&self) -> bool {
+        self.clipped_fraction > CLIPPING_FRACTION
+    }
 }
 
 /// The frame grid every per-frame series below is indexed by.

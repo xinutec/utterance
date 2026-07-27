@@ -1,5 +1,5 @@
 import { DecimalPipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from "@angular/core";
 import { MatButtonModule } from "@angular/material/button";
 import { MatCardModule } from "@angular/material/card";
 import { MatIconModule } from "@angular/material/icon";
@@ -13,9 +13,6 @@ import { VoiceprintChart } from "./voiceprint-chart";
 
 /** Target take length, in seconds. Not enforced — just what the UI suggests. */
 const TARGET_SECONDS = 30;
-
-/** Peak level above which a take is likely clipped and worth re-recording. */
-const CLIPPING_PEAK = 0.99;
 
 @Component({
   selector: "app-studio",
@@ -38,7 +35,24 @@ export class Studio implements OnInit {
 
   /** Capture problems, which are this component's own — not the store's. */
   readonly captureError = signal<string | null>(null);
-  readonly warning = signal<string | null>(null);
+
+  /**
+   * Quality warning about the open take, read from what the analyser measured
+   * rather than judged here — so an uploaded file is checked exactly as a
+   * browser recording is.
+   */
+  readonly warning = computed(() => {
+    const detail = this.store.selected();
+    // The backend owns the threshold for "clipped"; this reads its verdict and
+    // only formats the number, so the two cannot disagree.
+    if (!detail?.meta.clipped) return null;
+    const percent = detail.voiceprint.source.clippedFraction * 100;
+    return (
+      `this take is clipped — ${percent.toFixed(1)}% of it is pinned at full scale. ` +
+      `Clipping is distortion, and it corrupts the harmonic amplitudes the tuning is derived from. ` +
+      `Worth recording again with the input a few dB lower.`
+    );
+  });
 
   readonly targetSeconds = TARGET_SECONDS;
   readonly captureSupported = Recorder.supported;
@@ -49,7 +63,6 @@ export class Studio implements OnInit {
 
   async startRecording(): Promise<void> {
     this.captureError.set(null);
-    this.warning.set(null);
     this.store.clearError();
     try {
       await this.recorder.start();
@@ -71,9 +84,6 @@ export class Studio implements OnInit {
     if (!take) {
       this.captureError.set("nothing was captured — is the right input device selected?");
       return;
-    }
-    if (take.peak >= CLIPPING_PEAK) {
-      this.warning.set("that take reached full scale and is probably clipped — worth recording again quieter");
     }
     this.store.upload(take.wav, `take ${new Date().toLocaleTimeString()}`);
   }

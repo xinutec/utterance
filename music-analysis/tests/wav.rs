@@ -64,6 +64,61 @@ fn normalises_by_full_scale_not_by_the_loudest_sample() {
 }
 
 #[test]
+fn reports_the_peak_of_the_source() {
+    let quiet = decode(&wav_bytes(&[0.3f32, -0.5, 0.2], 16_000)).unwrap();
+    assert!((quiet.peak() - 0.5).abs() < 1e-3, "got {}", quiet.peak());
+}
+
+#[test]
+fn a_clean_recording_reports_no_clipping() {
+    // A single sample touching full scale is a peak that happened to land
+    // there, not distortion — it must not raise the flag on its own.
+    let mut samples = vec![0.4f32; 1_000];
+    samples[500] = 1.0;
+    let d = decode(&wav_bytes(&samples, 16_000)).unwrap();
+    assert!(
+        d.clipped_fraction() <= 0.001,
+        "got {}",
+        d.clipped_fraction()
+    );
+}
+
+#[test]
+fn a_flat_topped_recording_reports_clipping() {
+    // What a too-hot input produces: runs of samples pinned at the rail.
+    let mut samples = vec![0.4f32; 1_000];
+    for s in samples.iter_mut().take(60) {
+        *s = 1.0;
+    }
+    let d = decode(&wav_bytes(&samples, 16_000)).unwrap();
+    assert!(
+        (d.clipped_fraction() - 0.06).abs() < 0.01,
+        "got {}",
+        d.clipped_fraction()
+    );
+}
+
+#[test]
+fn clipping_is_measured_before_resampling() {
+    // The measurement has to survive the trip through analyse_wav: a
+    // band-limited resampler rounds the flat tops off, so a conversion first
+    // would quietly hide it.
+    let mut samples = vec![0.4f32; 48_000];
+    for (i, s) in samples.iter_mut().enumerate() {
+        if i % 100 < 40 {
+            *s = 1.0;
+        }
+    }
+    let vp = music_analysis::analyse_wav(&wav_bytes(&samples, 48_000)).unwrap();
+    assert!(
+        vp.source.is_clipped(),
+        "clipping was lost: {}",
+        vp.source.clipped_fraction
+    );
+    assert!((vp.source.peak - 1.0).abs() < 1e-3);
+}
+
+#[test]
 fn rejects_non_wav_bytes() {
     assert!(matches!(
         decode(b"this is not a wav file"),

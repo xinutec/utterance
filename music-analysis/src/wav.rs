@@ -16,11 +16,38 @@ pub struct Decoded {
     pub channels: u16,
 }
 
+/// Absolute sample value at or above which a sample counts as pinned.
+///
+/// Just under 16-bit full scale (32767/32768 = 0.99997), so a genuinely
+/// maximal sample is caught whatever the source bit depth.
+const FULL_SCALE: f32 = 0.999;
+
 impl Decoded {
     /// Duration in seconds of the source recording.
     pub fn duration_s(&self) -> f32 {
         let frames = self.samples.len() / usize::from(self.channels.max(1));
         frames as f32 / self.sample_rate as f32
+    }
+
+    /// Highest absolute sample, 0..1.
+    pub fn peak(&self) -> f32 {
+        self.samples.iter().fold(0.0f32, |m, s| m.max(s.abs()))
+    }
+
+    /// Fraction of samples pinned at full scale.
+    ///
+    /// Counted on the source samples, which is the only place it can be seen:
+    /// clipping is a flat top on the waveform, and resampling rounds it off.
+    pub fn clipped_fraction(&self) -> f32 {
+        if self.samples.is_empty() {
+            return 0.0;
+        }
+        let pinned = self
+            .samples
+            .iter()
+            .filter(|s| s.abs() >= FULL_SCALE)
+            .count();
+        pinned as f32 / self.samples.len() as f32
     }
 }
 

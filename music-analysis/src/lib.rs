@@ -58,6 +58,8 @@ pub fn analyse_wav(bytes: &[u8]) -> Result<Voiceprint, AnalysisError> {
             sample_rate_hz: decoded.sample_rate,
             channels: decoded.channels,
             duration_s,
+            peak: decoded.peak(),
+            clipped_fraction: decoded.clipped_fraction(),
         },
     ))
 }

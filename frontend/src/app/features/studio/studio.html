@@ -82,6 +82,9 @@
                     {{ take.durationS | number: "1.1-1" }}s ·
                     {{ take.voicedFraction * 100 | number: "1.0-0" }}% voiced ·
                     {{ take.onsetCount }} onsets
+                    @if (take.clipped) {
+                      <span class="badge">clipped</span>
+                    }
                   </span>
                 </button>
                 <button

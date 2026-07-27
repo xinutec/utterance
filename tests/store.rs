@@ -59,6 +59,8 @@ fn a_voiceprint() -> Voiceprint {
             sample_rate_hz: ANALYSIS_RATE,
             channels: 1,
             duration_s: 1.0,
+            peak: 1.0,
+            clipped_fraction: 0.0,
         },
     )
 }
@@ -66,13 +68,18 @@ fn a_voiceprint() -> Voiceprint {
 #[test]
 fn stores_and_reads_back_a_recording() {
     let store = TempStore::open();
+    let stored = a_voiceprint();
     let meta = store
-        .put(b"fake audio bytes", "brother, take 1", &a_voiceprint())
+        .put(b"fake audio bytes", "brother, take 1", &stored)
         .unwrap();
 
     assert_eq!(store.audio(&meta.id).unwrap(), b"fake audio bytes");
     assert_eq!(store.meta(&meta.id).unwrap().label, "brother, take 1");
-    assert_eq!(store.voiceprint(&meta.id).unwrap().schema_version, 1);
+    // Compared against what went in rather than a literal, so bumping the
+    // schema version does not require editing this test.
+    let read_back = store.voiceprint(&meta.id).unwrap();
+    assert_eq!(read_back.schema_version, stored.schema_version);
+    assert_eq!(read_back.frame.count, stored.frame.count);
 }
 
 #[test]

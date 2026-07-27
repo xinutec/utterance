@@ -7,8 +7,6 @@ export interface Take {
   readonly wav: Blob;
   readonly durationS: number;
   readonly sampleRateHz: number;
-  /** Highest absolute sample in the take, 0..1 — how close it came to clipping. */
-  readonly peak: number;
 }
 
 /**
@@ -87,15 +85,10 @@ export class Recorder {
     this.level.set(0);
     if (samples.length === 0) return null;
 
-    let peak = 0;
-    for (const s of samples) peak = Math.max(peak, Math.abs(s));
-
-    return {
-      wav: encodeWav(samples, sampleRateHz),
-      durationS: samples.length / sampleRateHz,
-      sampleRateHz,
-      peak,
-    };
+    // Clipping is not judged here. It is a property of the audio, so the
+    // analyser measures it once for every take however it arrived — recorded
+    // in this browser or uploaded as a file — and the UI reads that one answer.
+    return { wav: encodeWav(samples, sampleRateHz), durationS: samples.length / sampleRateHz, sampleRateHz };
   }
 
   /** Abandon a capture without producing a take. */

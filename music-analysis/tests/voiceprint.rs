@@ -12,6 +12,8 @@ fn source(secs: f32) -> Source {
         sample_rate_hz: ANALYSIS_RATE,
         channels: 1,
         duration_s: secs,
+        peak: 1.0,
+        clipped_fraction: 0.0,
     }
 }
 

@@ -172,7 +172,7 @@ async fn uploading_a_recording_returns_its_voiceprint() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["meta"]["label"], "take-1");
-    assert_eq!(body["voiceprint"]["schemaVersion"], 1);
+    assert_eq!(body["voiceprint"]["schemaVersion"], 2);
     assert_eq!(body["voiceprint"]["frame"]["analysisRateHz"], 16_000);
 
     // The point of the whole pipeline: a voice-shaped input must come back with
@@ -188,6 +188,12 @@ async fn uploading_a_recording_returns_its_voiceprint() {
         "voiced fraction was {}",
         body["meta"]["voicedFraction"]
     );
+
+    // Recording quality reaches the summary, so the take list can flag a bad
+    // take without opening every voiceprint. This fixture sits below the rail.
+    assert_eq!(body["meta"]["clipped"], false);
+    assert!(body["meta"]["peak"].as_f64().unwrap() < 0.99);
+
     assert!(
         body["meta"]["onsetCount"].as_u64().unwrap() >= 3,
         "expected an onset per burst"
@@ -217,7 +223,7 @@ async fn a_recording_can_be_listed_fetched_and_deleted() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(detail["voiceprint"]["schemaVersion"], 1);
+    assert_eq!(detail["voiceprint"]["schemaVersion"], 2);
 
     let audio = app
         .router
