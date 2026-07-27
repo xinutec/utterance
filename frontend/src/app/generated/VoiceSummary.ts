@@ -10,11 +10,19 @@ export type VoiceSummary = {
  */
 tonicHz: number, degrees: Array<ScaleDegree>, 
 /**
- * Relative amplitude per harmonic, the speaker's own measured spectrum.
+ * Spectra the tone moves between, ordered dark to bright.
+ *
+ * One per calibration take that held a pitch — the speaker's own vowels,
+ * which is what gives the output a timbre that moves rather than one fixed
+ * colour.
  */
-timbre: Array<number>, 
+palette: Array<Array<number>>, 
 /**
- * Which recording the scale and timbre were derived from.
+ * Spread among partials in cents, from the speaker's own pitch instability.
+ */
+detuneCents: number, 
+/**
+ * Which recording the scale was derived from.
  */
 calibrationId: string, calibrationLabel: string, 
 /**

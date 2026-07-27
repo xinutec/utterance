@@ -9,10 +9,13 @@ use music_mapping::score::{Event, Score};
 use music_realisation::synth::{self, RENDER_RATE};
 use music_realisation::wav;
 
-fn score(events: Vec<Event>, duration_s: f32, timbre: Vec<f32>) -> Score {
+/// A score with one fixed spectrum, so a test that is not about colour need not
+/// mention it.
+fn score(events: Vec<Event>, duration_s: f32, spectrum: Vec<f32>) -> Score {
     Score {
         duration_s,
-        timbre,
+        palette: vec![spectrum],
+        detune_cents: 0.0,
         events,
     }
 }
@@ -23,6 +26,9 @@ fn note(start_s: f32, duration_s: f32, hz: f32) -> Event {
         duration_s,
         hz,
         amplitude: 1.0,
+        colour_from: 0.0,
+        colour_to: 0.0,
+        breath: 0.0,
     }
 }
 
@@ -121,16 +127,12 @@ fn keeps_the_dynamics_the_score_carried() {
     let s = score(
         vec![
             Event {
-                start_s: 0.0,
-                duration_s: 0.4,
-                hz: 300.0,
                 amplitude: 1.0,
+                ..note(0.0, 0.4, 300.0)
             },
             Event {
-                start_s: 0.5,
-                duration_s: 0.4,
-                hz: 300.0,
                 amplitude: 0.25,
+                ..note(0.5, 0.4, 300.0)
             },
         ],
         1.0,
@@ -193,4 +195,147 @@ fn writes_a_wav_the_analyser_can_read_back() {
     assert_eq!(&bytes[8..12], b"WAVE");
     let rate = u32::from_le_bytes([bytes[24], bytes[25], bytes[26], bytes[27]]);
     assert_eq!(rate, RENDER_RATE);
+}
+
+/// How bright a slice sounds, without an FFT.
+///
+/// The RMS of the signal's first difference over the RMS of the signal.
+/// Differencing is a high-pass, so the ratio rises with energy at the top of the
+/// spectrum. Counting zero crossings was tried first and is useless here: it
+/// reports whichever partial is strongest and does not move at all under a tilt
+/// that changes every partial's level but not their ranking.
+fn brightness(samples: &[f32]) -> f32 {
+    let rms = |xs: &[f32]| (xs.iter().map(|v| v * v).sum::<f32>() / xs.len().max(1) as f32).sqrt();
+    let slope: Vec<f32> = samples.windows(2).map(|w| w[1] - w[0]).collect();
+    let level = rms(samples);
+    if level <= 0.0 {
+        0.0
+    } else {
+        rms(&slope) / level
+    }
+}
+
+/// A dark spectrum and a bright one, for tests about colour.
+fn dark() -> Vec<f32> {
+    vec![1.0, 0.3, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0]
+}
+fn bright() -> Vec<f32> {
+    vec![0.05, 0.1, 0.2, 0.4, 0.7, 1.0, 0.7, 0.4]
+}
+
+#[test]
+fn a_note_changes_colour_across_its_length() {
+    // The reason the score carries two colours. A spectrum that holds still is
+    // the dead-organ sound the whole widening was for.
+    let s = Score {
+        duration_s: 2.0,
+        palette: vec![dark(), bright()],
+        detune_cents: 0.0,
+        events: vec![Event {
+            colour_from: 0.0,
+            colour_to: 1.0,
+            ..note(0.0, 2.0, 200.0)
+        }],
+    };
+    let rendered = synth::render(&s);
+    let quarter = rendered.len() / 4;
+
+    let start = brightness(&rendered[..quarter]);
+    let end = brightness(&rendered[2 * quarter..3 * quarter]);
+    assert!(
+        end > start * 1.5,
+        "colour did not travel: brightness {start:.4} at the start, {end:.4} later"
+    );
+}
+
+#[test]
+fn a_note_darkens_as_it_decays() {
+    // Damping rises with frequency in every real resonator, so the attack is the
+    // brightest moment. Without it a decaying note keeps its attack brightness
+    // all the way down, which reads as synthetic long before anyone says why.
+    let s = score(vec![note(0.0, 2.0, 150.0)], 2.0, bright());
+    let rendered = synth::render(&s);
+    let fifth = rendered.len() / 5;
+
+    let early = brightness(&rendered[fifth / 2..fifth]);
+    let late = brightness(&rendered[3 * fifth..4 * fifth]);
+    assert!(
+        late < early,
+        "the tone did not darken: brightness {early:.4} early, {late:.4} late"
+    );
+}
+
+#[test]
+fn breath_puts_noise_in_the_tone() {
+    // Silence between the harmonics is what makes pure additive synthesis sound
+    // sterile. A breathy note must carry energy where no partial is.
+    let pitched = score(vec![note(0.0, 1.0, 200.0)], 1.0, dark());
+    let breathy = Score {
+        events: vec![Event {
+            breath: 0.6,
+            ..note(0.0, 1.0, 200.0)
+        }],
+        ..score(Vec::new(), 1.0, dark())
+    };
+
+    // Noise crosses zero far more often than a tone of the same pitch does.
+    let clean = brightness(&synth::render(&pitched));
+    let noisy = brightness(&synth::render(&breathy));
+    assert!(
+        noisy > clean * 2.0,
+        "breath added no noise: brightness {clean:.4} clean vs {noisy:.4} breathy"
+    );
+}
+
+#[test]
+fn detune_pulls_partials_off_their_exact_harmonics() {
+    // Perfectly locked partials are what a computer makes and nothing else does.
+    // Detuned ones beat against each other, so the envelope of a sustained note
+    // stops being flat.
+    let flat = score(vec![note(0.0, 2.0, 200.0)], 2.0, bright());
+    let detuned = Score {
+        detune_cents: 10.0,
+        ..score(vec![note(0.0, 2.0, 200.0)], 2.0, bright())
+    };
+
+    let spread = |samples: Vec<f32>| {
+        // Peak amplitude per 50 ms window; beating makes these vary.
+        let window = RENDER_RATE as usize / 20;
+        let peaks: Vec<f32> = samples
+            .chunks(window)
+            .map(|c| c.iter().fold(0.0f32, |m, s| m.max(s.abs())))
+            .collect();
+        let mean = peaks.iter().sum::<f32>() / peaks.len() as f32;
+        peaks.iter().map(|p| (p - mean).abs()).sum::<f32>() / peaks.len() as f32
+    };
+
+    assert!(
+        spread(synth::render(&detuned)) > spread(synth::render(&flat)),
+        "detune produced no beating"
+    );
+}
+
+#[test]
+fn a_palette_of_one_still_renders() {
+    // The state a speaker is in after a single calibration take. It should sound
+    // like the old fixed timbre, not like silence.
+    let s = score(vec![note(0.0, 0.5, 300.0)], 0.5, dark());
+    let peak = synth::render(&s).iter().fold(0.0f32, |m, v| m.max(v.abs()));
+    assert!(
+        peak > 0.5,
+        "a one-entry palette rendered at a peak of {peak}"
+    );
+}
+
+#[test]
+fn an_empty_palette_renders_silence_rather_than_guessing() {
+    // Inventing a spectrum would put energy where the speaker's tract put none,
+    // and report success while doing it.
+    let s = Score {
+        duration_s: 1.0,
+        palette: Vec::new(),
+        detune_cents: 0.0,
+        events: vec![note(0.0, 0.5, 300.0)],
+    };
+    assert!(synth::render(&s).iter().all(|&v| v == 0.0));
 }

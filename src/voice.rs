@@ -5,10 +5,11 @@
 //! serves as calibration, how the speaker profile is pooled, what gets rendered.
 //! No measurement, no aesthetics.
 
+use music_analysis::partials::Partials;
 use music_analysis::speaker::{self, SpeakerProfile};
 use music_analysis::voiceprint::Voiceprint;
 use music_mapping::tuning;
-use music_mapping::voice::Voice;
+use music_mapping::voice::{self, Voice};
 
 use crate::error::AppError;
 use crate::store::{RecordingMeta, Store};
@@ -107,12 +108,34 @@ pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated,
             })?,
     };
 
-    let voice =
-        Voice::from_calibration(&voiceprint.partials, space, tonic_hz).ok_or_else(|| {
-            AppError::BadRequest(
-                "that take has too thin a harmonic series to derive a scale from".into(),
-            )
-        })?;
+    // Every take that held a pitch contributes a spectrum to the palette, not
+    // just the one the scale came from. A speaker who recorded several vowels
+    // handed over several genuinely different spectra from one throat, and using
+    // one of them is how the first renders came out with a tone that never
+    // moved. Ordering happens in the mapping layer, by brightness.
+    let palette: Vec<&Partials> = takes
+        .iter()
+        .map(|(_, v)| &v.partials)
+        .filter(|p| p.frames_used >= MIN_CALIBRATION_FRAMES)
+        .collect();
+
+    // Jitter from the calibration take rather than from whatever was said: it is
+    // a property of a throat, and reading it from an excited utterance would
+    // make the timbre depend on the mood.
+    let detune_cents = voice::jitter_cents(&voiceprint.pitch.hz);
+
+    let voice = Voice::from_calibration(
+        &voiceprint.partials,
+        &palette,
+        detune_cents,
+        space,
+        tonic_hz,
+    )
+    .ok_or_else(|| {
+        AppError::BadRequest(
+            "that take has too thin a harmonic series to derive a scale from".into(),
+        )
+    })?;
 
     Ok(Calibrated {
         voice,

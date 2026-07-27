@@ -141,9 +141,15 @@ pub struct VoiceSummary {
     /// Where the music centres — this speaker's median pitch.
     pub tonic_hz: f32,
     pub degrees: Vec<ScaleDegree>,
-    /// Relative amplitude per harmonic, the speaker's own measured spectrum.
-    pub timbre: Vec<f32>,
-    /// Which recording the scale and timbre were derived from.
+    /// Spectra the tone moves between, ordered dark to bright.
+    ///
+    /// One per calibration take that held a pitch — the speaker's own vowels,
+    /// which is what gives the output a timbre that moves rather than one fixed
+    /// colour.
+    pub palette: Vec<Vec<f32>>,
+    /// Spread among partials in cents, from the speaker's own pitch instability.
+    pub detune_cents: f32,
+    /// Which recording the scale was derived from.
     pub calibration_id: String,
     pub calibration_label: String,
     /// How many takes went into the speaker profile.
@@ -169,7 +175,8 @@ pub async fn voice_summary(
                 depth: d.depth,
             })
             .collect(),
-        timbre: calibrated.voice.timbre.clone(),
+        palette: calibrated.voice.palette.clone(),
+        detune_cents: calibrated.voice.detune_cents,
         calibration_id: calibrated.source.id.clone(),
         calibration_label: calibrated.source.label.clone(),
         takes: calibrated.profile.takes,

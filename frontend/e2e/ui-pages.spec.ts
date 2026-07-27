@@ -79,7 +79,11 @@ const VOICE = {
     { cents: 884, ratio: 1.666, depth: 0.155 },
     { cents: 1200, ratio: 2, depth: 0 },
   ],
-  timbre: Array.from({ length: 24 }, (_, k) => 1 / (k + 1)),
+  palette: [
+    Array.from({ length: 24 }, (_, k) => 1 / (k + 1)),
+    Array.from({ length: 24 }, (_, k) => 0.2 + 0.03 * k),
+  ],
+  detuneCents: 3.4,
   calibrationId: "0123456789abcdef",
   calibrationLabel: "steady-ah",
   takes: 7,
@@ -162,6 +166,14 @@ test("studio — the derived scale lays out cleanly @ phone", async ({ page }, t
   await page.goto("/");
   await page.getByRole("button", { name: "Render as music" }).click();
   await page.getByText("The scale this voice implies").waitFor();
+
+  // Clicking auto-scrolled the button into view, which leaves content under the
+  // sticky toolbar. The toolbar is opaque, so that is not a visual defect — but
+  // the overlap check measures geometry and cannot know that. Return to the top
+  // so the assertions describe the layout rather than the scroll position.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);

@@ -15,9 +15,18 @@
   @if (voice(); as summary) {
     <p class="provenance">
       Tonic {{ summary.tonicHz | number: "1.0-1" }} Hz · scale from
-      <strong>{{ summary.calibrationLabel }}</strong> · timbre of
-      {{ summary.timbre.length }} measured partials
+      <strong>{{ summary.calibrationLabel }}</strong> ·
+      {{ summary.palette.length }} measured
+      {{ summary.palette.length === 1 ? "spectrum" : "spectra" }} to move between ·
+      {{ summary.detuneCents | number: "1.0-1" }}¢ of the speaker's own detune
     </p>
+
+    @if (summary.palette.length < 2) {
+      <p class="note">
+        Only one usable spectrum, so the tone cannot travel. Recording the other calibration
+        vowels gives it somewhere to go.
+      </p>
+    }
 
     <h4 class="heading">The scale this voice implies</h4>
     <ul class="degrees">

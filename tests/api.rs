@@ -493,7 +493,15 @@ async fn the_voice_summary_describes_the_derived_scale() {
         "no fifth in {degrees:?}"
     );
 
-    assert!(!body["timbre"].as_array().unwrap().is_empty());
+    // The palette is what gives the tone somewhere to travel; an empty one
+    // renders silence, and a single entry renders a colour that never moves.
+    let palette = body["palette"].as_array().unwrap();
+    assert!(!palette.is_empty(), "no spectra to synthesise from");
+    assert!(
+        !palette[0].as_array().unwrap().is_empty(),
+        "a spectrum with no partials in it"
+    );
+    assert!(body["detuneCents"].as_f64().unwrap() >= 0.0);
 }
 
 #[tokio::test]

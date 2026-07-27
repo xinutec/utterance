@@ -1,8 +1,7 @@
-//! A voiceprint and a tuning become a score.
+//! A voiceprint and a voice become a score.
 //!
-//! The first mapping in the project that produces something playable, and the
-//! crudest thing that could be called one. Every rule below is a decision, none
-//! is forced by the measurements, and all of them are meant to be replaced:
+//! Every rule below is a decision, none is forced by the measurements, and all
+//! of them are meant to be replaced:
 //!
 //! - **when** a note happens: at a detected onset
 //! - **how long** it lasts: until the next onset
@@ -10,18 +9,25 @@
 //!   speaker's own vowel space
 //! - **which octave**: from where it sat top-to-bottom in that same space
 //! - **how loud**: from the energy envelope at that moment
+//! - **what colour**: from how bright the vowel was, and where it moved to
+//!   during the note
+//! - **how breathy**: from how periodic the voice was there
 //!
-//! The weak link is the first. Onsets mean *the spectrum changed here*, not *a
-//! syllable began here*, and until the stress hierarchy exists the rhythm will
-//! be wrong in ways that have nothing to do with this mapping's taste. That is
-//! documented in `docs/roadmap.md` and is the reason to hear this before
-//! polishing anything else.
+//! The last two exist because the first version read four of the roughly ten
+//! streams a voice emits and turned them into notes — the exact failure
+//! `docs/architecture.md` warns about, a controller richer than the thing it
+//! controls. Aperiodicity and formant *movement* are two more of them.
 //!
-//! The vowel-to-pitch rule is the part worth arguing about. Mapping frontness to
-//! scale degree and openness to register is legible — closed front vowels come
-//! out high and bright, open back vowels low — but it is one choice out of
-//! many, and it spends a two-dimensional measurement on a one-dimensional scale
-//! plus an octave.
+//! The weak link remains the first rule. Onsets mean *the spectrum changed
+//! here*, not *a syllable began here*, and until the stress hierarchy exists the
+//! rhythm will be wrong in ways that have nothing to do with this mapping's
+//! taste.
+//!
+//! **Where this stops short of resynthesis.** Colour follows the speaker's own
+//! formant movement, which is articulation driving timbre — control, not
+//! playback. What keeps it from sounding like speech is that those spectra are
+//! applied to derived pitches at derived timings: the mouth shapes the tone, it
+//! does not utter it.
 
 use music_analysis::voiceprint::Voiceprint;
 
@@ -60,10 +66,25 @@ const VOWEL_SEARCH_FRAMES: usize = 12;
 /// the detector rather than anything the speaker did.
 const SILENCE_FLOOR: f32 = 0.02;
 
+/// Aperiodicity at which a note is treated as entirely breath.
+///
+/// YIN's normalised difference runs from 0 for a perfectly periodic frame to
+/// about 1 for noise. Voicing is decided far below this, so a frame reaching it
+/// is one where the tracker found a pitch it barely believes — which is exactly
+/// the breathy phonation worth hearing as noise rather than discarding.
+const FULL_BREATH_APERIODICITY: f32 = 0.6;
+
+/// Most of a note that may be noise.
+///
+/// A note that is all breath carries no pitch, and a piece made of them carries
+/// no tuning. Reading breathiness is for texture, not for removing the thing the
+/// texture is made of.
+const MAX_BREATH: f32 = 0.7;
+
 /// Turn a voiceprint into a score, in the world a [`Voice`] describes.
 ///
 /// The voice comes from the speaker's calibration rather than from this take.
-/// They are facts about the person, and reading them from the utterance would
+/// Those are facts about the person, and reading them from the utterance would
 /// make the same sentence produce a different piece depending on how much of the
 /// speaker's range it happened to use.
 pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
@@ -99,18 +120,37 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
             .get(n + 1)
             .map(|&f| f as f32 * vp.frame.hop_s)
             .unwrap_or(vp.source.duration_s);
+        let duration_s = (next_s - start_s).clamp(MIN_NOTE_S, MAX_NOTE_S);
+
+        // Colour tracks the vowel across the note rather than freezing it at the
+        // attack, so a syllable whose mouth moves produces a tone that moves.
+        //
+        // Clamped to the last frame that exists: a note running to the end of
+        // the take lands one past the series, and without this the final note —
+        // and any note held to the end — would silently lose its colour
+        // movement while every other note kept it.
+        let end_frame = (frame + (duration_s / vp.frame.hop_s) as usize)
+            .min(vp.formants.f1.len().saturating_sub(1));
+        let colour_from = front.clamp(0.0, 1.0);
+        let colour_to = vowel_near(vp, end_frame)
+            .map(|(a, b)| voice.space.normalise(a, b).1.clamp(0.0, 1.0))
+            .unwrap_or(colour_from);
 
         events.push(Event {
             start_s,
-            duration_s: (next_s - start_s).clamp(MIN_NOTE_S, MAX_NOTE_S),
+            duration_s,
             hz: voice.tonic_hz * 2f32.powf(register) * degree.ratio,
             amplitude,
+            colour_from,
+            colour_to,
+            breath: breath_at(vp, frame),
         });
     }
 
     Score {
         duration_s: vp.source.duration_s,
-        timbre: voice.timbre.clone(),
+        palette: voice.palette.clone(),
+        detune_cents: voice.detune_cents,
         events,
     }
 }
@@ -119,9 +159,21 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
 fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
     Score {
         duration_s: vp.source.duration_s,
-        timbre: voice.timbre.clone(),
+        palette: voice.palette.clone(),
+        detune_cents: voice.detune_cents,
         events: Vec::new(),
     }
+}
+
+/// How much of a note should be breath, from how periodic the voice was.
+fn breath_at(vp: &Voiceprint, frame: usize) -> f32 {
+    let aperiodicity = vp
+        .pitch
+        .aperiodicity
+        .get(frame)
+        .copied()
+        .unwrap_or_default();
+    (aperiodicity / FULL_BREATH_APERIODICITY).clamp(0.0, 1.0) * MAX_BREATH
 }
 
 /// Which degree a normalised position picks.
@@ -131,6 +183,10 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
 /// error — and this is where they stop being real, because a scale has ends.
 /// Clamping is the decision; it happens once, here, rather than being smeared
 /// through the measurement layers that had no business making it.
+///
+/// The same frontness also picks the colour above, which is a real cost worth
+/// naming: two dimensions of the output move together where the voice offered
+/// them separately. Untangling that needs a mapping that spends F2 once.
 fn index_of(position: f32, count: usize) -> usize {
     let scaled = position * (count - 1) as f32;
     (scaled.round().max(0.0) as usize).min(count - 1)

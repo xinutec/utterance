@@ -10,6 +10,7 @@ use music_analysis::partials::{Partial, Partials};
 use music_analysis::speaker::VowelSpace;
 use music_analysis::voiceprint::{Events, Formants, FrameGrid, Pitch, Source, Voiceprint};
 use music_mapping::compose::compose;
+use music_mapping::score::centroid;
 use music_mapping::voice::Voice;
 
 /// A speaker whose vowel space is a convenient unit square in Hz.
@@ -33,8 +34,29 @@ fn calibration() -> Partials {
     }
 }
 
+/// A second, brighter spectrum, so the palette has an axis to travel along.
+fn brighter() -> Partials {
+    Partials {
+        frames_used: 500,
+        f0_hz: Some(120.0),
+        partials: (1..=16)
+            .map(|k| Partial {
+                number: k,
+                ratio: k as f32,
+                // Rising toward the top rather than falling: a genuinely
+                // different colour from `calibration`, not a louder copy.
+                amplitude: 0.2 + 0.05 * k as f32,
+                presence: 1.0,
+            })
+            .collect(),
+    }
+}
+
 fn voice() -> Voice {
-    Voice::from_calibration(&calibration(), space(), 120.0).expect("a rich spectrum gives a voice")
+    let dark = calibration();
+    let light = brighter();
+    Voice::from_calibration(&dark, &[&dark, &light], 4.0, space(), 120.0)
+        .expect("a rich spectrum gives a voice")
 }
 
 /// A take with onsets at the given frames, each carrying the vowel beside it.
@@ -208,13 +230,79 @@ fn carries_the_dynamics_of_the_take() {
 }
 
 #[test]
-fn carries_the_speakers_own_timbre_into_the_score() {
+fn carries_the_speakers_own_palette_into_the_score() {
     // The score is what reaches the synthesiser, and a tuning derived from one
     // spectrum is only consonant for tones that have it.
     let vp = take(&[0], &[MIDDLE], 100, true);
     let v = voice();
-    assert_eq!(compose(&vp, &v).timbre, v.timbre);
-    assert!(!v.timbre.is_empty());
+    let score = compose(&vp, &v);
+    assert_eq!(score.palette, v.palette);
+    assert_eq!(score.detune_cents, v.detune_cents);
+    assert_eq!(
+        v.palette.len(),
+        2,
+        "both calibration spectra should survive"
+    );
+}
+
+#[test]
+fn orders_the_palette_dark_to_bright() {
+    // `colour` only means anything if the axis is ordered, and brightness is the
+    // one a listener can follow.
+    let v = voice();
+    let centroids: Vec<f32> = v.palette.iter().map(|s| centroid(s)).collect();
+    assert!(
+        centroids[0] < centroids[1],
+        "palette is not ordered by brightness: {centroids:?}"
+    );
+}
+
+#[test]
+fn a_vowel_that_moves_gives_a_note_whose_colour_moves() {
+    // The reason colour is two numbers. A syllable whose mouth travels should
+    // produce a tone that travels with it.
+    let mut vp = take(&[0], &[BACK], 100, true);
+    for i in 40..100 {
+        vp.formants.f1[i] = Some(FRONT.0);
+        vp.formants.f2[i] = Some(FRONT.1);
+    }
+    let event = &compose(&vp, &voice()).events[0];
+    assert!(
+        event.colour_to > event.colour_from + 0.3,
+        "colour barely moved: {} to {}",
+        event.colour_from,
+        event.colour_to
+    );
+}
+
+#[test]
+fn a_steady_vowel_gives_a_note_whose_colour_holds() {
+    let vp = take(&[0], &[MIDDLE], 100, true);
+    let event = &compose(&vp, &voice()).events[0];
+    assert!((event.colour_to - event.colour_from).abs() < 1e-6);
+}
+
+#[test]
+fn a_less_periodic_voice_gives_a_breathier_note() {
+    // Aperiodicity was measured from the first commit and read by nothing until
+    // now — one of the streams the mapping was throwing away.
+    let mut clean = take(&[0], &[MIDDLE], 100, true);
+    for slot in clean.pitch.aperiodicity.iter_mut() {
+        *slot = 0.02;
+    }
+    let mut breathy = take(&[0], &[MIDDLE], 100, true);
+    for slot in breathy.pitch.aperiodicity.iter_mut() {
+        *slot = 0.5;
+    }
+
+    let v = voice();
+    let quiet_breath = compose(&clean, &v).events[0].breath;
+    let much_breath = compose(&breathy, &v).events[0].breath;
+    assert!(
+        much_breath > quiet_breath + 0.2,
+        "breath did not follow aperiodicity: {quiet_breath} vs {much_breath}"
+    );
+    assert!(much_breath < 1.0, "a note should never be entirely noise");
 }
 
 #[test]
