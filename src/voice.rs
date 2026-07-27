@@ -79,24 +79,33 @@ pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated,
             .iter()
             .find(|(m, _)| m.id == id)
             .ok_or_else(|| AppError::BadRequest(format!("no recording {id}")))?,
+        // Eligibility first, preference second. Choosing the richest scale
+        // across *all* takes and checking the bar afterwards picks a take that
+        // measured a lively spectrum out of a second of audio and then refuses
+        // to use it — reporting no music while a perfectly good calibration take
+        // sits in the store unexamined.
         None => takes
             .iter()
+            .filter(|(_, v)| v.partials.frames_used >= MIN_CALIBRATION_FRAMES)
             .max_by_key(|(_, v)| {
                 let degrees = tuning::from_partials(&v.partials)
                     .map(|t| t.degrees.len())
                     .unwrap_or(0);
                 (degrees, v.partials.frames_used)
             })
-            .expect("takes is not empty"),
+            .ok_or_else(|| {
+                let best = takes
+                    .iter()
+                    .map(|(_, v)| v.partials.frames_used)
+                    .max()
+                    .unwrap_or(0);
+                AppError::BadRequest(format!(
+                    "no take holds a steady pitch for long enough to derive a scale — \
+                     the longest managed {best} frames of {MIN_CALIBRATION_FRAMES}. \
+                     Record a sustained vowel of a few seconds."
+                ))
+            })?,
     };
-
-    if voiceprint.partials.frames_used < MIN_CALIBRATION_FRAMES {
-        return Err(AppError::BadRequest(format!(
-            "the best calibration take holds a steady pitch for only {} frames — \
-             record a sustained vowel of a few seconds",
-            voiceprint.partials.frames_used
-        )));
-    }
 
     let voice =
         Voice::from_calibration(&voiceprint.partials, space, tonic_hz).ok_or_else(|| {

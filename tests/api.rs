@@ -571,3 +571,22 @@ async fn an_unknown_calibration_take_is_refused_rather_than_ignored() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn a_short_lively_take_does_not_block_a_usable_one() {
+    // Eligibility before preference. A brief take can measure a rich-looking
+    // spectrum, and choosing on richness alone would pick it and then refuse it
+    // for being too short — reporting no music while a good calibration take sat
+    // in the store unexamined.
+    let app = TestApp::new();
+    upload(&app, "brief", wav_fixture_moving_vowel(1.5)).await;
+    upload(&app, "usable", wav_fixture_moving_vowel(9.0)).await;
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["calibrationLabel"], "usable");
+}
