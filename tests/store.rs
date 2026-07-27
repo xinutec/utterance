@@ -65,6 +65,71 @@ fn a_voiceprint() -> Voiceprint {
     )
 }
 
+/// Real WAV bytes, so a record can be re-analysed from its audio.
+fn wav(secs: f32) -> Vec<u8> {
+    let n = (ANALYSIS_RATE as f32 * secs) as usize;
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: ANALYSIS_RATE,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut w = hound::WavWriter::new(&mut buf, spec).expect("wav writer");
+        for i in 0..n {
+            let t = i as f32 / ANALYSIS_RATE as f32;
+            let v = (2.0 * std::f32::consts::PI * 140.0 * t).sin() * 0.5;
+            w.write_sample((v * 32_767.0) as i16).expect("write sample");
+        }
+        w.finalize().expect("finalize");
+    }
+    buf.into_inner()
+}
+
+#[test]
+fn a_stale_voiceprint_is_re_analysed_from_its_audio() {
+    // The whole reason bumping SCHEMA_VERSION is cheap: the audio is the source
+    // of truth and analysis is deterministic, so an out-of-date voiceprint is a
+    // stale cache, not lost data.
+    let store = TempStore::open();
+    let audio = wav(1.0);
+    let meta = store.put(&audio, "an old take", &a_voiceprint()).unwrap();
+
+    // Downgrade the stored voiceprint the way a schema bump leaves it: an old
+    // version, missing the fields the current analyser adds.
+    let path = store.path().join(&meta.id).join("voiceprint.json");
+    fs::write(
+        &path,
+        r#"{"schemaVersion":1,"source":{"sampleRateHz":16000}}"#,
+    )
+    .unwrap();
+
+    let rebuilt = store.voiceprint(&meta.id).unwrap();
+    assert_eq!(rebuilt.schema_version, a_voiceprint().schema_version);
+    assert!(
+        rebuilt.frame.count > 0,
+        "re-analysis produced an empty voiceprint"
+    );
+    // The label is the one thing not recoverable from audio; it must survive.
+    assert_eq!(store.meta(&meta.id).unwrap().label, "an old take");
+}
+
+#[test]
+fn a_rebuild_keeps_the_original_ordering() {
+    // created_at_ms is preserved across a re-analysis, so refreshing a stale
+    // record does not jump it to the top of the take list.
+    let store = TempStore::open();
+    let meta = store.put(&wav(1.0), "old", &a_voiceprint()).unwrap();
+    let path = store.path().join(&meta.id).join("voiceprint.json");
+    fs::write(&path, r#"{"schemaVersion":1}"#).unwrap();
+
+    assert_eq!(
+        store.meta(&meta.id).unwrap().created_at_ms,
+        meta.created_at_ms
+    );
+}
+
 #[test]
 fn stores_and_reads_back_a_recording() {
     let store = TempStore::open();

@@ -13,7 +13,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use music_analysis::voiceprint::Voiceprint;
+use music_analysis::voiceprint::{self, Voiceprint};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -125,6 +125,75 @@ impl Store {
         Ok(meta)
     }
 
+    /// Bring a record up to the current analyser, re-analysing if it is stale.
+    ///
+    /// The audio is the source of truth and analysis is a pure function of it,
+    /// so a voiceprint is a *cache*, not a record — it can always be rebuilt.
+    /// That is what makes bumping [`SCHEMA_VERSION`] cheap, and this project
+    /// will bump it every time the analyser learns to measure something new.
+    ///
+    /// The alternative — defaulting the missing fields — would answer "was this
+    /// take clipped?" with "no" for every recording made before we could tell.
+    /// A wrong answer is worse than the work of recomputing the right one.
+    pub fn ensure_current(&self, id: &str) -> Result<(), StoreError> {
+        let dir = self.checked_dir(id)?;
+
+        let current = matches!(
+            self.read_json::<Voiceprint>(id, VOICEPRINT),
+            Ok(vp) if vp.schema_version == voiceprint::SCHEMA_VERSION
+        );
+        if current && self.read_json::<RecordingMeta>(id, META).is_ok() {
+            return Ok(());
+        }
+
+        let audio = self.audio(id)?;
+        let voiceprint = music_analysis::analyse_wav(&audio).map_err(|e| StoreError::Corrupt {
+            id: id.to_string(),
+            detail: e.to_string(),
+        })?;
+
+        // The label is the one thing not recoverable from the audio, so keep it
+        // across the rebuild. Read loosely: the old metadata may be exactly what
+        // failed to parse.
+        let label = self.stored_label(id).unwrap_or_else(|| id.to_string());
+        tracing::info!(
+            "re-analysing {id} for schema v{}",
+            voiceprint::SCHEMA_VERSION
+        );
+
+        let meta = RecordingMeta {
+            // Preserved so a rebuild does not reshuffle the take list.
+            created_at_ms: self.stored_created_at(id).unwrap_or_else(now_ms),
+            label,
+            id: id.to_string(),
+            duration_s: voiceprint.source.duration_s,
+            sample_rate_hz: voiceprint.source.sample_rate_hz,
+            voiced_fraction: voiceprint.pitch.voiced_fraction(),
+            onset_count: voiceprint.events.onset_frames.len(),
+            peak: voiceprint.source.peak,
+            clipped: voiceprint.source.is_clipped(),
+        };
+        write_json(&dir.join(VOICEPRINT), &voiceprint)?;
+        write_json(&dir.join(META), &meta)?;
+        Ok(())
+    }
+
+    /// A single string field from the stored metadata, whatever else is wrong
+    /// with it.
+    fn stored_field(&self, id: &str, key: &str) -> Option<serde_json::Value> {
+        let bytes = fs::read(self.dir(id).join(META)).ok()?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+        value.get(key).cloned()
+    }
+
+    fn stored_label(&self, id: &str) -> Option<String> {
+        self.stored_field(id, "label")?.as_str().map(str::to_string)
+    }
+
+    fn stored_created_at(&self, id: &str) -> Option<u64> {
+        self.stored_field(id, "createdAtMs")?.as_u64()
+    }
+
     /// Every stored recording, newest first.
     ///
     /// A directory that fails to parse is skipped rather than failing the whole
@@ -164,10 +233,12 @@ impl Store {
     }
 
     pub fn meta(&self, id: &str) -> Result<RecordingMeta, StoreError> {
+        self.ensure_current(id)?;
         self.read_json(id, META)
     }
 
     pub fn voiceprint(&self, id: &str) -> Result<Voiceprint, StoreError> {
+        self.ensure_current(id)?;
         self.read_json(id, VOICEPRINT)
     }
 
