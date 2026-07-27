@@ -17,3 +17,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.nav {
+  // Pushed to the trailing edge, and never squeezed: navigation outranks the
+  // tagline for space, which is why the tagline is the thing that ellipsises.
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  flex: none;
+
+  .active {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}

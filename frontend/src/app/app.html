@@ -1,6 +1,14 @@
 <mat-toolbar class="bar">
   <span class="title">music</span>
   <span class="subtitle">the voice as law-giver</span>
+  <nav class="nav">
+    <!--
+      `exact` on the studio link only: every route is a prefix of "", so without
+      it the studio would read as active on every page.
+    -->
+    <a matButton routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Studio</a>
+    <a matButton routerLink="/calibrate" routerLinkActive="active">Calibrate</a>
+  </nav>
 </mat-toolbar>
 
 <main>

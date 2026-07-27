@@ -100,6 +100,32 @@ test("studio — empty state lays out cleanly @ phone", async ({ page }, testInf
   await expectNoOccludedControls(page, testInfo);
 });
 
+test("calibration — the guided steps lay out cleanly @ phone", async ({ page }, testInfo) => {
+  // This page is read while someone is standing at a microphone, so its failure
+  // mode is worse than the studio's: an instruction line colliding with the
+  // record button is the difference between a usable take and a wasted one.
+  await mockApi(page);
+  await page.goto("/calibrate");
+  await page.getByText('Hold "ah" for about ten seconds, as steady as you can.').waitFor();
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
+test("calibration — the longest step still fits @ phone", async ({ page }, testInfo) => {
+  // The speech step carries the longest instruction lines in the app, so it is
+  // the one that overflows first if the detail list ever stops wrapping.
+  await mockApi(page);
+  await page.goto("/calibrate");
+  await page.getByRole("button", { name: "Talk normally" }).click();
+  await page.getByText("Talk about anything for about a minute.").waitFor();
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
 /**
  * Canvas drawing takes colour strings, and an unparseable one is ignored in
  * silence — `fillStyle` simply keeps its previous value, which starts out black.
