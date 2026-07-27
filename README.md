@@ -21,17 +21,40 @@ sentence should produce audibly different pieces, each internally consistent.
 
 ## Running locally
 
+While working on the code — live reload, backend and frontend separate:
+
 ```sh
 scripts/dev.sh            # backend on :8181, ng serve on :4200 with /api proxied
 ```
 
 Then open <http://localhost:4200>.
 
-Backend alone:
+To just *use* it, serving the built bundle and the API from one origin:
+
+```sh
+nix develop -c bash -c 'cd frontend && npm run build'
+nix develop -c cargo build --release
+BIND_ADDR=0.0.0.0:8181 \
+  DATA_DIR="$PWD/data" \
+  STATIC_DIR="$PWD/frontend/dist/music-web/browser" \
+  ~/.cache/cargo/target/release/music
+```
+
+Then <http://localhost:8181>. Binding `0.0.0.0` also serves the LAN, so another
+device can browse takes and inspect voiceprints — but **not record**: browsers
+only grant microphone access in a secure context, which `localhost` is and a
+plain-HTTP LAN address is not. Recording happens at the machine running it.
+
+Backend alone, API only:
 
 ```sh
 nix develop -c cargo run
 ```
+
+Recordings live in `data/`, one directory per take holding the audio, its
+voiceprint and a little metadata. Deleting `data/` is a supported way to start
+over; the audio is the only thing not recoverable, since voiceprints are
+re-derived automatically whenever the analyser moves on.
 
 ## Verifying
 
