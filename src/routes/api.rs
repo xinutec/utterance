@@ -13,6 +13,18 @@ use crate::state::AppState;
 use crate::store::RecordingMeta;
 use crate::voice;
 
+/// Query string of the endpoints that need a speaker's musical world.
+#[derive(Debug, Deserialize)]
+pub struct VoiceParams {
+    /// Recording to derive the scale and timbre from.
+    ///
+    /// Absent means "choose one" — see `crate::voice::calibrate`. Present is how
+    /// a listener disagrees with that choice, which they will, because which
+    /// vowel a tuning should come from is not settled.
+    #[serde(default)]
+    pub calibration: Option<String>,
+}
+
 /// Query string of `POST /api/recordings`.
 #[derive(Debug, Deserialize)]
 pub struct UploadParams {
@@ -139,8 +151,11 @@ pub struct VoiceSummary {
 }
 
 /// `GET /api/voice` — the scale, timbre and tonic the speaker's takes imply.
-pub async fn voice_summary(State(app): State<AppState>) -> Result<Json<VoiceSummary>, AppError> {
-    let calibrated = voice::calibrate(&app.store, None)?;
+pub async fn voice_summary(
+    State(app): State<AppState>,
+    Query(params): Query<VoiceParams>,
+) -> Result<Json<VoiceSummary>, AppError> {
+    let calibrated = voice::calibrate(&app.store, params.calibration.as_deref())?;
     Ok(Json(VoiceSummary {
         tonic_hz: calibrated.voice.tonic_hz,
         degrees: calibrated
@@ -170,8 +185,9 @@ pub async fn voice_summary(State(app): State<AppState>) -> Result<Json<VoiceSumm
 pub async fn render(
     State(app): State<AppState>,
     Path(id): Path<String>,
+    Query(params): Query<VoiceParams>,
 ) -> Result<Response, AppError> {
-    let calibrated = voice::calibrate(&app.store, None)?;
+    let calibrated = voice::calibrate(&app.store, params.calibration.as_deref())?;
     let voiceprint = app.store.voiceprint(&id)?;
 
     let score = music_mapping::compose::compose(&voiceprint, &calibrated.voice);

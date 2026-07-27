@@ -7,6 +7,7 @@
 
 use music_analysis::speaker::{self, SpeakerProfile};
 use music_analysis::voiceprint::Voiceprint;
+use music_mapping::tuning;
 use music_mapping::voice::Voice;
 
 use crate::error::AppError;
@@ -29,13 +30,21 @@ pub struct Calibrated {
 
 /// Build the current speaker's voice from everything in the store.
 ///
-/// **How the calibration take is chosen: the one with the most steady frames.**
-/// A harmonic series belongs to a held vowel, and the take that held one longest
-/// is the one whose spectrum is measured over the most evidence. That is a
-/// heuristic standing in for a decision nobody has made — which vowel a
-/// speaker's tuning should come from is an open question in `docs/roadmap.md`,
-/// and until it is settled this picks the best-measured rather than the most
-/// musical.
+/// **How the calibration take is chosen: the one that yields the richest scale**,
+/// ties broken by how much evidence it was measured over.
+///
+/// The obvious criterion — most steady frames — was tried first and is wrong in
+/// a way worth recording. On the first real calibration set it picked an eleven
+/// second *ee*, beautifully measured, whose spectrum yields a scale of the fifth
+/// and nothing else; a five second *ah* in the same session yields eight degrees
+/// close to just intonation. A calibration take exists to define a musical world,
+/// and one defining a world with two notes in it has failed at that job however
+/// well it was measured.
+///
+/// This is a choice, not a measurement, which is why it lives in the composition
+/// root rather than in `music-analysis`. It also stands in for a decision nobody
+/// has made: which vowel a speaker's tuning *should* come from is an open
+/// question in `docs/roadmap.md`, and `override_id` is how a caller disagrees.
 ///
 /// Everything else pools across every take, because vowel-space corners and
 /// pitch range improve with material where a harmonic series does not.
@@ -72,7 +81,12 @@ pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated,
             .ok_or_else(|| AppError::BadRequest(format!("no recording {id}")))?,
         None => takes
             .iter()
-            .max_by_key(|(_, v)| v.partials.frames_used)
+            .max_by_key(|(_, v)| {
+                let degrees = tuning::from_partials(&v.partials)
+                    .map(|t| t.degrees.len())
+                    .unwrap_or(0);
+                (degrees, v.partials.frames_used)
+            })
             .expect("takes is not empty"),
     };
 

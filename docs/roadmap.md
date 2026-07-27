@@ -185,5 +185,12 @@ source, plus the one that most shapes daily work.
 
   Bound up with this: `tuning::MIN_DEPTH` decides when a dip in the roughness
   curve counts as a note, and part of that 8-versus-3 spread is the threshold
-  rather than the voice. It should be settled by listening, not by argument, and
-  nobody has heard anything yet.
+  rather than the voice. It should be settled by listening, not by argument.
+
+  Until it is settled, `src/voice.rs` picks the take yielding the richest scale
+  and `?calibration=<id>` overrides that. The first criterion tried — most steady
+  frames — picked an eleven-second *ee* measured over a thousand frames whose
+  scale is the fifth and nothing else, in preference to a five-second *ah*
+  yielding eight degrees. Measurement quality and musical usefulness turned out
+  to point in opposite directions, which is itself an argument that this question
+  has to be answered deliberately.

@@ -531,3 +531,43 @@ async fn refuses_to_calibrate_from_material_that_never_held_a_pitch() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }
+
+#[tokio::test]
+async fn calibration_can_be_pointed_at_a_chosen_take() {
+    // Which vowel a tuning comes from is unsettled, and the automatic choice is
+    // a heuristic. A listener who disagrees has to be able to say so, or the
+    // heuristic quietly becomes the decision.
+    let app = TestApp::new();
+    let (_, first) = upload(&app, "one", wav_fixture_moving_vowel(8.0)).await;
+    let (_, second) = upload(&app, "two", wav_fixture_moving_vowel(9.0)).await;
+    let chosen = second["meta"]["id"].as_str().unwrap().to_string();
+    let other = first["meta"]["id"].as_str().unwrap().to_string();
+    assert_ne!(chosen, other);
+
+    let (status, body) = send(
+        &app,
+        Request::get(format!("/api/voice?calibration={chosen}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["calibrationId"], chosen);
+}
+
+#[tokio::test]
+async fn an_unknown_calibration_take_is_refused_rather_than_ignored() {
+    // Silently falling back to the automatic choice would render music in a
+    // scale the caller did not ask for and report success.
+    let app = TestApp::new();
+    upload(&app, "calibration", wav_fixture_moving_vowel(8.0)).await;
+
+    let (status, _) = send(
+        &app,
+        Request::get("/api/voice?calibration=deadbeefdeadbeef")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
