@@ -66,3 +66,18 @@ pub fn hann(n: usize) -> Vec<f32> {
         })
         .collect()
 }
+
+/// Hamming window of length `n`.
+///
+/// Used for linear prediction rather than the Hann above: its lower first
+/// sidelobe keeps energy from one harmonic of the source out of the
+/// autocorrelation of its neighbours, which is what the pole fit is trying to
+/// see past.
+pub fn hamming(n: usize) -> Vec<f32> {
+    (0..n)
+        .map(|i| {
+            let x = 2.0 * std::f32::consts::PI * (i as f32) / (n as f32);
+            0.54 - 0.46 * x.cos()
+        })
+        .collect()
+}

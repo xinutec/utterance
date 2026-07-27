@@ -1,0 +1,12 @@
+:host {
+  display: block;
+}
+
+.plot {
+  display: block;
+  width: 100%;
+  height: 300px;
+
+  --chart-ink: var(--mat-sys-on-surface);
+  --chart-muted: var(--mat-sys-outline);
+}

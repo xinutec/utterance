@@ -25,7 +25,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// - 2: `Source` gained `peak` and `clippedFraction`.
 /// - 3: onset detection reworked — peak dominance, CFAR threshold, silence gate.
-pub const SCHEMA_VERSION: u32 = 3;
+/// - 4: added `formants` (F1/F2/F3 by linear prediction).
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -108,6 +109,39 @@ impl Pitch {
     }
 }
 
+/// Vocal-tract resonances, one entry per frame.
+///
+/// Two dimensions that matter and a third for context. F1 against F2 is the
+/// space vowels live in: every vowel of a language occupies a region of it, and
+/// a vowel sequence is a path through it. That geometry is the input the harmony
+/// mapping is meant to be derived from.
+///
+/// `null` wherever the frame gives no usable estimate — unvoiced, silent, or the
+/// fit found nothing in range. There is no such thing as a formant in silence.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Formants {
+    pub f1: Vec<Option<f32>>,
+    pub f2: Vec<Option<f32>>,
+    pub f3: Vec<Option<f32>>,
+}
+
+impl Formants {
+    /// Frames where both F1 and F2 are known, as `(f1, f2)` pairs.
+    ///
+    /// The vowel-space trajectory, which is what a consumer almost always wants:
+    /// a frame carrying only one of the two is a point on no plane.
+    pub fn vowel_space(&self) -> Vec<(f32, f32)> {
+        self.f1
+            .iter()
+            .zip(&self.f2)
+            .filter_map(|(a, b)| Some(((*a)?, (*b)?)))
+            .collect()
+    }
+}
+
 /// Event structure. Not yet a rhythm — see `docs/architecture.md`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -132,6 +166,7 @@ pub struct Voiceprint {
     pub source: Source,
     pub frame: FrameGrid,
     pub pitch: Pitch,
+    pub formants: Formants,
     /// Per-frame RMS in dBFS, floored at -100.
     pub rms_db: Vec<f32>,
     pub events: Events,

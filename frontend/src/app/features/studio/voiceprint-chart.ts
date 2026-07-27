@@ -21,10 +21,15 @@ const LEVEL_CEILING_DB = 0;
 
 /** Panel heights as fractions of the canvas, top to bottom. */
 const PANELS = [
-  { key: "pitch", label: "pitch — prosodic contour", weight: 0.45 },
-  { key: "level", label: "level — phrasing", weight: 0.3 },
-  { key: "flux", label: "spectral flux — events", weight: 0.25 },
+  { key: "pitch", label: "pitch — prosodic contour", weight: 0.3 },
+  { key: "formants", label: "formants — vowel quality (F1, F2, F3)", weight: 0.3 },
+  { key: "level", label: "level — phrasing", weight: 0.22 },
+  { key: "flux", label: "spectral flux — events", weight: 0.18 },
 ] as const;
+
+/** Frequency range of the formant panel, in Hz. */
+const FORMANT_MIN_HZ = 200;
+const FORMANT_MAX_HZ = 4000;
 
 /**
  * Renders a voiceprint as three stacked time-aligned panels.
@@ -106,6 +111,7 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
       const plotHeight = h - LABEL_HEIGHT - PANEL_GAP;
 
       if (panel.key === "pitch") this.drawPitch(ctx, vp, x, plotTop, plotHeight, accent);
+      if (panel.key === "formants") this.drawFormants(ctx, vp, x, plotTop, plotHeight, accent, warm, ink);
       if (panel.key === "level") this.drawLevel(ctx, vp, x, plotTop, plotHeight, ink);
       if (panel.key === "flux") this.drawFlux(ctx, vp, x, plotTop, plotHeight, ink, warm);
 
@@ -170,6 +176,48 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
       drawing = true;
     });
     ctx.stroke();
+  }
+
+  /**
+   * F1, F2 and F3 as three separate tracks on a shared log axis.
+   *
+   * Log, like the pitch panel and for the same reason: the ear and the vowel
+   * system both work in ratios, so the 200 Hz between F1 and F2 of a close vowel
+   * matters far more than the same 200 Hz up at F3.
+   *
+   * Drawn as dots rather than lines. A formant series is full of gaps — every
+   * unvoiced frame, and every frame where the fit found nothing in range — and
+   * joining across a gap would draw a smooth glide the speaker never made.
+   */
+  private drawFormants(
+    ctx: CanvasRenderingContext2D,
+    vp: Voiceprint,
+    x: (f: number) => number,
+    top: number,
+    height: number,
+    accent: string,
+    warm: string,
+    ink: string,
+  ): void {
+    const logMin = Math.log2(FORMANT_MIN_HZ);
+    const span = Math.log2(FORMANT_MAX_HZ) - logMin;
+    const y = (hz: number): number => top + height - ((Math.log2(hz) - logMin) / span) * height;
+
+    const tracks: [readonly (number | null)[], string][] = [
+      [vp.formants.f1, accent],
+      [vp.formants.f2, warm],
+      [vp.formants.f3, ink],
+    ];
+
+    for (const [series, colour] of tracks) {
+      ctx.fillStyle = colour;
+      ctx.globalAlpha = colour === ink ? 0.35 : 0.85;
+      series.forEach((hz, i) => {
+        if (hz === null || hz < FORMANT_MIN_HZ || hz > FORMANT_MAX_HZ) return;
+        ctx.fillRect(x(i) - 0.75, y(hz) - 0.75, 1.5, 1.5);
+      });
+    }
+    ctx.globalAlpha = 1;
   }
 
   /** Level as a filled area — the shape of the phrasing, not individual values. */

@@ -8,6 +8,7 @@
 export type { Deleted } from "./generated/Deleted";
 export type { ErrorBody } from "./generated/ErrorBody";
 export type { Events } from "./generated/Events";
+export type { Formants } from "./generated/Formants";
 export type { FrameGrid } from "./generated/FrameGrid";
 export type { Pitch } from "./generated/Pitch";
 export type { RecordingDetail } from "./generated/RecordingDetail";

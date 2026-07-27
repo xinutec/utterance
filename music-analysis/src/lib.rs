@@ -12,14 +12,16 @@
 
 pub mod energy;
 pub mod f0;
+pub mod formant;
 pub mod frame;
+pub mod lpc;
 pub mod onset;
 pub mod resample;
 pub mod voiceprint;
 pub mod wav;
 
 use resample::ANALYSIS_RATE;
-use voiceprint::{Events, FrameGrid, Pitch, Source, Voiceprint};
+use voiceprint::{Events, Formants, FrameGrid, Pitch, Source, Voiceprint};
 
 /// Everything that can go wrong turning bytes into a voiceprint.
 #[derive(Debug, thiserror::Error)]
@@ -73,6 +75,11 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
     let count = frame::count(samples.len());
 
     let pitch_frames = f0::track(samples);
+    // Formants are gated on voicing: linear prediction assumes a source driving
+    // a filter, and an unvoiced frame has no periodic source to drive it.
+    let voiced: Vec<bool> = pitch_frames.iter().map(|f| f.hz.is_some()).collect();
+    let formant_frames = formant::track(samples, &voiced);
+
     let flux = onset::flux(samples);
     let onset_frames = onset::pick(&flux);
     let hop_s = frame::HOP as f32 / ANALYSIS_RATE as f32;
@@ -88,6 +95,11 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
         pitch: Pitch {
             hz: pitch_frames.iter().map(|f| f.hz).collect(),
             aperiodicity: pitch_frames.iter().map(|f| f.aperiodicity).collect(),
+        },
+        formants: Formants {
+            f1: formant_frames.iter().map(|f| f.f1).collect(),
+            f2: formant_frames.iter().map(|f| f.f2).collect(),
+            f3: formant_frames.iter().map(|f| f.f3).collect(),
         },
         rms_db: energy::track(samples),
         events: Events {

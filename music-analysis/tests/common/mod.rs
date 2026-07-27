@@ -142,3 +142,46 @@ pub fn cycles(x: &[f32]) -> usize {
 pub fn rms(x: &[f32]) -> f32 {
     (x.iter().map(|v| v * v).sum::<f32>() / (x.len() as f32)).sqrt()
 }
+
+/// Synthesise a vowel through an actual resonator cascade.
+///
+/// A glottal impulse train driven through one two-pole resonator per formant —
+/// the source-filter model itself, rather than an approximation of its output.
+/// That matters for testing formant tracking: linear prediction fits exactly
+/// this structure, so a signal built this way has formants at frequencies that
+/// are *known* rather than merely intended, and the tracker either recovers them
+/// or is wrong.
+pub fn resonated_vowel(f0_hz: f32, formants: &[(f32, f32)], secs: f32) -> Vec<f32> {
+    let n = (ANALYSIS_RATE as f32 * secs) as usize;
+    let period = (ANALYSIS_RATE as f32 / f0_hz).round() as usize;
+
+    // Glottal source: an impulse train. Flat spectrum, so every resonance in the
+    // filter below shows up in the output with nothing else shaping it.
+    let mut signal: Vec<f32> = (0..n)
+        .map(|i| if i % period == 0 { 1.0 } else { 0.0 })
+        .collect();
+
+    for &(frequency, bandwidth) in formants {
+        let theta = 2.0 * std::f32::consts::PI * frequency / ANALYSIS_RATE as f32;
+        let radius = (-std::f32::consts::PI * bandwidth / ANALYSIS_RATE as f32).exp();
+        let (a1, a2) = (2.0 * radius * theta.cos(), -radius * radius);
+
+        let mut y1 = 0.0f32;
+        let mut y2 = 0.0f32;
+        for sample in &mut signal {
+            let y = *sample + a1 * y1 + a2 * y2;
+            y2 = y1;
+            y1 = y;
+            *sample = y;
+        }
+    }
+
+    // Normalise to a sane level; the resonator cascade has large gain.
+    let peak = signal.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+    if peak > 0.0 {
+        for s in &mut signal {
+            *s /= peak * 1.2;
+        }
+    }
+    signal
+}

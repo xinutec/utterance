@@ -35,13 +35,18 @@ function voiceprint(): unknown {
   const count = 400;
   const frames = Array.from({ length: count }, (_, i) => i);
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     source: { sampleRateHz: 48_000, channels: 1, durationS: 28.4, peak: 0.71, clippedFraction: 0 },
     frame: { analysisRateHz: 16_000, hopS: 0.01, count },
     pitch: {
       // A contour with unvoiced gaps, so the multi-stroke path is exercised.
       hz: frames.map((i) => (i % 50 < 30 ? 120 + 40 * Math.sin(i / 12) : null)),
       aperiodicity: frames.map((i) => (i % 50 < 30 ? 0.08 : 0.9)),
+    },
+    formants: {
+      f1: frames.map((i) => (i % 50 < 30 ? 300 + 300 * Math.sin(i / 30) : null)),
+      f2: frames.map((i) => (i % 50 < 30 ? 1400 + 700 * Math.cos(i / 30) : null)),
+      f3: frames.map((i) => (i % 50 < 30 ? 2700 : null)),
     },
     rmsDb: frames.map((i) => (i % 50 < 30 ? -18 + 6 * Math.sin(i / 7) : -70)),
     events: {
@@ -73,7 +78,10 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
   await mockApi(page);
   await page.goto("/");
   await page.getByText("brother — take 1").first().waitFor();
-  await page.locator("canvas").waitFor();
+  // Two canvases now — the time-series chart and the vowel space. Wait for
+  // both, so the layout assertions run against the fully painted page.
+  await page.locator("app-voiceprint-chart canvas").waitFor();
+  await page.locator("app-vowel-space canvas").waitFor();
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);

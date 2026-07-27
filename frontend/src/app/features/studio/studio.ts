@@ -10,6 +10,7 @@ import { Recorder } from "../../audio/recorder";
 import type { RecordingMeta } from "../../models";
 import { RecordingsStore } from "../../recordings-store";
 import { VoiceprintChart } from "./voiceprint-chart";
+import { VowelSpace } from "./vowel-space";
 
 /** Target take length, in seconds. Not enforced — just what the UI suggests. */
 const TARGET_SECONDS = 30;
@@ -27,6 +28,7 @@ const TARGET_SECONDS = 30;
     MatProgressBarModule,
     MatTooltipModule,
     VoiceprintChart,
+    VowelSpace,
   ],
 })
 export class Studio implements OnInit {
