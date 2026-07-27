@@ -81,6 +81,14 @@ source, plus the one that most shapes daily work.
 - **No ML.** See `architecture.md`. The mapping layer needs the derivation, not
   an inferred number.
 
+- **Aesthetic parameters live in the mapping layer.** Any control over how
+  strongly the voice binds the result is a mapping parameter and never an
+  analysis one. This follows from the split rather than being a fresh choice, but
+  it has a practical edge worth stating: because a voiceprint is a cache keyed on
+  the analyser, a knob in analysis would invalidate every recording each time it
+  moved, while a knob in mapping can be swept against a fixed voiceprint and
+  heard immediately.
+
 ## Open questions
 
 - **Should a listener be able to perceive the connection back to the voice?**
@@ -89,6 +97,28 @@ source, plus the one that most shapes daily work.
   them to be arbitrarily abstract. Current lean is perceptible, on the grounds
   that it is what makes the project legible to anyone but its authors — but this
   should be decided deliberately before mapping work starts, not defaulted into.
+
+  Note that this is *not* the same axis as the one below, and the two may run
+  opposite. Binding hard to the speaker yields the most derived music and the
+  least speech-like, because a real voice's ratios are unfamiliar; binding
+  loosely — a pitch contour quantised to an ordinary scale — is obviously
+  melodised speech while barely transforming anything.
+
+- **How far should the voice be allowed to bind?** The axis is convention ↔
+  speaker: 12-TET, regular meter and ordinary voice leading at one end, the
+  speaker's measured ratios alone at the other. Moving along it is the same
+  operation in each dimension — snap toward a cultural grid by some amount:
+  interpolate in cents between the derived scale degree and the nearest tempered
+  one, between a measured tempo ratio and the nearest small-integer one, between
+  the vowels' Tonnetz path and the nearest diatonic waypoint. One scalar per
+  dimension, not one global scalar; binding tuning hard while leaving rhythm
+  conventional is a different and probably more listenable result than moving
+  both together.
+
+  Unresolved is where on that axis the music actually is, which is an argument
+  for building the control early and as an instrument for answering the question
+  by ear, rather than shipping it as a slider and letting it stand in for a
+  decision.
 - **How should a speaker's vowel space be normalised?** Against their own
   measured extremes, or against population norms? Affects whether two people
   produce comparable music or merely internally consistent music.
