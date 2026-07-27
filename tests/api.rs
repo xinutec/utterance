@@ -349,3 +349,185 @@ async fn an_upload_larger_than_the_default_axum_limit_is_accepted() {
     assert_eq!(body["meta"]["sampleRateHz"], 48_000);
     assert_eq!(body["voiceprint"]["frame"]["analysisRateHz"], 16_000);
 }
+
+/// A take whose vowel actually moves, so the speaker profile has a vowel space
+/// with width to it.
+///
+/// The plain fixture holds one vowel throughout, which is correct for what it
+/// tests and useless here: a speaker who never moved their tongue has a vowel
+/// space of zero extent, and calibration rightly refuses to normalise into one.
+/// This alternates two vowels burst by burst — roughly *ah* and *ee*.
+fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
+    const RATE: u32 = 16_000;
+    const F0: f32 = 125.0;
+    let formant = |hz: f32, center: f32, bw: f32| 1.0 / (1.0 + ((hz - center) / bw).powi(2));
+
+    let total = (RATE as f32 * secs) as usize;
+    let samples: Vec<f32> = (0..total)
+        .map(|i| {
+            let t = i as f32 / RATE as f32;
+            if (t / 0.5).fract() >= 0.6 {
+                return 0.0;
+            }
+            // Alternate vowels every half second, so both ends of the space are
+            // visited often enough to survive the profile's percentile trim.
+            let (f1, f2) = if ((t / 0.5) as u32).is_multiple_of(2) {
+                (730.0, 1090.0)
+            } else {
+                (300.0, 2300.0)
+            };
+            (1..)
+                .map(|k| k as f32 * F0)
+                .take_while(|&hz| hz < 8_000.0)
+                .map(|hz| {
+                    let gain = (F0 / hz) * (formant(hz, f1, 90.0) + 0.5 * formant(hz, f2, 110.0));
+                    gain * (2.0 * std::f32::consts::PI * hz * t).sin()
+                })
+                .sum::<f32>()
+                * 0.4
+        })
+        .collect();
+
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: RATE,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut w = hound::WavWriter::new(&mut buf, spec).unwrap();
+        for s in samples {
+            w.write_sample((s.clamp(-1.0, 1.0) * 32_767.0) as i16)
+                .unwrap();
+        }
+        w.finalize().unwrap();
+    }
+    buf.into_inner()
+}
+
+/// Fetch a non-JSON endpoint, returning status, content type and body bytes.
+async fn fetch(app: &TestApp, path: &str) -> (StatusCode, String, Vec<u8>) {
+    let res = app
+        .router
+        .clone()
+        .oneshot(Request::get(path).body(Body::empty()).unwrap())
+        .await
+        .expect("router call");
+    let status = res.status();
+    let content_type = res
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes().to_vec();
+    (status, content_type, bytes)
+}
+
+#[tokio::test]
+async fn rendering_a_take_returns_playable_audio() {
+    let app = TestApp::new();
+    let (status, body) = upload(&app, "calibration", wav_fixture_moving_vowel(8.0)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (status, content_type, bytes) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&bytes)
+    );
+    assert_eq!(content_type, "audio/wav");
+    assert_eq!(&bytes[0..4], b"RIFF");
+
+    // Eight seconds at 44.1 kHz in 16-bit mono is about 700 KB. Anything much
+    // smaller is a header with no music behind it.
+    assert!(
+        bytes.len() > 400_000,
+        "rendered only {} bytes — the score was probably empty",
+        bytes.len()
+    );
+}
+
+#[tokio::test]
+async fn a_render_is_the_same_every_time() {
+    // Determinism reaches all the way to the output: the same take, the same
+    // calibration and the same mapping must give byte-identical audio, or "the
+    // mapping changed" cannot be told from "the renderer wandered".
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(8.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (_, _, first) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
+    let (_, _, second) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
+    assert_eq!(first, second);
+}
+
+#[tokio::test]
+async fn the_voice_summary_describes_the_derived_scale() {
+    let app = TestApp::new();
+    upload(&app, "calibration", wav_fixture_moving_vowel(8.0)).await;
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    assert_eq!(body["calibrationLabel"], "calibration");
+    assert!(body["tonicHz"].as_f64().unwrap() > 100.0);
+
+    let degrees = body["degrees"].as_array().unwrap();
+    assert!(degrees.len() >= 3, "a scale of {} degrees", degrees.len());
+    assert_eq!(degrees.first().unwrap()["cents"].as_f64().unwrap(), 0.0);
+    assert_eq!(degrees.last().unwrap()["cents"].as_f64().unwrap(), 1200.0);
+
+    // A harmonic source must put a fifth in the scale, whatever else it finds.
+    assert!(
+        degrees
+            .iter()
+            .any(|d| (d["cents"].as_f64().unwrap() - 702.0).abs() < 8.0),
+        "no fifth in {degrees:?}"
+    );
+
+    assert!(!body["timbre"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn asking_for_a_voice_before_recording_anything_explains_itself() {
+    let app = TestApp::new();
+    let (status, body) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // The message has to say what to do, since this is the state every new
+    // installation starts in.
+    let message = body["error"].as_str().unwrap_or_default().to_string()
+        + body["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("record"),
+        "unhelpful message for an empty store: {body}"
+    );
+}
+
+#[tokio::test]
+async fn refuses_to_calibrate_from_material_that_never_held_a_pitch() {
+    // A take with no sustained phonation cannot give a harmonic series, and a
+    // scale derived from one would be arithmetic on noise reported with full
+    // confidence.
+    let app = TestApp::new();
+    upload(&app, "too-short", wav_fixture_moving_vowel(1.0)).await;
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+}

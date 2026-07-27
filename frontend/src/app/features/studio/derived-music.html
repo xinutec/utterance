@@ -1,0 +1,40 @@
+<div class="derived">
+  @if (renderUrl(); as url) {
+    <audio class="player" controls preload="none" [src]="url"></audio>
+  } @else {
+    <p class="note">Hear this take as music, in a scale derived from the speaker's own harmonic series.</p>
+    <button matButton="filled" type="button" [disabled]="loading()" (click)="load()">
+      <mat-icon>graphic_eq</mat-icon>
+      Render as music
+    </button>
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate" aria-label="Deriving the scale"></mat-progress-bar>
+    }
+  }
+
+  @if (voice(); as summary) {
+    <p class="provenance">
+      Tonic {{ summary.tonicHz | number: "1.0-1" }} Hz · scale from
+      <strong>{{ summary.calibrationLabel }}</strong> · timbre of
+      {{ summary.timbre.length }} measured partials
+    </p>
+
+    <h4 class="heading">The scale this voice implies</h4>
+    <ul class="degrees">
+      @for (d of degrees(); track d.cents) {
+        <li>
+          <span class="cents">{{ d.cents | number: "1.0-0" }}<span class="unit">¢</span></span>
+          <span class="bar"><span class="fill" [style.width.%]="d.weight * 100"></span></span>
+          <span class="ratio">{{ d.ratio | number: "1.3-3" }}</span>
+          <span class="off" [class.notable]="d.offEqual < -8 || d.offEqual > 8">
+            {{ d.offEqual > 0 ? "+" : "" }}{{ d.offEqual | number: "1.0-0" }} vs 12-TET
+          </span>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+</div>

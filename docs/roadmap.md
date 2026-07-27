@@ -14,27 +14,41 @@ the voiceprint as the interface between its layers.
 | events (spectral flux) | done, with a known limit | See "onsets" below. |
 | formants F1/F2/F3 | done | LPC + Durand-Kerner. Range-constrained assignment. |
 | speaker profile | done | Per-person vowel-space corners and f0 range. |
-| measured partial ratios | **not started** | Needed for tuning. |
+| measured partial ratios | done | Per take, over frames steady enough to use. |
 | stress hierarchy | **not started** | Needed for meter, and to fix onsets. |
 | phone-class segmentation | **not started** | Needed for the symbol stream. |
 
-Nothing in the mapping or realisation layers exists yet. That is deliberate: the
-voiceprint had to be worth mapping first.
+All three layers exist. The chain runs end to end for the first time: a
+calibration take yields a scale and a timbre, an utterance yields a score, the
+score renders to audio. What that first render sounds like is the open question
+below.
 
 ## The four mappings
 
-In rough order of how much each unlocks. None is started.
+In rough order of how much each unlocks.
 
-1. **Tuning from measured partials.** Derive a scale from the speaker's own
-   harmonic series rather than from 12-TET. Needs partial-ratio measurement,
-   which needs clean unclipped sustained phonation — the calibration take is the
-   right material. The most distinctive idea in the project and the one most
-   likely to sound strange in an interesting way.
+1. **Tuning from measured partials.** *Built* — `music-mapping/src/tuning.rs`.
+   A Plomp–Levelt roughness curve over the speaker's own measured spectrum,
+   swept from unison to the octave, with its deep minima read as scale degrees.
+   What came out of the first real calibration set:
+
+   - **Reproducible across takes.** Two steady-*ah* recordings gave scales
+     identical to the cent, despite individual partials differing by up to 8 dB
+     between them. The curve integrates over every pair, so per-partial wobble
+     barely moves it. Tuning needs no pooling across takes.
+   - **Not reproducible across vowels.** The same speaker's *ah*, *ee* and *oo*
+     gave 8, 3 and 4 degrees. A deliberately open *ah* yields a nearly-just
+     scale — 6:5, 5:4, 7:5, 3:2, 8:5, 5:3 — while a relaxed one collapses to the
+     fifth alone. See the open question below.
+   - **Audibly not 12-TET.** Four of those six degrees sit 13–18 cents off
+     equal temperament, and 7:5 at 582 cents has no equal-tempered equivalent.
+
 2. **Harmony from vowel space.** F1/F2 is a 2D manifold; the Tonnetz is a 2D
    lattice. Map one onto the other and a sentence becomes a chord progression.
-   **Ready to start** — formants are measured and validated. Needs a decision
-   about normalising the speaker's vowel space against their own extremes rather
-   than against population averages.
+   Not started as harmony. `compose.rs` currently spends the same measurement on
+   something far cruder — frontness picks a scale degree, openness picks an
+   octave — which is one note where this wants a progression. That crudeness is
+   deliberate: it was the shortest path to hearing anything.
 3. **Meter from stress hierarchy.** Nested strong/weak grouping from syllable
    prominence. Blocked on stress measurement, which is also what onsets need.
 4. **Development from the symbol stream.** Phone classes as an alphabet for a
@@ -55,6 +69,20 @@ In rough order of how much each unlocks. None is started.
   plot are population values for an adult speaker, not this speaker's. The
   calibration take is exactly what would fix that, and mapping (2) will need it
   done properly rather than as decoration.
+- **Analysis is no longer cheap.** Measuring partials runs a 2048-point FFT on
+  every steady frame, so a fifteen-second take costs seconds rather than
+  milliseconds. Acceptable because it runs once per recording and the result is
+  cached, but it is the reason a re-analysis sweep after a schema bump is now
+  something you wait for.
+- **Nothing derived is visible or audible in the UI.** Partials, the derived
+  scale, the score and the rendered audio all exist only in the crates. The
+  studio still shows pitch, energy, events and vowel space, and there is no way
+  to hear a render from a browser — which is the thing the person supplying the
+  voice most needs.
+- **The first mapping is a placeholder.** `compose.rs` reads rhythm from onsets,
+  which mean *the spectrum changed*, not *a syllable began*. Until the stress
+  hierarchy exists the rhythm is wrong in a way no amount of taste in the mapping
+  will fix.
 
 ## Decisions taken
 
@@ -146,3 +174,16 @@ source, plus the one that most shapes daily work.
 - **How should a speaker's vowel space be normalised?** Against their own
   measured extremes, or against population norms? Affects whether two people
   produce comparable music or merely internally consistent music.
+
+- **Which vowel does a speaker's tuning come from?** Measured, not speculative:
+  one person's *ah* gave an eight-note nearly-just scale and their *ee* gave the
+  fifth and nothing else. A harmonic series belongs to a tract shape, so "the
+  speaker's scale" is undefined until the vowel is pinned down. Candidates are a
+  single nominated calibration vowel, the union of several, or a scale that
+  changes with the vowel being sung — the last being the most interesting and the
+  most likely to be unusable.
+
+  Bound up with this: `tuning::MIN_DEPTH` decides when a dip in the roughness
+  curve counts as a note, and part of that 8-versus-3 spread is the threshold
+  rather than the voice. It should be settled by listening, not by argument, and
+  nobody has heard anything yet.

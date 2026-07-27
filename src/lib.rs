@@ -2,11 +2,13 @@
 //! integration tests in `tests/` exercise this public surface.
 //!
 //! This crate is the shell: HTTP, storage, wiring. The reasoning lives in
-//! `music-analysis` (objective) and, as it arrives, the mapping layer
-//! (aesthetic) — see `docs/architecture.md`.
+//! `music-analysis` (objective), `music-mapping` (aesthetic) and
+//! `music-realisation` (mechanical) — see `docs/architecture.md`. It is the
+//! composition root, and the only crate that may depend on all three.
 
 pub mod config;
 pub mod error;
 pub mod routes;
 pub mod state;
 pub mod store;
+pub mod voice;

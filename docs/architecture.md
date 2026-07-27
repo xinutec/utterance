@@ -35,10 +35,16 @@ rather than another view of pitch.
 The single structural commitment of this repo. These layers live in separate
 crates so that a discarded aesthetic idea never drags analysis code with it.
 
-Only `music-analysis` exists so far; mapping and realisation are not written.
-When they are, they get their own crates, and the score — the artefact between
-them, as yet undesigned — becomes the second stable interface alongside the
-voiceprint.
+All three exist. The dependency runs one way only — realisation reads a score,
+mapping reads a voiceprint, and neither lower layer may learn that a higher one
+exists. `src` is the composition root and the only crate that depends on all
+three.
+
+The **score** is the second stable interface, alongside the voiceprint, and it
+carries absolute frequencies in hertz: no degrees, no scale, no key. That is the
+mirror of the rule keeping analysis from knowing what a scale is. By the time a
+score exists every musical decision is already made, which is what lets a
+synthesiser be rewritten without touching a mapping.
 
 ```
 audio ──▶ [ analysis ] ──▶ voiceprint ──▶ [ mapping ] ──▶ score ──▶ [ realisation ] ──▶ audio
@@ -52,13 +58,28 @@ frame voiced? What is f0 here? Where are the syllable onsets? It is testable
 against fixtures because it can be wrong in a way you can demonstrate. It holds
 no musical opinions whatsoever — it does not know what a scale is.
 
-**mapping** answers questions with no right answers. Should this vowel be a minor
-chord? It is where the art lives, and where we expect to write many competing
-implementations over one stable voiceprint and keep the ones that sound good.
-Because the voiceprint is a stable serialised document, a mapping can be
-rewritten without re-analysing anything.
+**mapping** (`music-mapping`) answers questions with no right answers. Should
+this vowel be a minor chord? It is where the art lives, and where we expect to
+write many competing implementations over one stable voiceprint and keep the ones
+that sound good. Because the voiceprint is a stable serialised document, a
+mapping can be rewritten without re-analysing anything.
 
-**realisation** turns a score into sound. Mechanical.
+What is testable in mapping is narrower than in analysis, and worth stating so
+nobody mistakes a passing suite for a musical judgement: the arithmetic can be
+checked against results the literature already establishes, and the derivation
+can be checked to be reading its input rather than restating its own assumptions
+— a stretched spectrum must *not* make the octave consonant. Whether the output
+sounds good is not a thing any test here decides.
+
+**realisation** (`music-realisation`) turns a score into sound. Mechanical, and
+additive rather than sampled — forced rather than chosen, because a derived
+tuning puts notes wherever the speaker's spectrum says they belong and no sampled
+instrument can play 582 cents.
+
+It renders the score's own timbre rather than one of its choosing. A scale
+derived from a spectrum is only consonant for tones that *have* that spectrum;
+synthesise anything else and the roughness minima stop lining up with the notes,
+so the scale keeps its numbers and loses its justification.
 
 Violating this split — letting a mapping reach back into the audio, or letting
 analysis emit notes — is the failure mode that ends the project, because it makes

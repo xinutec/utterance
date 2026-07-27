@@ -9,6 +9,7 @@ import { MatTooltipModule } from "@angular/material/tooltip";
 import { Recorder } from "../../audio/recorder";
 import type { RecordingMeta } from "../../models";
 import { RecordingsStore } from "../../recordings-store";
+import { DerivedMusic } from "./derived-music";
 import { VoiceprintChart } from "./voiceprint-chart";
 import { VowelSpace } from "./vowel-space";
 
@@ -27,6 +28,7 @@ const TARGET_SECONDS = 30;
     MatIconModule,
     MatProgressBarModule,
     MatTooltipModule,
+    DerivedMusic,
     VoiceprintChart,
     VowelSpace,
   ],

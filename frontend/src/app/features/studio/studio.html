@@ -117,7 +117,12 @@
           <app-voiceprint-chart [voiceprint]="detail.voiceprint"></app-voiceprint-chart>
           <h3 class="section">Vowel space</h3>
           <app-vowel-space [voiceprint]="detail.voiceprint"></app-vowel-space>
+
+          <h3 class="section">The recording</h3>
           <audio class="player" controls [src]="store.audioUrl(detail.meta.id)"></audio>
+
+          <h3 class="section">As music</h3>
+          <app-derived-music [recordingId]="detail.meta.id"></app-derived-music>
         </mat-card-content>
       } @else {
         <mat-card-content>

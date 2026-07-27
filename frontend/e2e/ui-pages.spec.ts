@@ -67,6 +67,24 @@ function voiceprint(): unknown {
   };
 }
 
+/** A speaker's derived scale, roughly what a real harmonic voice produces. */
+const VOICE = {
+  tonicHz: 119.7,
+  degrees: [
+    { cents: 0, ratio: 1, depth: 0 },
+    { cents: 316, ratio: 1.2, depth: 0.097 },
+    { cents: 386, ratio: 1.25, depth: 0.053 },
+    { cents: 582, ratio: 1.4, depth: 0.041 },
+    { cents: 702, ratio: 1.5, depth: 0.138 },
+    { cents: 884, ratio: 1.666, depth: 0.155 },
+    { cents: 1200, ratio: 2, depth: 0 },
+  ],
+  timbre: Array.from({ length: 24 }, (_, k) => 1 / (k + 1)),
+  calibrationId: "0123456789abcdef",
+  calibrationLabel: "steady-ah",
+  takes: 7,
+};
+
 /** Catch-all first, then the specific routes. */
 async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/**", (r) =>
@@ -76,6 +94,7 @@ async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/recordings/0123456789abcdef", (r) =>
     r.fulfill({ json: { meta: META, voiceprint: voiceprint() } }),
   );
+  await page.route("**/api/voice", (r) => r.fulfill({ json: VOICE }));
 }
 
 test("the suite really runs at phone geometry", async ({ page }) => {
@@ -130,6 +149,19 @@ test("calibration — the longest step still fits @ phone", async ({ page }, tes
   await page.goto("/calibrate");
   await page.getByRole("button", { name: "Talk normally" }).click();
   await page.getByText("Talk about anything for about a minute.").waitFor();
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
+test("studio — the derived scale lays out cleanly @ phone", async ({ page }, testInfo) => {
+  // The densest row in the app: four numeric columns and a bar, one line per
+  // scale degree. It is the first thing to collide when the viewport narrows.
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Render as music" }).click();
+  await page.getByText("The scale this voice implies").waitFor();
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);

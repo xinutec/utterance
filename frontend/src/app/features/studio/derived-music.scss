@@ -1,0 +1,82 @@
+.derived {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.player {
+  display: block;
+  width: 100%;
+}
+
+.provenance,
+.note {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.heading {
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface-variant);
+  margin: 0.25rem 0 0;
+}
+
+.degrees {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+
+  li {
+    display: grid;
+    // Fixed columns so the numbers form readable columns rather than drifting
+    // with their own width; the bar takes whatever is left.
+    grid-template-columns: 3.5rem 1fr 3.5rem auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.cents {
+  text-align: right;
+  font-weight: 500;
+}
+
+.unit {
+  color: var(--mat-sys-on-surface-variant);
+  margin-left: 0.1rem;
+}
+
+.bar {
+  display: block;
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--mat-sys-surface-container-highest);
+  overflow: hidden;
+
+  .fill {
+    display: block;
+    height: 100%;
+    background: var(--mat-sys-primary);
+  }
+}
+
+.ratio,
+.off {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.off.notable {
+  // The whole point: an interval this far from equal temperament is one no
+  // ordinary instrument plays.
+  color: var(--mat-sys-tertiary);
+}
+
+.error {
+  color: var(--mat-sys-error);
+  margin: 0;
+}

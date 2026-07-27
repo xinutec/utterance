@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::store::RecordingMeta;
+use crate::voice;
 
 /// Query string of `POST /api/recordings`.
 #[derive(Debug, Deserialize)]
@@ -100,4 +101,88 @@ pub async fn delete(
 #[serde(rename_all = "camelCase")]
 pub struct Deleted {
     pub id: String,
+}
+
+/// One note of the speaker's derived scale, as the browser sees it.
+///
+/// A wire type rather than `music_mapping::tuning::Degree` re-exported: the
+/// mapping crate has no business carrying serialisation for a UI, and a scale
+/// shown to a person wants the cents rounded and the roughness left out.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct ScaleDegree {
+    pub cents: f32,
+    pub ratio: f32,
+    /// How firmly this is a note rather than a technicality. See
+    /// `music_mapping::tuning::Degree::depth`.
+    pub depth: f32,
+}
+
+/// The musical world derived from a speaker's recordings.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceSummary {
+    /// Where the music centres — this speaker's median pitch.
+    pub tonic_hz: f32,
+    pub degrees: Vec<ScaleDegree>,
+    /// Relative amplitude per harmonic, the speaker's own measured spectrum.
+    pub timbre: Vec<f32>,
+    /// Which recording the scale and timbre were derived from.
+    pub calibration_id: String,
+    pub calibration_label: String,
+    /// How many takes went into the speaker profile.
+    pub takes: usize,
+}
+
+/// `GET /api/voice` — the scale, timbre and tonic the speaker's takes imply.
+pub async fn voice_summary(State(app): State<AppState>) -> Result<Json<VoiceSummary>, AppError> {
+    let calibrated = voice::calibrate(&app.store, None)?;
+    Ok(Json(VoiceSummary {
+        tonic_hz: calibrated.voice.tonic_hz,
+        degrees: calibrated
+            .voice
+            .tuning
+            .degrees
+            .iter()
+            .map(|d| ScaleDegree {
+                cents: d.cents,
+                ratio: d.ratio,
+                depth: d.depth,
+            })
+            .collect(),
+        timbre: calibrated.voice.timbre.clone(),
+        calibration_id: calibrated.source.id.clone(),
+        calibration_label: calibrated.source.label.clone(),
+        takes: calibrated.profile.takes,
+    }))
+}
+
+/// `GET /api/recordings/{id}/render` — this take as music, in the speaker's
+/// own scale and timbre.
+///
+/// Rendered on demand rather than stored. It is a pure function of the take, the
+/// calibration and the mapping, and the mapping is the thing we expect to change
+/// hourly — a cached render would be stale the moment it was interesting.
+pub async fn render(
+    State(app): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Response, AppError> {
+    let calibrated = voice::calibrate(&app.store, None)?;
+    let voiceprint = app.store.voiceprint(&id)?;
+
+    let score = music_mapping::compose::compose(&voiceprint, &calibrated.voice);
+    tracing::info!(
+        "rendered {} as {} notes in a {}-degree scale from {}",
+        id,
+        score.events.len(),
+        calibrated.voice.tuning.degrees.len(),
+        calibrated.source.label
+    );
+
+    let bytes = music_realisation::wav::encode(&music_realisation::synth::render(&score));
+    Ok(([(header::CONTENT_TYPE, "audio/wav")], bytes).into_response())
 }

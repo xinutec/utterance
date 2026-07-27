@@ -49,8 +49,8 @@ const MIN_FRAMES: usize = 200;
 
 /// The extent of a speaker's vowel space, in Hz.
 ///
-/// Constructed only when both axes have a non-zero span, so [`Self::normalise`]
-/// can divide without a guard.
+/// Build one with [`Self::new`], which refuses a degenerate span so
+/// [`Self::normalise`] can divide without a guard.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VowelSpace {
@@ -61,7 +61,9 @@ pub struct VowelSpace {
 }
 
 impl VowelSpace {
-    fn new(f1_low: f32, f1_high: f32, f2_low: f32, f2_high: f32) -> Option<Self> {
+    /// A vowel space with the given bounds, or `None` if either axis has no
+    /// extent — a space of zero width is not one anything can be placed in.
+    pub fn new(f1_low: f32, f1_high: f32, f2_low: f32, f2_high: f32) -> Option<Self> {
         if f1_high <= f1_low || f2_high <= f2_low {
             return None;
         }

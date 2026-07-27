@@ -392,6 +392,8 @@ dependencies = [
  "hound",
  "http-body-util",
  "music-analysis",
+ "music-mapping",
+ "music-realisation",
  "serde",
  "serde_json",
  "sha2",
@@ -414,6 +416,22 @@ dependencies = [
  "serde_json",
  "thiserror",
  "ts-rs",
+]
+
+[[package]]
+name = "music-mapping"
+version = "0.1.0"
+dependencies = [
+ "music-analysis",
+ "serde",
+]
+
+[[package]]
+name = "music-realisation"
+version = "0.1.0"
+dependencies = [
+ "hound",
+ "music-mapping",
 ]
 
 [[package]]

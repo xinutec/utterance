@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace]
-members = ["music-analysis"]
+members = ["music-analysis", "music-mapping", "music-realisation"]
 
 [features]
 # Turns on ts-rs across the workspace — this crate's wire types *and* the
@@ -15,6 +15,10 @@ ts = ["dep:ts-rs", "music-analysis/ts"]
 
 [dependencies]
 music-analysis = { path = "music-analysis" }
+# The composition root: this crate is where the three layers are wired together,
+# and the only one that may depend on all of them.
+music-mapping = { path = "music-mapping" }
+music-realisation = { path = "music-realisation" }
 tokio = { version = "1.53.1", features = ["full"] }
 axum = "0.8.9"
 tower-http = { version = "0.7.0", features = ["fs"] }

@@ -11,16 +11,20 @@ those constraints are run.
 The output is not meant to sound like a voice. Two people reading the same
 sentence should produce audibly different pieces, each internally consistent.
 
-**Today this is the analysis layer only.** A take yields a voiceprint you can
-inspect — pitch contour, energy, events, formants — and nothing yet generates
-audio. The mapping and realisation layers are unwritten; `docs/roadmap.md` says
-what exists, what is next, and which decisions are already settled.
+**The chain runs end to end, and only from the crates.** A calibration take
+yields a scale and a timbre derived from the speaker's own spectrum; an utterance
+in that world yields a score; the score renders to audio. What the browser shows
+is still only the voiceprint — nothing derived is reachable from the UI yet.
+`docs/roadmap.md` says what exists, what is next, and which decisions are
+settled.
 
 ## Layout
 
 | Path             | What it is                                                  |
 | ---------------- | ----------------------------------------------------------- |
 | `music-analysis` | Pure DSP core: audio in, voiceprint out. No IO, no opinions. |
+| `music-mapping`  | Musical decisions over a voiceprint. Where the opinions live.  |
+| `music-realisation` | Score to audio. Additive synthesis, no decisions.          |
 | `src`            | axum server: recordings, analysis runs, static bundle.        |
 | `frontend`       | Angular 22 app: capture, inspect, visualise.                  |
 | `docs`           | Design intent. Start with `architecture.md`, then `roadmap.md`.|
