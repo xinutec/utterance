@@ -35,7 +35,7 @@ function voiceprint(): unknown {
   const count = 400;
   const frames = Array.from({ length: count }, (_, i) => i);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     source: { sampleRateHz: 48_000, channels: 1, durationS: 28.4, peak: 0.71, clippedFraction: 0 },
     frame: { analysisRateHz: 16_000, hopS: 0.01, count },
     pitch: {

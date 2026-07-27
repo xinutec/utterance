@@ -13,8 +13,19 @@ use serde::{Deserialize, Serialize};
 /// Bumped whenever the meaning of a field changes, so a stored voiceprint is
 /// never silently reinterpreted under a newer analyser.
 ///
-/// 2: `Source` gained `peak` and `clippedFraction`.
-pub const SCHEMA_VERSION: u32 = 2;
+/// **Bump this for any change that alters the output — the algorithm as much as
+/// the shape.** A stored voiceprint is a cache of a pure function of the audio,
+/// and this number identifies the function. Changing how onsets are picked
+/// invalidates every stored voiceprint exactly as thoroughly as adding a field
+/// does; the difference is that the shape change fails loudly on deserialise
+/// while the algorithm change is silent, so only this makes it visible.
+///
+/// Caught the hard way: an onset-detector rewrite left every stored take
+/// reporting its old counts, because the shape still parsed.
+///
+/// - 2: `Source` gained `peak` and `clippedFraction`.
+/// - 3: onset detection reworked — peak dominance, CFAR threshold, silence gate.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]

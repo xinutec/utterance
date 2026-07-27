@@ -12,6 +12,7 @@ use music::config::Config;
 use music::routes;
 use music::state::AppState;
 use music::store::Store;
+use music_analysis::voiceprint::SCHEMA_VERSION;
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -172,7 +173,7 @@ async fn uploading_a_recording_returns_its_voiceprint() {
 
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["meta"]["label"], "take-1");
-    assert_eq!(body["voiceprint"]["schemaVersion"], 2);
+    assert_eq!(body["voiceprint"]["schemaVersion"], SCHEMA_VERSION);
     assert_eq!(body["voiceprint"]["frame"]["analysisRateHz"], 16_000);
 
     // The point of the whole pipeline: a voice-shaped input must come back with
@@ -223,7 +224,7 @@ async fn a_recording_can_be_listed_fetched_and_deleted() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(detail["voiceprint"]["schemaVersion"], 2);
+    assert_eq!(detail["voiceprint"]["schemaVersion"], SCHEMA_VERSION);
 
     let audio = app
         .router
