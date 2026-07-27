@@ -10,6 +10,7 @@ import {
 } from "@angular/core";
 
 import type { Voiceprint } from "../../models";
+import { onColourSchemeChange, resolveThemeColours } from "./theme-colours";
 
 /** Axis bounds, in Hz. Wide enough for any speaker's vowel space. */
 const F1_RANGE = { min: 200, max: 1000 };
@@ -54,6 +55,7 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
   private observer?: ResizeObserver;
+  private stopWatchingScheme?: () => void;
 
   constructor() {
     effect(() => {
@@ -67,11 +69,15 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
       this.draw(this.voiceprint());
     });
     this.observer.observe(this.canvasRef().nativeElement);
+    this.stopWatchingScheme = onColourSchemeChange(() => {
+      this.draw(this.voiceprint());
+    });
     this.draw(this.voiceprint());
   }
 
   ngOnDestroy(): void {
     this.observer?.disconnect();
+    this.stopWatchingScheme?.();
   }
 
   private draw(vp: Voiceprint): void {
@@ -89,9 +95,7 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const style = getComputedStyle(canvas);
-    const ink = style.getPropertyValue("--chart-ink").trim() || "#e0e0e0";
-    const muted = style.getPropertyValue("--chart-muted").trim() || "#6a6a6a";
+    const { ink, muted } = resolveThemeColours(canvas.parentElement ?? canvas);
 
     const pad = { top: 18, right: 14, bottom: 28, left: 44 };
     const plot = {

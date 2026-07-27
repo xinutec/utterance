@@ -10,6 +10,7 @@ import {
 } from "@angular/core";
 
 import type { Voiceprint } from "../../models";
+import { onColourSchemeChange, resolveThemeColours } from "./theme-colours";
 
 /** Lowest and highest frequency drawn on the pitch panel — the tracker's range. */
 const PITCH_MIN_HZ = 70;
@@ -53,6 +54,7 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
   private observer?: ResizeObserver;
+  private stopWatchingScheme?: () => void;
 
   constructor() {
     // Redraws whenever the input changes; the first draw waits for the view,
@@ -68,11 +70,15 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
       this.draw(this.voiceprint());
     });
     this.observer.observe(this.canvasRef().nativeElement);
+    this.stopWatchingScheme = onColourSchemeChange(() => {
+      this.draw(this.voiceprint());
+    });
     this.draw(this.voiceprint());
   }
 
   ngOnDestroy(): void {
     this.observer?.disconnect();
+    this.stopWatchingScheme?.();
   }
 
   private draw(vp: Voiceprint): void {
@@ -92,11 +98,7 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const style = getComputedStyle(canvas);
-    const ink = style.getPropertyValue("--chart-ink").trim() || "#e0e0e0";
-    const muted = style.getPropertyValue("--chart-muted").trim() || "#6a6a6a";
-    const accent = style.getPropertyValue("--chart-accent").trim() || "#7cc4ff";
-    const warm = style.getPropertyValue("--chart-warm").trim() || "#ffb26b";
+    const { ink, muted, accent, warm } = resolveThemeColours(canvas.parentElement ?? canvas);
 
     const count = vp.frame.count;
     if (count === 0) return;

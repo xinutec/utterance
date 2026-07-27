@@ -1,4 +1,4 @@
-import { test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 // The fleet-shared layout harness, consumed as the published @xinutec/ui-harness
 // package (source repo ~/Code/ui-harness). Ships compiled JS, loads from
 // node_modules.
@@ -99,3 +99,62 @@ test("studio — empty state lays out cleanly @ phone", async ({ page }, testInf
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
+
+/**
+ * Canvas drawing takes colour strings, and an unparseable one is ignored in
+ * silence — `fillStyle` simply keeps its previous value, which starts out black.
+ * Material's system tokens compute to `light-dark(#1a1b1f, #e3e2e6)`, a CSS
+ * function no canvas can parse, so passing one straight through painted black
+ * text on a dark background with nothing anywhere reporting a problem.
+ *
+ * Nothing else in this suite can see that: the layout checks measure geometry,
+ * the unit tests never rasterise, and the page is perfectly valid. So this reads
+ * the pixels.
+ */
+for (const scheme of ["light", "dark"] as const) {
+  test(`canvases stay legible in ${scheme} mode`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await mockApi(page);
+    await page.goto("/");
+    await page.locator("app-voiceprint-chart canvas").waitFor();
+    await page.locator("app-vowel-space canvas").waitFor();
+
+    for (const selector of ["app-voiceprint-chart canvas", "app-vowel-space canvas"]) {
+      const contrast = await page.locator(selector).evaluate((canvas: HTMLCanvasElement) => {
+        const relativeLuminance = (r: number, g: number, b: number): number => {
+          const channel = (v: number): number => {
+            const s = v / 255;
+            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+          };
+          return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+        };
+
+        const background = getComputedStyle(document.body).backgroundColor;
+        const [br, bg, bb] = background.match(/\d+/g)!.map(Number);
+        const backgroundLuminance = relativeLuminance(br, bg, bb);
+
+        const ctx = canvas.getContext("2d")!;
+        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        // Solidly painted pixels only — antialiased glyph edges blend toward the
+        // background by design and would drag the measurement down.
+        const ratios: number[] = [];
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 3] < 200) continue;
+          const l = relativeLuminance(data[i], data[i + 1], data[i + 2]);
+          const [hi, lo] = l > backgroundLuminance ? [l, backgroundLuminance] : [backgroundLuminance, l];
+          ratios.push((hi + 0.05) / (lo + 0.05));
+        }
+        if (ratios.length === 0) return { painted: 0, best: 0 };
+        ratios.sort((a, b) => a - b);
+        return { painted: ratios.length, best: ratios[Math.floor(ratios.length * 0.9)] };
+      });
+
+      expect(contrast.painted, `${selector} painted nothing at all`).toBeGreaterThan(200);
+      expect(
+        contrast.best,
+        `${selector} in ${scheme} mode: brightest marks reach only ${contrast.best.toFixed(1)}:1 against the page`,
+      ).toBeGreaterThan(3);
+    }
+  });
+}
