@@ -1,0 +1,10 @@
+/target
+/data
+frontend/node_modules
+frontend/dist
+frontend/.angular
+frontend/out-tsc
+frontend/test-results
+.direnv
+.DS_Store
+/result

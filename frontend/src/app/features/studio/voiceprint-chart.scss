@@ -1,0 +1,16 @@
+:host {
+  display: block;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: 340px;
+
+  // Read by the canvas painter via getComputedStyle, so the drawing follows the
+  // Material theme instead of hard-coding colours the theme can contradict.
+  --chart-ink: var(--mat-sys-on-surface);
+  --chart-muted: var(--mat-sys-outline);
+  --chart-accent: var(--mat-sys-primary);
+  --chart-warm: var(--mat-sys-tertiary);
+}

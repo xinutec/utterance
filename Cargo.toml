@@ -1,0 +1,36 @@
+[package]
+name = "music"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+members = ["music-analysis"]
+
+[features]
+# Turns on ts-rs across the workspace — this crate's wire types *and* the
+# voiceprint types in music-analysis — so `cargo test --features ts
+# export_bindings` emits the frontend TypeScript (see scripts/gen-types.sh).
+# Off by default: normal builds carry no ts-rs at all.
+ts = ["dep:ts-rs", "music-analysis/ts"]
+
+[dependencies]
+music-analysis = { path = "music-analysis" }
+tokio = { version = "1.53.1", features = ["full"] }
+axum = "0.8.9"
+tower-http = { version = "0.7.0", features = ["fs"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+# Content-addressed recording ids: the same audio must land on the same id.
+sha2 = "0.11.0"
+anyhow = "1.0.104"
+thiserror = "2.0.19"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+ts-rs = { version = "12.0.1", features = ["serde-compat"], optional = true }
+
+[dev-dependencies]
+# Drives the router in-process for the API tests — no socket, no port to clash on.
+tower = { version = "0.5.3", features = ["util"] }
+http-body-util = "0.1.4"
+# Builds real WAV bytes for upload fixtures rather than hand-rolled headers.
+hound = "3.5.1"

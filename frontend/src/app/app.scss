@@ -1,0 +1,19 @@
+.bar {
+  gap: 0.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.title {
+  font-weight: 500;
+}
+
+.subtitle {
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+  // The tagline is decoration; on a phone the app name is what has to survive.
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

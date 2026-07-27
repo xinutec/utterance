@@ -1,0 +1,124 @@
+<div class="studio">
+  <mat-card>
+    <mat-card-content>
+      @if (!captureSupported) {
+        <p class="note">
+          This browser will not capture audio here. Recording needs a secure context — open the app over
+          localhost or HTTPS. You can still upload a WAV file below.
+        </p>
+      }
+
+      @if (recorder.recording()) {
+        <div class="live">
+          <div class="elapsed">{{ recorder.elapsedS() | number: "1.1-1" }}s</div>
+          <mat-progress-bar
+            class="meter"
+            mode="determinate"
+            [value]="recorder.level() * 100"
+            aria-label="Input level"
+          ></mat-progress-bar>
+          <p class="hint">aiming for about {{ targetSeconds }} seconds of unhurried speech</p>
+        </div>
+        <div class="actions">
+          <button matButton="filled" type="button" (click)="stopRecording()">
+            <mat-icon>stop</mat-icon>
+            Stop and analyse
+          </button>
+          <button matButton type="button" (click)="cancelRecording()">Discard</button>
+        </div>
+      } @else {
+        <div class="actions">
+          <button
+            matButton="filled"
+            type="button"
+            [disabled]="!captureSupported || store.busy()"
+            (click)="startRecording()"
+          >
+            <mat-icon>mic</mat-icon>
+            Record
+          </button>
+          <button matButton type="button" [disabled]="store.busy()" (click)="file.click()">
+            <mat-icon>upload_file</mat-icon>
+            Upload a WAV
+          </button>
+          <input #file type="file" accept="audio/wav,.wav" hidden (change)="onFileChosen($event)" />
+        </div>
+      }
+
+      @if (store.busy()) {
+        <mat-progress-bar mode="indeterminate" aria-label="Analysing"></mat-progress-bar>
+      }
+      @if (store.error(); as message) {
+        <p class="error" role="alert">{{ message }}</p>
+      }
+      @if (captureError(); as message) {
+        <p class="error" role="alert">{{ message }}</p>
+      }
+      @if (warning(); as message) {
+        <p class="warning">{{ message }}</p>
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <div class="columns">
+    <mat-card>
+      <mat-card-header><mat-card-title>Takes</mat-card-title></mat-card-header>
+      <mat-card-content>
+        @if (store.recordings().length === 0) {
+          <p class="note">Nothing recorded yet.</p>
+        } @else {
+          <!--
+            A plain list of sibling buttons rather than mat-action-list: the row
+            needs both a select action and a delete action, and nesting the
+            delete button inside a clickable list-item button would be invalid
+            HTML that no screen reader can present sensibly.
+          -->
+          <ul class="take-list">
+            @for (take of store.recordings(); track take.id) {
+              <li class="take" [class.chosen]="store.selected()?.meta?.id === take.id">
+                <button class="pick" type="button" (click)="store.select(take)">
+                  <span class="label">{{ take.label }}</span>
+                  <span class="stats">
+                    {{ take.durationS | number: "1.1-1" }}s ·
+                    {{ take.voicedFraction * 100 | number: "1.0-0" }}% voiced ·
+                    {{ take.onsetCount }} onsets
+                  </span>
+                </button>
+                <button
+                  matIconButton
+                  type="button"
+                  [attr.aria-label]="'Delete ' + take.label"
+                  matTooltip="Delete"
+                  (click)="remove(take, $event)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="detail">
+      @if (store.selected(); as detail) {
+        <mat-card-header>
+          <mat-card-title>{{ detail.meta.label }}</mat-card-title>
+          <mat-card-subtitle>
+            {{ detail.voiceprint.source.sampleRateHz | number: "1.0-0" }} Hz source ·
+            analysed at {{ detail.voiceprint.frame.analysisRateHz | number: "1.0-0" }} Hz ·
+            {{ detail.voiceprint.frame.count | number }} frames
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <app-voiceprint-chart [voiceprint]="detail.voiceprint"></app-voiceprint-chart>
+          <audio class="player" controls [src]="store.audioUrl(detail.meta.id)"></audio>
+        </mat-card-content>
+      } @else {
+        <mat-card-content>
+          <p class="note">Record or select a take to see its voiceprint.</p>
+        </mat-card-content>
+      }
+    </mat-card>
+  </div>
+</div>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A pitch contour: what the app is for, in the one shape that fits 32px. -->
+  <rect width="32" height="32" rx="7" fill="#0b1b2b" />
+  <path
+    d="M3 21 C 7 21, 8 11, 12 11 S 17 19, 21 19 S 26 8, 29 8"
+    fill="none"
+    stroke="#7cc4ff"
+    stroke-width="2.5"
+    stroke-linecap="round"
+  />
+</svg>
