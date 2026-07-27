@@ -11,7 +11,7 @@ import {
 
 /**
  * Layout-measurement checks against the built bundle with the API mocked. The
- * studio is a dense page — a take list, a stats line and a three-panel chart —
+ * studio is a dense page — a take list, a stats line, a four-panel chart and a vowel-space plot —
  * and its failure modes (a stats line colliding with the delete button, a canvas
  * forcing the body wider than the screen) read fine in source and only show in a
  * real browser at a real width.

@@ -12,8 +12,13 @@ specific person.
 
 ## The three-way split
 
-The single structural commitment of this repo. These layers stay in separate
+The single structural commitment of this repo. These layers live in separate
 crates so that a discarded aesthetic idea never drags analysis code with it.
+
+Only `music-analysis` exists so far; mapping and realisation are not written.
+When they are, they get their own crates, and the score — the artefact between
+them, as yet undesigned — becomes the second stable interface alongside the
+voiceprint.
 
 ```
 audio ──▶ [ analysis ] ──▶ voiceprint ──▶ [ mapping ] ──▶ score ──▶ [ realisation ] ──▶ audio
@@ -58,10 +63,18 @@ The intent for each:
   measured, not as *a syllable began here*, which is what we want and cannot yet
   distinguish — a continuously glided vowel produces the former without the
   latter. Separating them needs the stress hierarchy, below.
+- **formants** — F1, F2 and F3, the vocal-tract resonances. F1 against F2 is a
+  two-dimensional space in which every vowel of a language occupies a region, so
+  a vowel sequence is a path through it — the geometry the harmony mapping is to
+  be built on. Nearly independent of pitch, which is what makes it a separate
+  measurement rather than a view of the same thing. `null` where the fit found
+  nothing in that formant's anatomical range: assignment is per-frame with no
+  continuity tracking, so a formant that drops out is reported as absent rather
+  than filled in from the one above it.
 
 Planned, in rough order of how much they unlock (see `docs/roadmap.md`):
-measured partial ratios (→ tuning), formant trajectories (→ harmony via vowel
-space), stress hierarchy (→ meter), phone-class segmentation (→ symbol stream).
+measured partial ratios (→ tuning), stress hierarchy (→ meter), phone-class
+segmentation (→ symbol stream).
 
 ## Fixtures and ground truth
 
@@ -86,11 +99,20 @@ ground truth is worse than nothing, because it stops anyone looking again.
 ## Determinism
 
 Analysis must be a pure function of the audio bytes. Same input, same voiceprint,
-byte for byte, on any machine. This is what makes fixtures meaningful and what
-lets us tell "I changed the mapping" apart from "the analyser drifted".
+byte for byte. This is what makes fixtures meaningful and what lets us tell "I
+changed the mapping" apart from "the analyser drifted".
 
-No clock, no randomness, no parallel reduction with nondeterministic ordering, no
-dependence on floating-point library differences where avoidable.
+No clock, no randomness, no parallel reduction with nondeterministic ordering,
+and iterative solvers start from fixed points rather than anywhere that varies
+between runs.
+
+**Scope of the guarantee: one toolchain on one platform.** The analysis path is
+full of `sin`, `ln`, `log10` and complex `arg`, and libm implementations differ
+between platforms in the last bits — so byte-identical output *across* machines
+is neither claimed nor tested. The determinism tests compare two runs in the same
+process, which is exactly as far as the claim goes. Committing a golden
+voiceprint and asserting against it would be worth doing, and would have to allow
+a tolerance rather than compare bytes.
 
 ## Why no ML
 

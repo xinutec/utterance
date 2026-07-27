@@ -3,12 +3,18 @@
 Derive music from the structure of a voice.
 
 A recording of someone speaking for half a minute is not treated as a sound to
-play back, pitch-shift or resynthesise. It is treated as a **source of law**: the
-speaker's prosody, stress hierarchy, vowel geometry and measured harmonic series
-are extracted, and the music is what falls out when those constraints are run.
+play back, pitch-shift or resynthesise. It is treated as a **source of law**. The
+aim: the speaker's prosody, stress hierarchy, vowel geometry and measured
+harmonic series become the constraints, and the music is what falls out when
+those constraints are run.
 
 The output is not meant to sound like a voice. Two people reading the same
 sentence should produce audibly different pieces, each internally consistent.
+
+**Today this is the analysis layer only.** A take yields a voiceprint you can
+inspect — pitch contour, energy, events, formants — and nothing yet generates
+audio. The mapping and realisation layers are unwritten; `docs/roadmap.md` says
+what exists, what is next, and which decisions are already settled.
 
 ## Layout
 
@@ -17,7 +23,7 @@ sentence should produce audibly different pieces, each internally consistent.
 | `music-analysis` | Pure DSP core: audio in, voiceprint out. No IO, no opinions. |
 | `src`            | axum server: recordings, analysis runs, static bundle.        |
 | `frontend`       | Angular 22 app: capture, inspect, visualise.                  |
-| `docs`           | Design intent — start with `docs/architecture.md`.            |
+| `docs`           | Design intent. Start with `architecture.md`, then `roadmap.md`.|
 
 ## Running locally
 
@@ -37,7 +43,7 @@ nix develop -c cargo build --release
 BIND_ADDR=0.0.0.0:8181 \
   DATA_DIR="$PWD/data" \
   STATIC_DIR="$PWD/frontend/dist/music-web/browser" \
-  ~/.cache/cargo/target/release/music
+  nix develop -c cargo run --release
 ```
 
 Then <http://localhost:8181>. Binding `0.0.0.0` also serves the LAN, so another
@@ -59,6 +65,8 @@ re-derived automatically whenever the analyser moves on.
 ## Verifying
 
 ```sh
-scripts/verify.sh         # fmt, clippy, cargo test, eslint, ng build, dev-lint
+scripts/verify.sh         # rust: fmt, clippy, tests · generated-type drift
+                          # frontend: eslint, unit tests, build + layout harness
+                          # plus the shared dev-lint rules
 scripts/setup-hooks.sh    # one-time per clone: pre-commit runs the above
 ```

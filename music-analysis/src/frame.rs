@@ -7,16 +7,20 @@
 
 use crate::resample::ANALYSIS_RATE;
 
-/// Frames per second of analysis. 10 ms is the speech-analysis convention: short
-/// enough to place a plosive burst, long enough that 30 seconds stays a few
-/// thousand frames rather than a few hundred thousand.
+/// Samples between consecutive frames — 10 ms, i.e. 100 frames per second.
+///
+/// The speech-analysis convention: short enough to place a plosive burst, long
+/// enough that 30 seconds stays a few thousand frames rather than a few hundred
+/// thousand.
 pub const HOP: usize = ANALYSIS_RATE as usize / 100;
 
 /// Window for pitch estimation, 64 ms.
 ///
-/// Set by the lowest f0 we track: YIN needs two full periods inside the window,
-/// and a 70 Hz voice has a 14 ms period. Anything shorter silently loses the
-/// bottom of a low male range.
+/// Set by the lowest f0 we track. YIN searches lags out to one period of the
+/// lowest voice — 229 samples at 70 Hz — and its difference function needs the
+/// window to be at least twice the longest lag it examines, so the search is
+/// capped at `window / 2` (see `f0::estimate`). 1024 leaves that cap comfortably
+/// above 229. Anything shorter silently loses the bottom of a low male range.
 pub const PITCH_WINDOW: usize = 1024;
 
 /// Window for spectral analysis, 32 ms. Shorter than the pitch window because

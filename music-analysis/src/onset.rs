@@ -27,7 +27,7 @@
 //! detector over-fires, and `tests/onset_real.rs` uses one for exactly that, but
 //! it cannot say what the right count is — the question has no answer there.
 //! Resolving the ambiguity properly needs a cue flux does not carry: the stress
-//! hierarchy, which is where the metrical work in `docs/architecture.md` starts.
+//! hierarchy, which is where the metrical work in `docs/roadmap.md` starts.
 
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -41,9 +41,10 @@ use crate::frame::{self, SPECTRAL_WINDOW};
 /// by its vowel onset is one event, not two.
 const MIN_SEPARATION: usize = 5;
 
-/// How much recent history the adaptive threshold is measured over, in frames
-/// (~250 ms). Long enough to characterise a stretch of speech, short enough to
-/// follow it as it changes.
+/// Total span of the local window the adaptive threshold is measured over, in
+/// frames (~250 ms, straddling the candidate). Long enough to characterise a
+/// stretch of speech, short enough to follow it as it changes. The guard band
+/// below removes the middle of it.
 const HISTORY_FRAMES: usize = 25;
 
 /// Frames either side of a candidate excluded from its own threshold statistics.
@@ -84,6 +85,13 @@ const GATE_SPAN: usize = 10;
 /// sit. Raise to report fewer, more confident onsets.
 ///
 /// The dominant sensitivity knob. See [`threshold`] for why the units are MADs.
+///
+/// **This value, [`THRESHOLD_FLOOR`] and [`SILENCE_MARGIN_DB`] were fitted
+/// against a single sustained-vowel fixture, and are unvalidated on speech.**
+/// That fixture can only bound over-firing — it contains no discrete events to
+/// count, for the reason given at the top of this module. Judging these numbers
+/// properly needs a recording with syllables labelled by ear, which does not
+/// exist yet; until it does, treat them as a starting point rather than a result.
 const THRESHOLD_MADS: f32 = 6.0;
 
 /// How far above the noise floor a frame must sit before its flux counts fully,
@@ -292,20 +300,13 @@ fn threshold(flux: &[f32], i: usize) -> f32 {
     median + (THRESHOLD_MADS * mad).max(THRESHOLD_FLOOR)
 }
 
-/// Median and median-absolute-deviation of the flux curve *preceding* `i`.
+/// Median and median-absolute-deviation of the flux curve around `i`, excluding
+/// a guard band either side of the candidate itself.
 ///
-/// Backward-looking, not centred. A centred window contains the very peak being
-/// judged along with its aftermath, which inflates both statistics exactly where
-/// a real event is — the attack of a sound then has to clear a threshold its own
-/// arrival raised, and drops out. Measured on the sustained-vowel fixture, a
-/// centred window lost the attack entirely while keeping mid-vowel jitter.
-///
-/// Asking "is this bigger than what was happening just before" is also the
-/// better question on its own terms: that is what an onset *is*.
-///
-/// MAD rather than standard deviation because one outlier in the history moves a
+/// MAD rather than standard deviation because one outlier in the window moves a
 /// standard deviation a long way, and the threshold would rise to meet whatever
-/// it was supposed to detect.
+/// it was supposed to detect. The guard band is the other half of that problem —
+/// see the body for why the window is arranged this way.
 fn local_spread(flux: &[f32], i: usize) -> (f32, f32) {
     // Centred, with a guard band excluded around the candidate — the standard
     // constant-false-alarm-rate arrangement. Two separate problems force it:

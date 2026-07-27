@@ -12,9 +12,16 @@ import {
 import type { Voiceprint } from "../../models";
 import { onColourSchemeChange, resolveThemeColours } from "./theme-colours";
 
-/** Axis bounds, in Hz. Wide enough for any speaker's vowel space. */
-const F1_RANGE = { min: 200, max: 1000 };
-const F2_RANGE = { min: 600, max: 2600 };
+/**
+ * Axis bounds, in Hz.
+ *
+ * Deliberately identical to the anatomical ranges the analyser will report a
+ * formant in (`formant::RANGES`). Plotting a narrower window than the
+ * measurement would silently drop real estimates off the edge of the picture,
+ * and nothing on screen would say a point was missing.
+ */
+const F1_RANGE = { min: 200, max: 1100 };
+const F2_RANGE = { min: 600, max: 3000 };
 
 /**
  * Cardinal vowel positions, for orientation only.
@@ -131,7 +138,13 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Frames with both formants, clamped to the plotted range. */
+  /**
+   * Frames with both formants.
+   *
+   * Out-of-range points are excluded, not clamped — clamping would pile them
+   * against an axis and invent a cluster the speaker never produced. Given the
+   * bounds match the analyser's, this should exclude nothing in practice.
+   */
   private positions(vp: Voiceprint): { f1: number; f2: number }[] {
     const out: { f1: number; f2: number }[] = [];
     for (let i = 0; i < vp.frame.count; i++) {

@@ -329,10 +329,11 @@ async fn a_traversal_id_is_a_404_not_a_file_read() {
 
 #[tokio::test]
 async fn an_upload_larger_than_the_default_axum_limit_is_accepted() {
-    // Browser capture geometry: 48 kHz stereo, which is ~192 KB per second.
-    // Twelve seconds clears axum's 2 MB default, and a real half-minute take is
-    // nearly three times that. Without the raised limit every recording would be
-    // rejected at the door.
+    // Comfortably past axum's 2 MB default, using 48 kHz stereo to get there in
+    // twelve seconds of fixture. The app itself records 48 kHz *mono* (~96 KB/s),
+    // where a real half-minute take is about 2.9 MB — over the default either
+    // way, so without the raised limit every recording would be rejected at the
+    // door. Stereo is used here only to keep the fixture short.
     let app = TestApp::new();
     let wav = wav_fixture_at(12.0, 48_000, 2);
     assert!(

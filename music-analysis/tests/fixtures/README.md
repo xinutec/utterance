@@ -19,7 +19,7 @@ breath, at a near-constant pitch of about 135 Hz. Confirmed with the speaker.
 on sustained material — the first implementation reported 22 events across seven
 seconds of one continuous sound. It **cannot** establish the right number, because
 a continuous glide has no discrete events while still producing real spectral
-change; see the module docs in `src/onset.rs`. Tests here therefore assert
+change; see the module docs in `../../src/onset.rs`. Tests here therefore assert
 bounds, never exact counts.
 
 Note also that the phonation *fades in* over roughly 60 ms rather than starting

@@ -22,12 +22,12 @@ const PRE_EMPHASIS: f32 = 0.97;
 
 /// Prediction order.
 ///
-/// The usual rule is two poles per expected resonance plus a few spare: at a
-/// 16 kHz analysis rate there are four or five formants below Nyquist, so 18
-/// leaves room for them and for whatever tilt survives pre-emphasis. Too low
-/// merges neighbouring formants into one pole; too high spends poles on
-/// individual harmonics of the source, which is exactly what this is supposed to
-/// see past.
+/// The standard rule of thumb is one pole per kilohertz of sample rate plus two
+/// — 18 at our 16 kHz analysis rate. That works out at two poles for each of the
+/// four or five formants below Nyquist, plus a pair spare for whatever spectral
+/// tilt survives pre-emphasis. Too low merges neighbouring formants into a single
+/// pole; too high spends poles on individual harmonics of the source, which is
+/// exactly what this is supposed to see past.
 pub const ORDER: usize = 18;
 
 /// Iterations of the root solver before giving up.

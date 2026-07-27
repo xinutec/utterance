@@ -8,7 +8,7 @@ the voiceprint as the interface between its layers.
 
 | Measurement | State | Notes |
 | --- | --- | --- |
-| f0 contour | done | YIN. Tracks a genuine 2:1 pitch excursion correctly. |
+| f0 contour | done | YIN. Guards the classic octave error (`tests/f0.rs`). |
 | energy envelope | done | |
 | voicing | done | Gates everything pitch-derived and the formants. |
 | events (spectral flux) | done, with a known limit | See "onsets" below. |
@@ -42,8 +42,8 @@ In rough order of how much each unlocks. None is started.
 ## Known gaps, with their cost
 
 - **Onsets mean "the spectrum changed", not "a syllable began."** Spectral flux
-  cannot separate the two; a continuously glided vowel demonstrates it. Tuning
-  accuracy needs speech with syllables labelled by ear, which no one has produced
+  cannot separate the two; a continuously glided vowel demonstrates it. Threshold
+  tuning needs speech with syllables labelled by ear, which no one has produced
   yet, so the onset tests assert bounds rather than counts. The real fix is the
   stress hierarchy, which carries a cue flux does not.
 - **No formant continuity tracking.** Assignment is per-frame, constrained by
@@ -57,7 +57,17 @@ In rough order of how much each unlocks. None is started.
 
 ## Decisions taken
 
-Recorded so they are not reopened without reason.
+Recorded so they are not reopened without reason. **This is not the full
+ledger** — most decisions are documented at the code they govern, where they are
+harder to forget about. Listed here are the ones with no obvious home in the
+source, plus the one that most shapes daily work.
+
+- **A stored voiceprint is a cache, not a record.** The audio is the source of
+  truth and analysis is a pure function of it, so `SCHEMA_VERSION` identifies the
+  analyser and `Store::ensure_current` re-derives anything stale. Bump that
+  version for *any* change to the output, algorithm as much as shape: a shape
+  change fails loudly on deserialise, an algorithm change is silent. This is why
+  improving the analyser never invalidates a recording.
 
 - **Capture stays in the browser** (2026-07-27). Server-side capture — the Mac
   recording from its own microphone with a phone as remote control — was

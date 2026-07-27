@@ -33,7 +33,12 @@ const FORMANT_MIN_HZ = 200;
 const FORMANT_MAX_HZ = 4000;
 
 /**
- * Renders a voiceprint as three stacked time-aligned panels.
+ * Renders a voiceprint as four stacked time-aligned panels: pitch, formants,
+ * level and spectral flux.
+ *
+ * The formant panel reads differently from the others — dots rather than a
+ * line, because the series is full of gaps, and a log axis, because vowel
+ * quality is a matter of ratios.
  *
  * Everything shares one x-axis and one frame grid, because reading these
  * together is the point: an onset that lands nowhere near an energy rise, or a

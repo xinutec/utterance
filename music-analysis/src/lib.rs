@@ -36,8 +36,9 @@ pub enum AnalysisError {
 
 /// Shortest recording worth analysing.
 ///
-/// One pitch window plus a little context. Below this the frame grid is a
-/// handful of entries, all of them edge-padded, and every series is artefact.
+/// About four pitch windows. Below this the frame grid is a couple of dozen
+/// entries, a large share of them edge-padded, and the medians and percentiles
+/// everything downstream takes are computed over too few values to mean much.
 pub const MIN_DURATION_S: f32 = 0.25;
 
 /// Decode a WAV file and analyse it.
