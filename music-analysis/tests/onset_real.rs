@@ -5,12 +5,15 @@
 //! generated tone is perfectly steady, and real phonation is not. This file is
 //! the other half.
 //!
-//! **These tests deliberately assert bounds, not exact counts.** How many events
-//! this recording truly contains is not known — it depends on what the speaker
-//! articulated, which the audio alone does not settle. Asserting an exact number
-//! would be writing down a guess and calling it ground truth. What *is* certain
-//! is the shape of the failure the first implementation had, and that is what is
-//! pinned here.
+//! **These tests deliberately assert bounds, not exact counts.** The fixture is
+//! a continuously glided vowel, which contains no discrete events at all while
+//! still producing large spectral change wherever the articulators move quickly
+//! — so "how many onsets should this have" has no correct answer. See the module
+//! docs in `src/onset.rs`.
+//!
+//! What the fixture *can* pin is how badly the detector over-fires on sustained
+//! material, and that is what is asserted here. Tuning the threshold for
+//! accuracy needs labelled speech, which is a different fixture.
 
 use music_analysis::analyse_wav;
 
@@ -73,10 +76,31 @@ fn the_fixture_really_is_a_steady_sustained_vowel() {
 }
 
 #[test]
+fn events_do_not_cluster_into_bursts() {
+    // A clustering check catches the original failure in a way a count cannot:
+    // the 22 false positives arrived in tight groups a few frames apart, which
+    // is what jitter crossing a threshold looks like. Genuine articulatory
+    // movements are spread out.
+    let vp = analyse_wav(SUSTAINED_VOWEL).unwrap();
+    let times = &vp.events.onset_times_s;
+
+    for pair in times.windows(2) {
+        assert!(
+            pair[1] - pair[0] > 0.15,
+            "events {:.2}s and {:.2}s are {:.0} ms apart — that is jitter, not articulation",
+            pair[0],
+            pair[1],
+            (pair[1] - pair[0]) * 1000.0
+        );
+    }
+}
+
+#[test]
 fn the_loudest_spectral_change_is_still_reported() {
     // The failure mode of over-correcting. This recording's largest spectral
-    // change by a wide margin sits around 2.4s; whatever tuning the detector
-    // carries, an event that dominant must survive it.
+    // change by a wide margin sits around 2.4s, where the speaker moves fastest
+    // between vowel targets; whatever tuning the detector carries, a change that
+    // dominant must survive it.
     let vp = analyse_wav(SUSTAINED_VOWEL).unwrap();
 
     let (peak_frame, _) = vp

@@ -8,6 +8,26 @@
 //! Flux rather than raw energy rise, because a vowel-to-vowel transition at a
 //! constant level is an onset a listener hears and an energy tracker misses: the
 //! spectrum changes even though the loudness does not.
+//!
+//! # What flux cannot tell apart
+//!
+//! Spectral flux measures *the spectrum changed*, and reads that as *a sound
+//! started*. In speech the two coincide — a new syllable is a new articulation —
+//! which is why the measure works at all. They come apart whenever a single
+//! continuous sound changes shape.
+//!
+//! The clean demonstration is a glided vowel: *ee → ah → oo* on one unbroken
+//! breath contains no events whatsoever, yet produces large flux wherever the
+//! articulators move quickly between targets. Nothing in the flux curve
+//! distinguishes that from a genuine onset, because in purely spectral terms
+//! there is no difference.
+//!
+//! The consequence for tuning: **onset thresholds must be judged on speech, not
+//! on sustained material.** A held or glided vowel can bound how badly the
+//! detector over-fires, and `tests/onset_real.rs` uses one for exactly that, but
+//! it cannot say what the right count is — the question has no answer there.
+//! Resolving the ambiguity properly needs a cue flux does not carry: the stress
+//! hierarchy, which is where the metrical work in `docs/architecture.md` starts.
 
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;

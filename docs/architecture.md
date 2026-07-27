@@ -54,11 +54,34 @@ The intent for each:
 - **voicing** — which frames carry a glottal source at all. Gates everything
   pitch-derived; unvoiced frames are consonant texture, not silence.
 - **onsets** — event times. The raw material for a metrical grammar, not yet the
-  grammar itself.
+  grammar itself. Read them as *the spectrum changed here*, which is what was
+  measured, not as *a syllable began here*, which is what we want and cannot yet
+  distinguish — a continuously glided vowel produces the former without the
+  latter. Separating them needs the stress hierarchy, below.
 
 Planned, in rough order of how much they unlock (see `docs/roadmap.md`):
 measured partial ratios (→ tuning), formant trajectories (→ harmony via vowel
 space), stress hierarchy (→ meter), phone-class segmentation (→ symbol stream).
+
+## Fixtures and ground truth
+
+A measurement is only worth as much as the material it was judged on, and the two
+kinds of recording we have answer different questions.
+
+**Sustained material** — a held or glided vowel — bounds how badly something
+over-fires. It cannot say what the right answer is, because a continuous sound
+has no discrete events while still changing spectrally throughout. The onset
+detector was first tuned against a synthetic sustained tone, passed cleanly, and
+then reported 22 events in seven seconds of one real held vowel: a generated tone
+has none of the jitter a voice does, so the fixture could not fail.
+
+**Speech** is where accuracy has to be judged, and judging it needs labels a
+person supplies by listening. We do not have those yet, so the onset tests assert
+bounds rather than counts, and say so.
+
+The rule this leaves behind: **when a test cannot fail, say so in the test.** A
+bound honestly labelled as a bound is useful. The same assertion dressed up as
+ground truth is worse than nothing, because it stops anyone looking again.
 
 ## Determinism
 
