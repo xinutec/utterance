@@ -25,4 +25,18 @@ bounds, never exact counts.
 Note also that the phonation *fades in* over roughly 60 ms rather than starting
 sharply, so there is no attack event to detect at the beginning.
 
+**What the current analyser makes of it**, as a speaker profile over its 626
+usable vowel frames — recorded here as an observation, not as a target to tune
+toward, since nobody has measured this speaker's real corners by any other means:
+
+| | low | high |
+| --- | --- | --- |
+| F1 | 260 Hz | 673 Hz |
+| F2 | 668 Hz | 2324 Hz |
+| f0 | 131 Hz | 138 Hz (median 135) |
+
+The three vowels land where phonetics puts them — *ee* low-F1/high-F2, *ah*
+high-F1/mid-F2, *oo* low on both — which is the reason this take is usable as a
+calibration recording and not only as an over-firing bound.
+
 No linguistic content: it is a held vowel, not speech.

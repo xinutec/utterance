@@ -17,6 +17,7 @@ pub mod frame;
 pub mod lpc;
 pub mod onset;
 pub mod resample;
+pub mod speaker;
 pub mod voiceprint;
 pub mod wav;
 

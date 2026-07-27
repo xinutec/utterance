@@ -10,6 +10,26 @@ The consequence to hold onto when making decisions: a listener hearing the outpu
 should not hear a voice. They should hear a piece whose *rules* came from a
 specific person.
 
+**The singer controls the law, not the notes.** Sing higher and the tuning system
+stretches; it is not that a higher note plays. This is the same commitment stated
+from the performer's side, and it carries a design constraint with it.
+
+A voice emits on the order of ten independent continuous streams at once — f0,
+loudness, F1, F2, F3, spectral tilt, breathiness, jitter, plus voicing as a
+discrete gate. A note has three: pitch, loudness, duration. So an output built
+out of notes has nowhere to put six or seven of those streams, and discards them.
+That is the whole reason voice-driven synthesisers feel like a gimmick — the
+controller is richer than the thing it controls — and avoiding it is a constraint
+on the mapping and realisation layers, not a matter of taste. **Whatever the
+music is made of has to need as many hands to play as a voice has.**
+
+The property being spent here is one voices have and instruments mostly do not:
+pitch and timbre are independent. On an acoustic instrument the spectrum follows
+the pitch and the dynamics whether you want it to or not, while a voice can hold
+f0 dead still and sweep the vowel across its whole space. Two orthogonal
+controllers in one organ, which is what makes formants a separate measurement
+rather than another view of pitch.
+
 ## The three-way split
 
 The single structural commitment of this repo. These layers live in separate
@@ -75,6 +95,35 @@ The intent for each:
 Planned, in rough order of how much they unlock (see `docs/roadmap.md`):
 measured partial ratios (→ tuning), stress hierarchy (→ meter), phone-class
 segmentation (→ symbol stream).
+
+## The speaker profile
+
+A second analysis artefact, and a deliberately different object from a
+voiceprint: `music-analysis/src/speaker.rs` measures the **person**, where a
+voiceprint measures one **utterance**.
+
+The speaker is the world; the utterance is the piece. Pitch range and the corners
+of a vowel space are anatomy and habit — they barely move between takes — and
+they are what a tuning system and a harmonic lattice have to be built from. What
+was said decides only what happens inside that. Keeping the two in separate
+documents is what stops a mapping deriving a speaker's range from one short take
+that never reached it.
+
+It is measurement rather than aesthetics, which is why it lives in the analysis
+layer: *how high does this person's F2 go* has an answer that can be shown wrong.
+Two properties are worth knowing from outside the module:
+
+- **Bounds are percentiles, not extremes.** Formant assignment is per-frame with
+  no continuity tracking, so a few frames per take land somewhere the speaker
+  never was, and a true minimum and maximum would be defined entirely by those
+  frames.
+- **A range is withheld rather than guessed** when there is too little material
+  to measure it, with the frame counts still reported so a caller can tell "too
+  little" from "none".
+
+Because a profile is a pure function of the voiceprints it is built from, it is a
+cache in the same sense they are, and carries its own version for the same
+reason.
 
 ## Fixtures and ground truth
 

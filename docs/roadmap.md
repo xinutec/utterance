@@ -13,6 +13,7 @@ the voiceprint as the interface between its layers.
 | voicing | done | Gates everything pitch-derived and the formants. |
 | events (spectral flux) | done, with a known limit | See "onsets" below. |
 | formants F1/F2/F3 | done | LPC + Durand-Kerner. Range-constrained assignment. |
+| speaker profile | done | Per-person vowel-space corners and f0 range. |
 | measured partial ratios | **not started** | Needed for tuning. |
 | stress hierarchy | **not started** | Needed for meter, and to fix onsets. |
 | phone-class segmentation | **not started** | Needed for the symbol stream. |
@@ -88,6 +89,29 @@ source, plus the one that most shapes daily work.
   the analyser, a knob in analysis would invalidate every recording each time it
   moved, while a knob in mapping can be swept against a fixed voiceprint and
   heard immediately.
+
+- **A vowel space is normalised against the speaker's own extremes**
+  (2026-07-27), not against population norms. It makes the *utterance* the
+  variable rather than the anatomy, which is what lets a body of work by one
+  person be one sound world with a different piece in each take. The cost is a
+  calibration recording per speaker, which is cheap and which
+  `music-analysis/src/speaker.rs` now consumes.
+
+- **Control is exercised by learning the mapping, not by playing it live**
+  (2026-07-27). Real-time would force the analysis to become causal and
+  low-latency, giving up non-causal pitch tracking and whole-take statistics —
+  a real loss of measurement quality, paid before anyone knows whether the
+  mapping is worth performing. Deterministic mapping plus fast iteration gets
+  most of the control for none of that: record, hear it, adjust, sing it again.
+
+  Determinism is what makes this work, and it is the strongest argument for the
+  no-ML decision that was not apparent when that decision was taken — a singer
+  can only build a mental model of a system that answers the same way twice.
+
+  **Constraint kept while this holds:** mapping should avoid depending on
+  statistics of the whole take where it can, staying frame-local, so real-time
+  remains reachable later. The speaker profile is not a violation: it is measured
+  once per person and then fixed, not recomputed per take.
 
 ## Open questions
 
