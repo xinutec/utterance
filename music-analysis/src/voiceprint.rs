@@ -26,7 +26,8 @@ use serde::{Deserialize, Serialize};
 /// - 2: `Source` gained `peak` and `clippedFraction`.
 /// - 3: onset detection reworked — peak dominance, CFAR threshold, silence gate.
 /// - 4: added `formants` (F1/F2/F3 by linear prediction).
-pub const SCHEMA_VERSION: u32 = 4;
+/// - 5: added `partials` (the measured harmonic series).
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -170,6 +171,12 @@ pub struct Voiceprint {
     /// Per-frame RMS in dBFS, floored at -100.
     pub rms_db: Vec<f32>,
     pub events: Events,
+    /// The take's harmonic series, where it held a pitch long enough to have one.
+    ///
+    /// Not a per-frame series like the fields above: it describes the recording
+    /// as a whole, measured over whichever frames were steady enough to use.
+    /// `framesUsed` says how many those were, which on connected speech is few.
+    pub partials: crate::partials::Partials,
 }
 
 impl Voiceprint {

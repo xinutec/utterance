@@ -16,6 +16,7 @@ pub mod formant;
 pub mod frame;
 pub mod lpc;
 pub mod onset;
+pub mod partials;
 pub mod resample;
 pub mod speaker;
 pub mod voiceprint;
@@ -86,6 +87,11 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
     let onset_frames = onset::pick(&flux);
     let hop_s = frame::HOP as f32 / ANALYSIS_RATE as f32;
 
+    // Guided by the pitch track above rather than re-deriving f0, so one
+    // recording has exactly one answer about its fundamental.
+    let pitch_hz: Vec<Option<f32>> = pitch_frames.iter().map(|f| f.hz).collect();
+    let partials = partials::measure(samples, &pitch_hz);
+
     Voiceprint {
         schema_version: voiceprint::SCHEMA_VERSION,
         source,
@@ -95,7 +101,7 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
             count,
         },
         pitch: Pitch {
-            hz: pitch_frames.iter().map(|f| f.hz).collect(),
+            hz: pitch_hz,
             aperiodicity: pitch_frames.iter().map(|f| f.aperiodicity).collect(),
         },
         formants: Formants {
@@ -109,5 +115,6 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
             onset_frames,
             flux,
         },
+        partials,
     }
 }

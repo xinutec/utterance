@@ -2,6 +2,7 @@
 import type { Events } from "./Events";
 import type { Formants } from "./Formants";
 import type { FrameGrid } from "./FrameGrid";
+import type { Partials } from "./Partials";
 import type { Pitch } from "./Pitch";
 import type { Source } from "./Source";
 
@@ -12,4 +13,12 @@ export type Voiceprint = { schemaVersion: number, source: Source, frame: FrameGr
 /**
  * Per-frame RMS in dBFS, floored at -100.
  */
-rmsDb: Array<number>, events: Events, };
+rmsDb: Array<number>, events: Events, 
+/**
+ * The take's harmonic series, where it held a pitch long enough to have one.
+ *
+ * Not a per-frame series like the fields above: it describes the recording
+ * as a whole, measured over whichever frames were steady enough to use.
+ * `framesUsed` says how many those were, which on connected speech is few.
+ */
+partials: Partials, };

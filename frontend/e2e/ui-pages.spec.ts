@@ -54,6 +54,16 @@ function voiceprint(): unknown {
       onsetFrames: frames.filter((i) => i % 50 === 0),
       onsetTimesS: frames.filter((i) => i % 50 === 0).map((i) => i * 0.01),
     },
+    partials: {
+      framesUsed: 240,
+      f0Hz: 119.3,
+      partials: Array.from({ length: 12 }, (_, k) => ({
+        number: k + 1,
+        ratio: k + 1,
+        amplitude: 1 / (k + 1),
+        presence: 1,
+      })),
+    },
   };
 }
 
