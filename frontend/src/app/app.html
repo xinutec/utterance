@@ -1,17 +1,45 @@
-<mat-toolbar class="bar">
-  <span class="title">utterance</span>
-  <span class="subtitle">the voice as law-giver</span>
-  <nav class="nav">
-    <!--
-      `exact` on the studio link only: every route is a prefix of "", so without
-      it the studio would read as active on every page.
-    -->
-    <a matButton routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Studio</a>
-    <a matButton routerLink="/calibrate" routerLinkActive="active">Calibrate</a>
-    <a matButton routerLink="/compare" routerLinkActive="active">Compare</a>
-  </nav>
-</mat-toolbar>
+@if (auth.needsSignIn() || auth.refused()) {
+  <!--
+    Replaces the app rather than covering it. What is behind the wall is
+    recordings of two people's voices, and a dialog laid over a page that has
+    already painted is a page that already fetched.
+  -->
+  <div class="wall">
+    <mat-card class="card">
+      <mat-card-content>
+        @if (auth.refused(); as why) {
+          <h2>Signed in, but not for this</h2>
+          <p>{{ why }}</p>
+          <p class="quiet">
+            Ask Pippijn to add the account, or sign out and use the one that is on the list.
+          </p>
+          <form method="post" action="/logout">
+            <button matButton="outlined" type="submit">Sign out</button>
+          </form>
+        } @else {
+          <h2>utterance</h2>
+          <p class="quiet">This holds recordings of a voice, so it asks who you are first.</p>
+          <a matButton="filled" [href]="auth.signInUrl()">Sign in with Nextcloud</a>
+        }
+      </mat-card-content>
+    </mat-card>
+  </div>
+} @else {
+  <mat-toolbar class="bar">
+    <span class="title">utterance</span>
+    <span class="subtitle">the voice as law-giver</span>
+    <nav class="nav">
+      <!--
+        `exact` on the studio link only: every route is a prefix of "", so without
+        it the studio would read as active on every page.
+      -->
+      <a matButton routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Studio</a>
+      <a matButton routerLink="/calibrate" routerLinkActive="active">Calibrate</a>
+      <a matButton routerLink="/compare" routerLinkActive="active">Compare</a>
+    </nav>
+  </mat-toolbar>
 
-<main>
-  <router-outlet></router-outlet>
-</main>
+  <main>
+    <router-outlet></router-outlet>
+  </main>
+}

@@ -31,3 +31,36 @@
     color: var(--mat-sys-on-secondary-container);
   }
 }
+
+.wall {
+  // The whole viewport, because this replaces the app rather than covering it.
+  // Centred and padded so a phone in portrait shows the card without scrolling,
+  // which is the geometry the layout harness checks it at.
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+
+  .card {
+    max-width: 26rem;
+    width: 100%;
+  }
+
+  h2 {
+    font: var(--mat-sys-headline-small);
+    margin: 0 0 0.5rem;
+  }
+
+  p {
+    margin: 0 0 1rem;
+  }
+
+  .quiet {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  form {
+    margin: 0;
+  }
+}

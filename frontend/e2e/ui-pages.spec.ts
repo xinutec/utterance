@@ -320,6 +320,29 @@ test("studio — a scale that carries no lattice says so @ phone", async ({ page
   await expectNoOccludedControls(page, testInfo);
 });
 
+test("the sign-in wall lays out cleanly @ phone", async ({ page }, testInfo) => {
+  // The deployed app answers 401 until someone signs in with Nextcloud, so this
+  // is the first thing anyone sees off the LAN — and it is a card centred in a
+  // viewport, which is a layout nothing else in this app has.
+  await mockApi(page);
+  await page.route("**/api/**", (r) =>
+    r.fulfill({
+      status: 401,
+      json: { code: "not_authenticated", message: "sign in to continue" },
+    }),
+  );
+  await page.goto("/");
+  await page.getByRole("link", { name: "Sign in with Nextcloud" }).waitFor();
+
+  // Replaced, not covered. A toolbar still on screen would mean the app behind
+  // it rendered, and a page that rendered is a page that fetched.
+  await expect(page.locator("mat-toolbar")).toHaveCount(0);
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
 test("compare — two renders side by side lay out cleanly @ phone", async ({ page }, testInfo) => {
   // The densest page in the app: a take picker, a transport, a five-panel chart
   // and two full sets of sliders. A phone is where it collides first.

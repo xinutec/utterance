@@ -28,6 +28,14 @@ serde_json = "1.0.151"
 sha2 = "0.11.0"
 anyhow = "1.0.104"
 thiserror = "2.0.19"
+# Sign-in. All three are used only by `webauth`, which is inert unless the
+# Nextcloud credentials are in the environment — see that module.
+hmac = "0.13.0"
+base64 = "0.23.0"
+# `default-tls` is rustls here, so this pulls in no OpenSSL and needs no system
+# library at build time — which is what keeps the container image and the nix
+# package buildable from source alone.
+reqwest = { version = "0.13.4", features = ["json", "form"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ts-rs = { version = "12.0.1", features = ["serde-compat"], optional = true }

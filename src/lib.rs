@@ -12,3 +12,4 @@ pub mod routes;
 pub mod state;
 pub mod store;
 pub mod voice;
+pub mod webauth;
