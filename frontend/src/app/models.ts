@@ -17,5 +17,6 @@ export type { RecordingDetail } from "./generated/RecordingDetail";
 export type { RecordingMeta } from "./generated/RecordingMeta";
 export type { ScaleDegree } from "./generated/ScaleDegree";
 export type { Source } from "./generated/Source";
+export type { Texture } from "./generated/Texture";
 export type { Voiceprint } from "./generated/Voiceprint";
 export type { VoiceSummary } from "./generated/VoiceSummary";

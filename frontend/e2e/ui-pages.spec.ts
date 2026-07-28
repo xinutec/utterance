@@ -54,6 +54,12 @@ function voiceprint(): unknown {
       onsetFrames: frames.filter((i) => i % 50 === 0),
       onsetTimesS: frames.filter((i) => i % 50 === 0).map((i) => i * 0.01),
     },
+    texture: {
+      // Tonal inside the bursts, noisy in the gaps — the shape a consonant
+      // makes, so the fixture exercises the same fields a real take does.
+      centroidHz: frames.map((i) => (i % 50 < 30 ? 700 : 5200)),
+      flatness: frames.map((i) => (i % 50 < 30 ? 0.02 : 0.8)),
+    },
     partials: {
       framesUsed: 240,
       f0Hz: 119.3,

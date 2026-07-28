@@ -16,7 +16,7 @@
 //! - **There is noise in it.** Breath, bow, wind: no acoustic sound is purely
 //!   periodic, and the absence of noise is heard as sterility.
 
-use music_mapping::score::{Event, Score};
+use music_mapping::score::{Event, NoiseEvent, Score};
 
 /// Rate everything is rendered at.
 ///
@@ -75,6 +75,13 @@ pub fn render(score: &Score) -> Vec<f32> {
 
     for (index, event) in score.events.iter().enumerate() {
         sum_note(&mut out, event, score, index);
+    }
+
+    // Seeded past the notes so a consonant never draws the same noise as the
+    // breath of the note beside it, which would correlate the two and read as
+    // one sound rather than two.
+    for (index, event) in score.noise.iter().enumerate() {
+        sum_noise(&mut out, event, score.events.len() + index);
     }
 
     normalise(&mut out);
@@ -154,6 +161,47 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
 
         let noisy = noise.next_bipolar();
         *sample += (value * gain * pitched + noisy * breath) * envelope * event.amplitude;
+    }
+}
+
+/// Add one consonant to the buffer.
+///
+/// A two-pole resonator driven by white noise. The same arithmetic the vocal
+/// tract does to the glottal source, which is why it is the right shape here:
+/// a fricative *is* noise through a resonance, so reproducing the measured
+/// centre and width reproduces the sound rather than approximating it.
+fn sum_noise(out: &mut [f32], event: &NoiseEvent, seed: usize) {
+    let start = (event.start_s * RENDER_RATE as f32).max(0.0) as usize;
+    if start >= out.len() || event.duration_s <= 0.0 {
+        return;
+    }
+    let end = (start + (event.duration_s * RENDER_RATE as f32) as usize).min(out.len());
+
+    // Above Nyquist the resonator is not a band-pass any more; it rings at a
+    // frequency that was never in the recording.
+    let nyquist = RENDER_RATE as f32 / 2.0;
+    let centre = event.centre_hz.clamp(20.0, nyquist * 0.95);
+    let bandwidth = event.bandwidth_hz.max(1.0);
+
+    let theta = std::f32::consts::TAU * centre / RENDER_RATE as f32;
+    let radius = (-std::f32::consts::PI * bandwidth / RENDER_RATE as f32).exp();
+    let (a1, a2) = (2.0 * radius * theta.cos(), -radius * radius);
+
+    // A resonator's gain rises sharply as its band narrows, so without this a
+    // narrow consonant would arrive many times louder than a wide one carrying
+    // the same measured energy.
+    let compensation = (1.0 - radius).max(1e-4);
+
+    let mut noise = Noise::seeded(seed as u32);
+    let (mut y1, mut y2) = (0.0f32, 0.0f32);
+
+    for (i, sample) in out[start..end].iter_mut().enumerate() {
+        let y = noise.next_bipolar() + a1 * y1 + a2 * y2;
+        y2 = y1;
+        y1 = y;
+
+        let t = i as f32 / RENDER_RATE as f32;
+        *sample += y * compensation * envelope(t, event.duration_s) * event.amplitude;
     }
 }
 

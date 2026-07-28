@@ -5,7 +5,7 @@
 //! for the right length, at the right moment, without clicks and without
 //! aliasing.
 
-use music_mapping::score::{Event, Score};
+use music_mapping::score::{Event, NoiseEvent, Score};
 use music_realisation::synth::{self, RENDER_RATE};
 use music_realisation::wav;
 
@@ -17,6 +17,7 @@ fn score(events: Vec<Event>, duration_s: f32, spectrum: Vec<f32>) -> Score {
         palette: vec![spectrum],
         detune_cents: 0.0,
         events,
+        noise: Vec::new(),
     }
 }
 
@@ -231,6 +232,7 @@ fn a_note_changes_colour_across_its_length() {
         duration_s: 2.0,
         palette: vec![dark(), bright()],
         detune_cents: 0.0,
+        noise: Vec::new(),
         events: vec![Event {
             colour_from: 0.0,
             colour_to: 1.0,
@@ -336,6 +338,101 @@ fn an_empty_palette_renders_silence_rather_than_guessing() {
         palette: Vec::new(),
         detune_cents: 0.0,
         events: vec![note(0.0, 0.5, 300.0)],
+        noise: Vec::new(),
     };
     assert!(synth::render(&s).iter().all(|&v| v == 0.0));
+}
+
+fn noise_event(start_s: f32, duration_s: f32, centre_hz: f32, bandwidth_hz: f32) -> NoiseEvent {
+    NoiseEvent {
+        start_s,
+        duration_s,
+        centre_hz,
+        bandwidth_hz,
+        amplitude: 1.0,
+    }
+}
+
+fn noise_score(events: Vec<NoiseEvent>, duration_s: f32) -> Score {
+    Score {
+        noise: events,
+        ..score(Vec::new(), duration_s, vec![1.0])
+    }
+}
+
+#[test]
+fn a_consonant_sounds_where_the_score_puts_it() {
+    let s = noise_score(vec![noise_event(0.5, 0.2, 5000.0, 3000.0)], 1.0);
+    let rendered = synth::render(&s);
+    let energy = |from: f32, to: f32| {
+        let range = (from * RENDER_RATE as f32) as usize..(to * RENDER_RATE as f32) as usize;
+        rendered[range].iter().fold(0.0f32, |m, v| m.max(v.abs()))
+    };
+    assert!(energy(0.0, 0.45) < 1e-6, "sound before the consonant");
+    assert!(energy(0.55, 0.65) > 0.1, "no sound during the consonant");
+    assert!(energy(0.8, 1.0) < 1e-6, "sound after the consonant");
+}
+
+#[test]
+fn a_bright_consonant_renders_brighter_than_a_dark_one() {
+    // The whole point of measuring the centroid: the speaker's own s and sh must
+    // come out as different sounds, not as one generic hiss.
+    let ess = synth::render(&noise_score(
+        vec![noise_event(0.0, 0.4, 7000.0, 3000.0)],
+        0.5,
+    ));
+    let esh = synth::render(&noise_score(
+        vec![noise_event(0.0, 0.4, 3000.0, 1500.0)],
+        0.5,
+    ));
+    assert!(
+        brightness(&ess) > brightness(&esh) * 1.3,
+        "s {:.4} against sh {:.4}",
+        brightness(&ess),
+        brightness(&esh)
+    );
+}
+
+#[test]
+fn a_narrow_band_is_not_louder_than_a_wide_one() {
+    // A resonator's gain rises sharply as its band narrows. Without the
+    // compensation, a whistled consonant would arrive many times louder than an
+    // airy one carrying the same measured energy.
+    let narrow = synth::render(&noise_score(
+        vec![noise_event(0.0, 0.4, 3000.0, 250.0)],
+        0.5,
+    ));
+    let wide = synth::render(&noise_score(
+        vec![noise_event(0.0, 0.4, 3000.0, 4000.0)],
+        0.5,
+    ));
+
+    let rms = |x: &[f32]| (x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32).sqrt();
+    let ratio = rms(&narrow) / rms(&wide);
+    assert!(
+        (0.25..4.0).contains(&ratio),
+        "narrow band rendered {ratio:.2} times the wide one's level"
+    );
+}
+
+#[test]
+fn notes_and_consonants_sound_together() {
+    // They are separate streams in the score and must both reach the output —
+    // the failure this guards is one silently overwriting the other.
+    let both = Score {
+        noise: vec![noise_event(0.0, 0.4, 6000.0, 3000.0)],
+        ..score(vec![note(0.0, 0.4, 200.0)], 0.5, vec![1.0, 0.5])
+    };
+    let only_notes = score(vec![note(0.0, 0.4, 200.0)], 0.5, vec![1.0, 0.5]);
+
+    assert!(
+        brightness(&synth::render(&both)) > brightness(&synth::render(&only_notes)) * 1.2,
+        "adding a consonant changed nothing about the render"
+    );
+}
+
+#[test]
+fn a_consonant_is_deterministic() {
+    let s = noise_score(vec![noise_event(0.0, 0.3, 4000.0, 2000.0)], 0.5);
+    assert_eq!(synth::render(&s), synth::render(&s));
 }

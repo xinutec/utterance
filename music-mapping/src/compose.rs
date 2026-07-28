@@ -31,7 +31,7 @@
 
 use music_analysis::voiceprint::Voiceprint;
 
-use crate::score::{Event, Score};
+use crate::score::{Event, NoiseEvent, Score};
 use crate::voice::Voice;
 
 /// Octaves the register spans above the tonic.
@@ -151,6 +151,7 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
         duration_s: vp.source.duration_s,
         palette: voice.palette.clone(),
         detune_cents: voice.detune_cents,
+        noise: compose_noise(vp, loudest),
         events,
     }
 }
@@ -162,6 +163,7 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
         palette: voice.palette.clone(),
         detune_cents: voice.detune_cents,
         events: Vec::new(),
+        noise: Vec::new(),
     }
 }
 
@@ -206,4 +208,115 @@ fn vowel_near(vp: &Voiceprint, frame: usize) -> Option<(f32, f32)> {
 fn amplitude_at(vp: &Voiceprint, frame: usize, loudest_db: f32) -> f32 {
     let db = vp.rms_db.get(frame).copied().unwrap_or(f32::NEG_INFINITY);
     10f32.powf((db - loudest_db) / 20.0)
+}
+
+/// Flatness above which a frame counts as noise rather than tone.
+///
+/// A vowel's energy sits in harmonics and measures near zero; a fricative's is
+/// spread across everything and measures high. The bar sits well above any vowel
+/// and well below white noise, so what it selects is genuinely the consonants.
+const NOISE_FLATNESS: f32 = 0.12;
+
+/// Shortest run of noise worth sounding, in frames.
+///
+/// Three frames, 30 ms. Shorter than a plosive burst and far shorter than a
+/// fricative, so nothing real is lost — but it does discard the single stray
+/// frames that appear at the edge of every voiced stretch, which would otherwise
+/// pepper the render with clicks nobody made.
+const MIN_NOISE_FRAMES: usize = 3;
+
+/// Longest a run of noise is sounded, in seconds.
+///
+/// A silence between phrases measures as flat as a fricative does — there is no
+/// energy in it, so there is no shape to it either. Loudness screens most of
+/// that out; this catches the rest, since no consonant lasts a second.
+const MAX_NOISE_S: f32 = 0.5;
+
+/// Quietest noise run kept, relative to the loudest moment in the take.
+///
+/// Higher than the bar for notes. Room tone is flat, continuous and quiet, and
+/// without this every gap between phrases would sound as a wash.
+const NOISE_FLOOR: f32 = 0.06;
+
+/// How wide a band the measured flatness is spread across, in Hz.
+///
+/// Flatness runs from 0 for a pure tone to 1 for white noise, and this turns
+/// that into a bandwidth: a peaked spectrum becomes a narrow band that whistles,
+/// a flat one becomes air. The ceiling is what a fully flat frame gets.
+const MAX_NOISE_BANDWIDTH_HZ: f32 = 4_000.0;
+
+/// The narrowest band, so a highly tonal frame still sounds like something.
+const MIN_NOISE_BANDWIDTH_HZ: f32 = 250.0;
+
+/// Turn the unvoiced stretches of a take into noise events.
+///
+/// This is the material every earlier version threw away. Nearly three quarters
+/// of ordinary speech carries no fundamental, and all of it was reaching the
+/// mapping only as a trigger for a note built out of the *following* vowel.
+///
+/// Each run of consecutive noise-like frames becomes one event, keeping the
+/// speaker's own consonant timing — which is also the fastest structural layer
+/// in speech, and the only one the note stream cannot carry.
+pub fn compose_noise(vp: &Voiceprint, loudest_db: f32) -> Vec<NoiseEvent> {
+    let flatness = &vp.texture.flatness;
+    let centroid = &vp.texture.centroid_hz;
+    let voiced = &vp.pitch.hz;
+
+    let mut out = Vec::new();
+    let mut run: Option<usize> = None;
+
+    for i in 0..=flatness.len() {
+        let noisy = i < flatness.len()
+            && voiced.get(i).copied().flatten().is_none()
+            && flatness[i] >= NOISE_FLATNESS;
+
+        match (noisy, run) {
+            (true, None) => run = Some(i),
+            (false, Some(start)) => {
+                if let Some(event) = noise_run(vp, start, i, centroid, flatness, loudest_db) {
+                    out.push(event);
+                }
+                run = None;
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// One run of noise frames as an event, if it is worth sounding.
+fn noise_run(
+    vp: &Voiceprint,
+    start: usize,
+    end: usize,
+    centroid: &[f32],
+    flatness: &[f32],
+    loudest_db: f32,
+) -> Option<NoiseEvent> {
+    if end - start < MIN_NOISE_FRAMES {
+        return None;
+    }
+
+    // Loudest frame rather than the mean: a plosive is a burst followed by
+    // nothing, and averaging across it reports a quiet event where a sharp one
+    // happened.
+    let amplitude = (start..end)
+        .map(|i| amplitude_at(vp, i, loudest_db))
+        .fold(0.0f32, f32::max);
+    if amplitude < NOISE_FLOOR {
+        return None;
+    }
+
+    let span = (end - start) as f32;
+    let mean = |series: &[f32]| series[start..end].iter().sum::<f32>() / span;
+    let flat = mean(flatness).clamp(0.0, 1.0);
+
+    Some(NoiseEvent {
+        start_s: start as f32 * vp.frame.hop_s,
+        duration_s: (span * vp.frame.hop_s).min(MAX_NOISE_S),
+        centre_hz: mean(centroid),
+        bandwidth_hz: MIN_NOISE_BANDWIDTH_HZ
+            + (MAX_NOISE_BANDWIDTH_HZ - MIN_NOISE_BANDWIDTH_HZ) * flat,
+        amplitude,
+    })
 }

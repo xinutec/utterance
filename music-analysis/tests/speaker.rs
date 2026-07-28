@@ -8,6 +8,7 @@
 
 use music_analysis::partials::Partials;
 use music_analysis::speaker::{self, PROFILE_VERSION};
+use music_analysis::texture::Texture;
 use music_analysis::voiceprint::{Events, Formants, FrameGrid, Pitch, Source, Voiceprint};
 
 /// A voiceprint carrying the given per-frame series and nothing else of interest.
@@ -42,12 +43,17 @@ fn voiceprint(f1: Vec<Option<f32>>, f2: Vec<Option<f32>>, hz: Vec<Option<f32>>) 
             onset_frames: Vec::new(),
             onset_times_s: Vec::new(),
         },
-        // Profiling reads pitch and formants; the harmonic series is beside the
-        // point here, so it is left empty rather than faked into plausibility.
+        // Profiling reads pitch and formants; neither the harmonic series nor
+        // the noise shape is read here, so both are left empty rather than
+        // faked into plausibility.
         partials: Partials {
             frames_used: 0,
             f0_hz: None,
             partials: Vec::new(),
+        },
+        texture: Texture {
+            centroid_hz: vec![0.0; count],
+            flatness: vec![0.0; count],
         },
     }
 }

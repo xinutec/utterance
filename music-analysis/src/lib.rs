@@ -19,6 +19,7 @@ pub mod onset;
 pub mod partials;
 pub mod resample;
 pub mod speaker;
+pub mod texture;
 pub mod voiceprint;
 pub mod wav;
 
@@ -91,6 +92,7 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
     // recording has exactly one answer about its fundamental.
     let pitch_hz: Vec<Option<f32>> = pitch_frames.iter().map(|f| f.hz).collect();
     let partials = partials::measure(samples, &pitch_hz);
+    let texture = texture::track(samples);
 
     Voiceprint {
         schema_version: voiceprint::SCHEMA_VERSION,
@@ -116,5 +118,6 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
             flux,
         },
         partials,
+        texture,
     }
 }

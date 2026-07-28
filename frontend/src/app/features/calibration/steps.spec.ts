@@ -46,8 +46,10 @@ function goodTake(overrides: Partial<Fixture> = {}): RecordingDetail {
       formants: { f1: [], f2: [], f3: [] },
       rmsDb: [],
       events: { flux: [], onsetFrames: [], onsetTimesS: [] },
-      // Nothing here reads the harmonic series; left empty rather than faked.
+      // Nothing here reads the harmonic series or the noise shape; left empty
+      // rather than faked.
       partials: { framesUsed: 0, f0Hz: null, partials: [] },
+      texture: { centroidHz: [], flatness: [] },
     },
   };
 }

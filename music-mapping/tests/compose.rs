@@ -8,6 +8,7 @@
 
 use music_analysis::partials::{Partial, Partials};
 use music_analysis::speaker::VowelSpace;
+use music_analysis::texture::Texture;
 use music_analysis::voiceprint::{Events, Formants, FrameGrid, Pitch, Source, Voiceprint};
 use music_mapping::compose::compose;
 use music_mapping::score::centroid;
@@ -107,6 +108,12 @@ fn take(onsets: &[usize], vowels: &[(f32, f32)], frames: usize, loud: bool) -> V
             frames_used: 0,
             f0_hz: None,
             partials: Vec::new(),
+        },
+        // Tonal and dark by default, so a take says nothing about consonants
+        // unless a test deliberately puts some in.
+        texture: Texture {
+            centroid_hz: vec![500.0; frames],
+            flatness: vec![0.01; frames],
         },
     }
 }
@@ -337,4 +344,96 @@ fn is_a_pure_function_of_its_input() {
     let vp = take(&[0, 50, 100], &[BACK, MIDDLE, FRONT], 200, true);
     let v = voice();
     assert_eq!(compose(&vp, &v), compose(&vp, &v));
+}
+
+/// Mark frames `from..to` as unvoiced noise with the given spectral shape.
+fn make_noisy(vp: &mut Voiceprint, from: usize, to: usize, centroid_hz: f32, flatness: f32) {
+    for i in from..to {
+        vp.pitch.hz[i] = None;
+        vp.formants.f1[i] = None;
+        vp.formants.f2[i] = None;
+        vp.texture.centroid_hz[i] = centroid_hz;
+        vp.texture.flatness[i] = flatness;
+    }
+}
+
+#[test]
+fn a_consonant_becomes_a_noise_event() {
+    // The material every earlier version discarded: nearly three quarters of
+    // ordinary speech carries no fundamental.
+    let mut vp = take(&[0], &[MIDDLE], 100, true);
+    make_noisy(&mut vp, 40, 60, 7000.0, 0.8);
+
+    let score = compose(&vp, &voice());
+    assert_eq!(score.noise.len(), 1, "the consonant did not sound");
+    let n = &score.noise[0];
+    assert!((n.start_s - 0.40).abs() < 1e-5);
+    assert!((n.duration_s - 0.20).abs() < 1e-5);
+    assert!((n.centre_hz - 7000.0).abs() < 1.0, "centre {}", n.centre_hz);
+}
+
+#[test]
+fn a_flatter_consonant_gets_a_wider_band() {
+    // Flatness is what separates air from a whistle, and it is the speaker's
+    // own measurement that decides which.
+    let mut airy = take(&[0], &[MIDDLE], 100, true);
+    make_noisy(&mut airy, 40, 60, 5000.0, 0.95);
+    let mut focused = take(&[0], &[MIDDLE], 100, true);
+    make_noisy(&mut focused, 40, 60, 5000.0, 0.2);
+
+    let v = voice();
+    let wide = compose(&airy, &v).noise[0].bandwidth_hz;
+    let narrow = compose(&focused, &v).noise[0].bandwidth_hz;
+    assert!(wide > narrow * 2.0, "wide {wide} against narrow {narrow}");
+}
+
+#[test]
+fn a_vowel_never_becomes_a_consonant() {
+    // Voiced frames are tonal and must stay out of the noise stream entirely,
+    // or the pitched material would be doubled as hiss.
+    let vp = take(&[0, 50], &[BACK, FRONT], 100, true);
+    assert!(compose(&vp, &voice()).noise.is_empty());
+}
+
+#[test]
+fn a_single_stray_frame_is_not_a_consonant() {
+    // One noise-like frame appears at the edge of almost every voiced stretch.
+    // Sounding them would pepper the render with clicks nobody made.
+    let mut vp = take(&[0], &[MIDDLE], 100, true);
+    make_noisy(&mut vp, 50, 51, 6000.0, 0.9);
+    assert!(compose(&vp, &voice()).noise.is_empty());
+}
+
+#[test]
+fn a_silent_gap_is_not_a_consonant() {
+    // Room tone between phrases measures as flat as a fricative does — there is
+    // no energy in it, so there is no shape to it either.
+    let mut vp = take(&[0], &[MIDDLE], 200, true);
+    make_noisy(&mut vp, 60, 160, 4000.0, 0.9);
+    for slot in vp.rms_db.iter_mut().take(160).skip(60) {
+        *slot = -70.0;
+    }
+    assert!(
+        compose(&vp, &voice()).noise.is_empty(),
+        "silence was sounded as a consonant"
+    );
+}
+
+#[test]
+fn consonants_keep_the_speakers_own_timing() {
+    // The fastest structural layer in speech, and the one the note stream
+    // cannot carry: several consonants a second, where notes arrive at one or
+    // two.
+    let mut vp = take(&[0], &[MIDDLE], 300, true);
+    for k in 0..5 {
+        make_noisy(&mut vp, 40 + k * 40, 40 + k * 40 + 10, 6000.0, 0.8);
+    }
+    let noise = compose(&vp, &voice()).noise;
+    assert_eq!(noise.len(), 5);
+    for pair in noise.windows(2) {
+        assert!(
+            pair[1].start_s > pair[0].start_s,
+            "noise events out of order"
+        );
+    }
 }

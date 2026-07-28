@@ -48,6 +48,29 @@ pub struct Event {
     pub breath: f32,
 }
 
+/// A stretch of noise: a consonant, sounded.
+///
+/// Separate from [`Event`] rather than a flag on it because the two are not
+/// variations of one thing. A note has a pitch and a place in a scale; this has
+/// neither, and never should — a consonant is not a note played badly, it is a
+/// different kind of sound with its own timing, and speech has more of them than
+/// it has vowels.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoiseEvent {
+    pub start_s: f32,
+    pub duration_s: f32,
+    /// Centre of the noise band, in Hz — where the speaker put the energy.
+    pub centre_hz: f32,
+    /// Width of that band, in Hz.
+    ///
+    /// Narrow reads as a whistle or a hiss with a pitch to it; wide reads as
+    /// air. The speaker's own measured flatness decides which.
+    pub bandwidth_hz: f32,
+    /// Relative loudness, 0..1.
+    pub amplitude: f32,
+}
+
 /// Everything needed to render a piece.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,6 +98,13 @@ pub struct Score {
     pub detune_cents: f32,
     /// Ascending by start time.
     pub events: Vec<Event>,
+    /// The consonants, ascending by start time.
+    ///
+    /// A second stream rather than more notes. In ordinary speech there are more
+    /// of these than there are voiced stretches — the first version of this
+    /// project discarded every one of them, which is most of what made the
+    /// output sound like a reduction of a voice rather than a use of it.
+    pub noise: Vec<NoiseEvent>,
 }
 
 impl Score {

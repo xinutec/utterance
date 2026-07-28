@@ -5,6 +5,7 @@ import type { FrameGrid } from "./FrameGrid";
 import type { Partials } from "./Partials";
 import type { Pitch } from "./Pitch";
 import type { Source } from "./Source";
+import type { Texture } from "./Texture";
 
 /**
  * Everything the analyser extracted from one recording.
@@ -21,4 +22,12 @@ rmsDb: Array<number>, events: Events,
  * as a whole, measured over whichever frames were steady enough to use.
  * `framesUsed` says how many those were, which on connected speech is few.
  */
-partials: Partials, };
+partials: Partials, 
+/**
+ * The shape of the noise, per frame.
+ *
+ * Defined everywhere but interesting mostly where the voice is unvoiced —
+ * the consonants, which are most of ordinary speech and which every other
+ * field here gates away.
+ */
+texture: Texture, };

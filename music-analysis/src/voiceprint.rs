@@ -27,7 +27,8 @@ use serde::{Deserialize, Serialize};
 /// - 3: onset detection reworked — peak dominance, CFAR threshold, silence gate.
 /// - 4: added `formants` (F1/F2/F3 by linear prediction).
 /// - 5: added `partials` (the measured harmonic series).
-pub const SCHEMA_VERSION: u32 = 5;
+/// - 6: added `texture` (spectral centroid and flatness per frame).
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -177,6 +178,12 @@ pub struct Voiceprint {
     /// as a whole, measured over whichever frames were steady enough to use.
     /// `framesUsed` says how many those were, which on connected speech is few.
     pub partials: crate::partials::Partials,
+    /// The shape of the noise, per frame.
+    ///
+    /// Defined everywhere but interesting mostly where the voice is unvoiced —
+    /// the consonants, which are most of ordinary speech and which every other
+    /// field here gates away.
+    pub texture: crate::texture::Texture,
 }
 
 impl Voiceprint {
