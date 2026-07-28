@@ -1,9 +1,9 @@
 /**
- * Two settings, and what differs between them.
+ * Two settings, and which knobs they disagree about.
  *
- * The comparison is the point of this feature, so naming the difference is its
- * central operation rather than a detail of the view: someone who cannot say
- * what changed cannot say what the change did.
+ * Naming the difference is the feature's central operation rather than a detail
+ * of the view: someone who cannot say what changed cannot say what the change
+ * did. Comparing the resulting *streams* is `compare-panels.ts` next door.
  */
 
 import type { Knob } from "../../models";
@@ -31,34 +31,4 @@ export function differences(
       b: knobValue(b, knob),
     }))
     .filter((d) => d.a !== d.b);
-}
-
-/**
- * Where two streams diverge, as a 0..1 curve over the shorter of the two.
- *
- * Scaled by the largest difference rather than by the streams' own range, so
- * the curve answers *where* they differ rather than *whether* — the second is
- * already answered by the fact that anything is drawn at all. A pair that
- * differs everywhere by the same amount is a flat line at 1, which is the
- * honest picture of a change with no particular moment to it.
- */
-export function divergence(a: readonly number[], b: readonly number[]): number[] {
-  const n = Math.min(a.length, b.length);
-  const raw = Array.from({ length: n }, (_, i) => Math.abs(a[i] - b[i]));
-  const peak = Math.max(...raw, 0);
-  return peak > 0 ? raw.map((v) => v / peak) : raw;
-}
-
-/**
- * The moment the two renders differ most, in seconds.
- *
- * What someone comparing two things actually wants offered to them: not a
- * verdict, but the place to listen.
- */
-export function loudestDifference(divergences: readonly number[], stepS: number): number {
-  let best = 0;
-  for (let i = 1; i < divergences.length; i++) {
-    if (divergences[i] > divergences[best]) best = i;
-  }
-  return best * stepS;
 }

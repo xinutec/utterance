@@ -12,40 +12,35 @@ import {
 
 import type { ScoreView } from "../../models";
 import { onColourSchemeChange, resolveThemeColours } from "../studio/theme-colours";
-import { divergence } from "./compare-settings";
+import { PANELS, summarise, type Panel } from "./compare-panels";
 
 /** Height reserved above each panel for its caption. */
-const LABEL_HEIGHT = 14;
+const LABEL_HEIGHT = 15;
 /** Gap left under each panel so neighbouring series never touch. */
-const PANEL_GAP = 6;
-
-/** The streams worth putting side by side, and what each one answers. */
-const PANELS = [
-  { key: "level", label: "level — how loud, and how many voices" },
-  { key: "colour", label: "colour — tone, dark to bright" },
-  { key: "root", label: "root — the pitch everything is built on (log)" },
-  { key: "spread", label: "spread — how far the chord reaches above it" },
-  { key: "breath", label: "breath — how much of the tone is air" },
-] as const;
-
-type PanelKey = (typeof PANELS)[number]["key"];
+const PANEL_GAP = 8;
+/** Share of a panel given to the difference trace under it. */
+const DIFFERENCE_SHARE = 0.3;
+/** Opacity of the side that is not currently audible. */
+const SILENT_ALPHA = 0.4;
 
 /**
- * Two scores drawn on one time axis, with where they differ marked.
+ * Two scores on one time axis, with the difference between them drawn beneath
+ * each stream.
  *
- * **Why this exists.** Two renders a listener cannot tell apart are not
- * necessarily two renders that are the same, and the difference between those
- * two situations decides whether a knob is worth keeping. Drawing both makes the
- * question answerable: either the lines separate somewhere, and that somewhere
- * is where to listen, or they do not, and the knob does nothing audible however
- * much the bytes differ.
+ * **The difference trace is the instrument here, not the two curves.** Two
+ * renders being compared are usually *nearly* the same — that is what makes
+ * them hard to tell apart and worth comparing. Drawn against the full range of
+ * the data, "nearly the same" is a single line: the second curve lands on the
+ * first and hides it, which reads as a broken chart. Each panel therefore
+ * carries its own difference, scaled to its own largest gap and captioned with
+ * what that gap actually is, so a ten-cent difference fills the strip and says
+ * "up to 93 cents" rather than vanishing into an axis two octaves tall.
  *
- * The divergence strip under each panel is the actual instrument here. It says
- * *when* rather than *whether*, and clicking it moves both players there —
- * which turns "hard to tell" into "listen at 12.4 seconds".
+ * Panels where the two are byte-identical say **identical** in so many words.
+ * Silence there would be indistinguishable from a drawing fault.
  *
- * Canvas rather than SVG, like the voiceprint chart next door: a thousand points
- * per stream across five panels is more DOM than a page can carry.
+ * Canvas rather than SVG, like the voiceprint chart: a thousand points per
+ * stream across five panels is more DOM than a page can carry.
  */
 @Component({
   selector: "app-compare-chart",
@@ -58,6 +53,8 @@ export class CompareChart implements AfterViewInit, OnDestroy {
   readonly b = input.required<ScoreView>();
   /** Where the players are, in seconds, so the chart can show a playhead. */
   readonly playhead = input<number>(0);
+  /** Which side is audible; it is drawn solid and the other faded. */
+  readonly audible = input<"a" | "b">("a");
 
   /** A click on the chart, in seconds. Both players seek here. */
   readonly seek = output<number>();
@@ -69,8 +66,8 @@ export class CompareChart implements AfterViewInit, OnDestroy {
   constructor() {
     effect(() => {
       // Read every input so the effect re-runs when any of them moves.
-      const [a, b, at] = [this.a(), this.b(), this.playhead()];
-      if (this.observer) this.draw(a, b, at);
+      const inputs = [this.a(), this.b(), this.playhead(), this.audible()] as const;
+      if (this.observer) this.draw(...inputs);
     });
   }
 
@@ -88,9 +85,8 @@ export class CompareChart implements AfterViewInit, OnDestroy {
 
   onClick(event: MouseEvent): void {
     const canvas = this.canvasRef().nativeElement;
-    const bounds = canvas.getBoundingClientRect();
-    const fraction = (event.clientX - bounds.left) / bounds.width;
-    this.seek.emit(fraction * this.duration());
+    const box = canvas.getBoundingClientRect();
+    this.seek.emit(((event.clientX - box.left) / box.width) * this.duration());
   }
 
   private duration(): number {
@@ -98,10 +94,10 @@ export class CompareChart implements AfterViewInit, OnDestroy {
   }
 
   private redraw(): void {
-    this.draw(this.a(), this.b(), this.playhead());
+    this.draw(this.a(), this.b(), this.playhead(), this.audible());
   }
 
-  private draw(a: ScoreView, b: ScoreView, playhead: number): void {
+  private draw(a: ScoreView, b: ScoreView, playhead: number, audible: "a" | "b"): void {
     const canvas = this.canvasRef().nativeElement;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -116,42 +112,53 @@ export class CompareChart implements AfterViewInit, OnDestroy {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const { ink, muted, accent, warm } = resolveThemeColours(canvas.parentElement ?? canvas);
-
+    const theme = resolveThemeColours(canvas.parentElement ?? canvas);
     const panelHeight = height / PANELS.length;
-    let top = 0;
-    for (const panel of PANELS) {
-      const seriesA = series(a, panel.key);
-      const seriesB = series(b, panel.key);
 
-      ctx.fillStyle = muted;
-      ctx.font = "11px system-ui, sans-serif";
-      ctx.fillText(panel.label, 0, top + 11);
+    PANELS.forEach((panel, index) => {
+      const top = index * panelHeight;
+      const difference = panel.difference(a, b);
+
+      this.caption(ctx, panel, difference, top, width, theme);
 
       const plotTop = top + LABEL_HEIGHT;
-      // The bottom eighth of each panel is the divergence strip.
-      const strip = (panelHeight - LABEL_HEIGHT - PANEL_GAP) * 0.18;
-      const plotHeight = panelHeight - LABEL_HEIGHT - PANEL_GAP - strip;
+      const usable = panelHeight - LABEL_HEIGHT - PANEL_GAP;
+      const diffHeight = usable * DIFFERENCE_SHARE;
+      const plotHeight = usable - diffHeight;
 
-      const scale = bounds(seriesA, seriesB, panel.key);
-      this.plot(ctx, seriesA, scale, width, plotTop, plotHeight, accent, 1.75);
-      this.plot(ctx, seriesB, scale, width, plotTop, plotHeight, warm, 1.75);
-      this.strip(ctx, divergence(seriesA, seriesB), width, plotTop + plotHeight, strip, ink);
+      const tracesA = panel.traces(a);
+      const tracesB = panel.traces(b);
+      const scale = bounds([...tracesA, ...tracesB], panel.key);
 
-      ctx.strokeStyle = muted;
+      // The silent side first and faded, so the side being heard is on top and
+      // never hidden by the one that is not.
+      const order = audible === "a" ? ([tracesB, tracesA] as const) : ([tracesA, tracesB] as const);
+      const colours =
+        audible === "a"
+          ? ([theme.warm, theme.accent] as const)
+          : ([theme.accent, theme.warm] as const);
+      order.forEach((traces, i) => {
+        ctx.globalAlpha = i === 0 ? SILENT_ALPHA : 1;
+        for (const trace of traces) {
+          this.plot(ctx, trace, scale, width, plotTop, plotHeight, colours[i]);
+        }
+      });
+      ctx.globalAlpha = 1;
+
+      this.difference(ctx, difference, width, plotTop + plotHeight, diffHeight, theme.ink);
+
+      ctx.strokeStyle = theme.muted;
       ctx.globalAlpha = 0.25;
       ctx.beginPath();
       ctx.moveTo(0, top + panelHeight - PANEL_GAP);
       ctx.lineTo(width, top + panelHeight - PANEL_GAP);
       ctx.stroke();
       ctx.globalAlpha = 1;
-
-      top += panelHeight;
-    }
+    });
 
     // The playhead last, over everything, so it is never hidden by a series.
     const x = (playhead / this.duration()) * width;
-    ctx.strokeStyle = ink;
+    ctx.strokeStyle = theme.ink;
     ctx.globalAlpha = 0.55;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -159,6 +166,29 @@ export class CompareChart implements AfterViewInit, OnDestroy {
     ctx.lineTo(x, height);
     ctx.stroke();
     ctx.globalAlpha = 1;
+  }
+
+  /** The panel's name, and how far apart the two sides are in it. */
+  private caption(
+    ctx: CanvasRenderingContext2D,
+    panel: Panel,
+    difference: readonly number[],
+    top: number,
+    width: number,
+    theme: { muted: string; ink: string },
+  ): void {
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillStyle = theme.muted;
+    ctx.fillText(panel.label, 0, top + 11);
+
+    const verdict = summarise(difference, panel.unit);
+    ctx.textAlign = "right";
+    // "identical" is the one that must not be missed, so it is the one drawn in
+    // full-strength ink rather than in the caption grey.
+    ctx.fillStyle = verdict === "identical" ? theme.ink : theme.muted;
+    ctx.fillText(verdict, width, top + 11);
+    ctx.textAlign = "left";
   }
 
   private plot(
@@ -169,12 +199,11 @@ export class CompareChart implements AfterViewInit, OnDestroy {
     top: number,
     height: number,
     colour: string,
-    lineWidth: number,
   ): void {
     if (values.length === 0) return;
     const span = hi - lo || 1;
     ctx.strokeStyle = colour;
-    ctx.lineWidth = lineWidth;
+    ctx.lineWidth = 1.75;
     ctx.lineJoin = "round";
     ctx.beginPath();
     values.forEach((v, i) => {
@@ -187,13 +216,14 @@ export class CompareChart implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Where the two differ, as a filled strip.
+   * How far apart the two sides are, filled and scaled to its own largest gap.
    *
-   * Filled rather than drawn as a line because it is not a measurement anyone
-   * reads a value off — it is a heat map with one dimension, and the only
-   * question asked of it is *where is it tallest*.
+   * Scaled to itself rather than to the panel above it, which is the whole point:
+   * the differences worth hunting for are the ones too small to see against the
+   * data. The caption carries the absolute size so the scaling cannot mislead
+   * anyone into thinking a small difference is a large one.
    */
-  private strip(
+  private difference(
     ctx: CanvasRenderingContext2D,
     values: readonly number[],
     width: number,
@@ -202,56 +232,41 @@ export class CompareChart implements AfterViewInit, OnDestroy {
     colour: string,
   ): void {
     if (values.length === 0 || height <= 0) return;
+    const peak = Math.max(...values);
+    if (peak <= 0) return;
+
     const step = width / values.length;
     ctx.fillStyle = colour;
     values.forEach((v, i) => {
-      if (v <= 0) return;
-      ctx.globalAlpha = 0.15 + 0.55 * v;
-      ctx.fillRect(i * step, top + height * (1 - v), Math.max(step, 1), height * v);
+      const share = v / peak;
+      if (share <= 0) return;
+      ctx.globalAlpha = 0.2 + 0.5 * share;
+      ctx.fillRect(i * step, top + height * (1 - share), Math.max(step, 1), height * share);
     });
     ctx.globalAlpha = 1;
   }
 }
 
-/** One panel's series, derived from a score. */
-function series(score: ScoreView, key: PanelKey): number[] {
-  switch (key) {
-    case "level":
-      return score.level;
-    case "colour":
-      return score.colour;
-    case "breath":
-      return score.breath;
-    // The lowest voice is the root everything else is stacked on. Log, because
-    // this is a pitch and pitch is heard in ratios.
-    case "root":
-      return score.voices.length > 0 ? score.voices[0].map((hz) => Math.log2(Math.max(hz, 1))) : [];
-    // How far the top voice sits above the root, in octaves. This is the number
-    // `voicing` and `spacing` move, and it is invisible in either voice alone.
-    case "spread": {
-      const [low, high] = [score.voices.at(0), score.voices.at(-1)];
-      if (!low || !high) return [];
-      return low.map((hz, i) => Math.log2(Math.max(high[i], 1) / Math.max(hz, 1)));
-    }
-  }
-}
-
 /**
- * The range a panel is drawn against, shared by both sides.
+ * The range a panel is drawn against, shared by both sides and every trace.
  *
- * Shared is the whole point: scaled independently, two series that differ by an
- * octave would be drawn on top of each other and the chart would report no
- * difference at all.
+ * Shared is essential: scaled independently, two series an octave apart would be
+ * drawn on top of each other and the chart would report no difference at all.
  */
-function bounds(a: readonly number[], b: readonly number[], key: PanelKey): readonly [number, number] {
+function bounds(traces: readonly (readonly number[])[], key: string): readonly [number, number] {
   // Colour and breath are defined on 0..1, and pinning them there keeps a small
   // real difference small rather than magnifying it to fill the panel.
   if (key === "colour" || key === "breath") return [0, 1];
 
-  const all = [...a, ...b];
-  if (all.length === 0) return [0, 1];
-  const lo = Math.min(...all);
-  const hi = Math.max(...all);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const trace of traces) {
+    for (const v of trace) {
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  }
+  if (!Number.isFinite(lo)) return [0, 1];
   // A flat pair still needs a panel's worth of height to sit in the middle of.
   return hi > lo ? [lo, hi] : [lo - 0.5, lo + 0.5];
 }

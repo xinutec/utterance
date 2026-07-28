@@ -88,12 +88,13 @@
         [a]="viewA"
         [b]="viewB"
         [playhead]="playhead()"
+        [audible]="side()"
         (seek)="seekTo($event)"
       ></app-compare-chart>
       <p class="legend">
         <span class="swatch a"></span> A
         <span class="swatch b"></span> B
-        <span class="swatch strip"></span> where they differ — click to listen there
+        <span class="swatch strip"></span> how far apart, scaled to each panel — click to listen there
       </p>
 
       @if (viewA.degrees.join() !== viewB.degrees.join()) {

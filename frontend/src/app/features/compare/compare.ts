@@ -24,7 +24,8 @@ import { RecordingsStore } from "../../recordings-store";
 import { MappingControls } from "../studio/mapping-controls";
 import { INITIAL_SETTINGS, settingsQuery, type MappingSettings } from "../studio/mapping-settings";
 import { CompareChart } from "./compare-chart";
-import { differences, divergence, loudestDifference } from "./compare-settings";
+import { mostDifferentAt } from "./compare-panels";
+import { differences } from "./compare-settings";
 
 /** Which side is audible. */
 type Side = "a" | "b";
@@ -117,13 +118,12 @@ export class Compare implements OnInit {
    */
   readonly mostDifferent = computed(() => {
     const [a, b] = [this.scoreA(), this.scoreB()];
-    if (!a || !b || a.colour.length === 0) return null;
-    // Across the streams a listener is most likely to notice, rather than one:
-    // a change that shows in none of these is not one anyone will hear.
-    const combined = [a.level, a.colour, a.breath]
-      .map((stream, i) => divergence(stream, [b.level, b.colour, b.breath][i]))
-      .reduce((acc, curve) => acc.map((v, j) => Math.max(v, curve[j] ?? 0)));
-    return loudestDifference(combined, a.stepS);
+    if (!a || !b) return null;
+    // Across every panel rather than a chosen few. The first version looked at
+    // level, colour and breath — all three of which are byte-identical under
+    // `bind`, so it confidently offered second zero for the comparison the page
+    // exists to make.
+    return mostDifferentAt(a, b);
   });
 
   ngOnInit(): void {
