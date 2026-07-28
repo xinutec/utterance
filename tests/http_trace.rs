@@ -63,3 +63,88 @@ fn a_redacted_line_still_says_there_was_a_query() {
         );
     }
 }
+
+// ---- the layer's position in the stack ------------------------------------
+
+use std::sync::{Arc, Mutex};
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use tower::ServiceExt;
+use tracing_subscriber::fmt::MakeWriter;
+use utterance::config::Config;
+use utterance::state::AppState;
+use utterance::store::Store;
+use utterance::webauth::WebAuth;
+
+/// A writer that keeps everything, so a test can read back what was logged.
+#[derive(Clone, Default)]
+struct Captured(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().expect("log buffer").extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> MakeWriter<'a> for Captured {
+    type Writer = Self;
+    fn make_writer(&'a self) -> Self::Writer {
+        self.clone()
+    }
+}
+
+#[tokio::test]
+async fn a_refused_request_is_still_logged() {
+    // The defect this was deployed with, found by reading the log rather than
+    // by reasoning about it: tracing was applied *inside* the sign-in gate, so
+    // a 401 short-circuited before anything recorded it — and the requests
+    // worth seeing most, the refused ones, were the only ones missing.
+    let dir = std::env::temp_dir().join(format!("utterance-trace-test-{}", std::process::id()));
+    let router = utterance::routes::router_with(
+        AppState::new(
+            Config {
+                bind_addr: "127.0.0.1:0".into(),
+                data_dir: dir.clone(),
+                static_dir: None,
+            },
+            Store::open(&dir).expect("open store"),
+        ),
+        Some(Arc::new(WebAuth::new("secret", "id", "shh", []))),
+    );
+
+    let captured = Captured::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(captured.clone())
+        .with_ansi(false)
+        .finish();
+
+    let response = {
+        let _guard = tracing::subscriber::set_default(subscriber);
+        router
+            .oneshot(
+                Request::get("/api/controls?mapping=tonnetz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("router answered")
+    };
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let logged = String::from_utf8(captured.0.lock().expect("log buffer").clone()).expect("utf8");
+    assert!(
+        logged.contains("/api/controls?mapping=tonnetz"),
+        "a refused request left no line:\n{logged}"
+    );
+    assert!(
+        logged.contains("401"),
+        "the refusal was logged without its status:\n{logged}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

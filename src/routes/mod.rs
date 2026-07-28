@@ -36,8 +36,7 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         .route("/recordings/{id}/score", get(api::score))
         .route("/voice", get(api::voice_summary))
         .route("/controls", get(api::controls))
-        .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
-        .layer(http_trace::layer());
+        .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES));
 
     // Applied to the API router alone, so the health check the cluster probes
     // and the sign-in routes themselves stay reachable without a session.
@@ -50,6 +49,13 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         }
         None => api,
     };
+
+    // **Outside the gate, and that ordering is the whole point.** A later
+    // `layer` wraps the earlier ones, so tracing added before the gate sees
+    // only requests the gate let through — and a refused request is exactly the
+    // one worth a line. Found by reading the log after deploying it the other
+    // way round: `/login` appeared and every 401 was invisible.
+    let api = api.layer(http_trace::layer());
 
     let mut app = Router::new()
         .route("/healthz", get(|| async { "ok" }))

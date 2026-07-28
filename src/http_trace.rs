@@ -12,6 +12,7 @@
 //! into a log puts a credential somewhere it outlives its exchange, so those
 //! two paths log without their query and everything else logs with it.
 
+use axum::extract::OriginalUri;
 use axum::http::{Request, Uri};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::{DefaultOnFailure, DefaultOnResponse, TraceLayer};
@@ -50,10 +51,18 @@ pub fn loggable(uri: &Uri) -> String {
 /// interesting lines is the same as not having them.
 pub fn layer() -> RequestTrace {
     fn span(request: &Request<axum::body::Body>) -> tracing::Span {
+        // The URI as the client sent it. Nesting rewrites `request.uri()` to
+        // strip the prefix it matched, so a layer inside `/api` would log
+        // `/controls` for a request to `/api/controls` — a path that appears in
+        // no browser, no manifest and no other log on the fleet.
+        let uri = request
+            .extensions()
+            .get::<OriginalUri>()
+            .map_or_else(|| request.uri(), |original| &original.0);
         tracing::info_span!(
             "request",
             method = %request.method(),
-            target = %loggable(request.uri()),
+            target = %loggable(uri),
         )
     }
 
