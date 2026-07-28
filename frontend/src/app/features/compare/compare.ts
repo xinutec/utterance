@@ -19,12 +19,19 @@ import { MatIconModule } from "@angular/material/icon";
 import { MatProgressBarModule } from "@angular/material/progress-bar";
 import { MatSelectModule } from "@angular/material/select";
 
+import { ActivatedRoute, Router } from "@angular/router";
+
 import { ControlsStore } from "../../controls-store";
 import type { ScoreView } from "../../models";
 import { ApiError, RecordingsApi } from "../../recordings-api";
 import { RecordingsStore } from "../../recordings-store";
 import { MappingControls } from "../studio/mapping-controls";
-import { INITIAL_SETTINGS, settingsQuery, type MappingSettings } from "../studio/mapping-settings";
+import {
+  INITIAL_SETTINGS,
+  parseSettings,
+  settingsQuery,
+  type MappingSettings,
+} from "../studio/mapping-settings";
 import { CompareChart } from "./compare-chart";
 import { mostDifferentAt } from "./compare-panels";
 import { differences } from "./compare-settings";
@@ -146,12 +153,77 @@ export class Compare implements OnInit {
   });
 
   constructor() {
+    this.readUrl();
     this.watchSettings();
+    this.writeUrl();
   }
 
   ngOnInit(): void {
     this.store.refresh();
     this.controls.ensure();
+  }
+
+  // ---- the comparison as a link -------------------------------------------
+  //
+  // **Why this page of all of them.** A comparison is the project's unit of
+  // evidence — every open question in `docs/roadmap.md` is settled by two
+  // renders and a pair of ears — and until this existed a comparison could only
+  // be passed on as a description of which controls to move. Two people in two
+  // rooms then listen to two slightly different things and disagree about a
+  // result neither of them heard.
+  //
+  // `a` and `b` each carry a whole settings query, url-encoded inside this one,
+  // so the encoding is `settingsQuery` in both directions and there is no second
+  // format to keep in step with the knob table.
+
+  /**
+   * True once the incoming URL has been read.
+   *
+   * The read has to wait for the published knobs — nothing can validate a knob
+   * value before the list of knobs arrives — and the write must not run before
+   * the read, or the first render would overwrite a shared link with the
+   * defaults it was about to replace.
+   */
+  private readonly loaded = signal(false);
+
+  private readUrl(): void {
+    const route = inject(ActivatedRoute);
+    const params = route.snapshot.queryParamMap;
+
+    effect(() => {
+      const knobs = this.controls.knobs();
+      if (this.loaded() || knobs.length === 0) return;
+
+      const take = params.get("take");
+      if (take) this.recordingId.set(take);
+      const a = params.get("a");
+      const b = params.get("b");
+      if (a !== null) this.a.set(parseSettings(a, knobs));
+      // Only when `a` was given too: a link carrying one side and not the other
+      // would silently keep this page's own default on the other, which is a
+      // comparison nobody chose.
+      if (a !== null && b !== null) this.b.set(parseSettings(b, knobs, this.b()));
+      this.loaded.set(true);
+    });
+  }
+
+  private writeUrl(): void {
+    const router = inject(Router);
+    const route = inject(ActivatedRoute);
+
+    effect(() => {
+      const knobs = this.controls.knobs();
+      if (!this.loaded()) return;
+      const queryParams = {
+        take: this.chosen(),
+        a: settingsQuery(this.a(), knobs),
+        b: settingsQuery(this.b(), knobs),
+      };
+      // `replaceUrl` because moving a slider is not somewhere to go back to:
+      // pushing history would make the back button undo one knob at a time
+      // through a whole afternoon of listening.
+      void router.navigate([], { relativeTo: route, queryParams, replaceUrl: true });
+    });
   }
 
   /** Default to the longest take, which is the one with the most to compare. */

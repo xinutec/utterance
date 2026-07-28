@@ -433,3 +433,38 @@ for (const scheme of ["light", "dark"] as const) {
     }
   });
 }
+
+/**
+ * A comparison is the project's unit of evidence, and until it could be linked
+ * it could only be passed on as a description of which controls to move. Two
+ * people in two rooms then listen to two slightly different things and disagree
+ * about a result neither of them heard.
+ *
+ * Checked here rather than in a unit test because the failure is in the wiring
+ * and not in the parsing: the read waits for the published knobs and the write
+ * must not run before the read, and getting that order wrong overwrites a shared
+ * link with this page's own defaults before anyone sees it. Nothing below the
+ * component can see that happen.
+ */
+test("compare — a shared link arrives at the settings it names", async ({ page }) => {
+  await mockApi(page);
+  await page.goto(
+    "/compare?take=0123456789abcdef&a=" +
+      encodeURIComponent("mapping=tonnetz") +
+      "&b=" +
+      encodeURIComponent("mapping=tonnetz&bind=0"),
+  );
+
+  // The one thing the two sides disagree about, as the page itself names it.
+  const differing = page.locator("p.differing");
+  await expect(differing).toContainText("Bind to the voice");
+  await expect(differing.locator(".diff", { hasText: "Bind to the voice" })).toContainText("1");
+  await expect(differing.locator(".diff", { hasText: "Bind to the voice" })).toContainText("0");
+  // Both sides on the lattice, so the mapping is not listed as a difference.
+  await expect(differing).not.toContainText("Mapping");
+
+  // And the link survives being opened: the page writes its own state back, so
+  // a URL that changed on arrival would mean the address bar no longer
+  // described what is playing.
+  await expect(page).toHaveURL(/a=mapping%3Dtonnetz&b=mapping%3Dtonnetz%26bind%3D0/);
+});
