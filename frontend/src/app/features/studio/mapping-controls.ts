@@ -10,7 +10,6 @@ import { MatTooltipModule } from "@angular/material/tooltip";
 import type { Knob, MappingChoice } from "../../models";
 import { RecordingsStore } from "../../recordings-store";
 import { knobValue, withKnob, type MappingSettings } from "./mapping-settings";
-import { WheelScrollsThePage } from "./wheel-scrolls-the-page";
 
 /**
  * The mapping's knobs, as things you can turn.
@@ -45,7 +44,6 @@ import { WheelScrollsThePage } from "./wheel-scrolls-the-page";
     MatSelectModule,
     MatSliderModule,
     MatTooltipModule,
-    WheelScrollsThePage,
   ],
 })
 export class MappingControls {
