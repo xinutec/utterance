@@ -11,12 +11,33 @@
 //!   the voiceprint and until now nothing read it at all.
 //! - **vowel frontness** — walks a root up and down the speaker's scale.
 //! - **vowel openness** — how widely the voices spread around that root.
+//! - **F3** — opens or clusters the chord above that spread. The dimension of
+//!   articulation the vowel chart cannot see: rounding and retroflexion move it
+//!   while F1 and F2 hold still.
+//! - **spectral flux** — stirs the texture where the mouth is moving fastest.
+//!   Rhythm without cutting anything into notes.
 //! - **energy** — how loud the field is, and how many voices are audible in it.
-//! - **vowel brightness** — the colour every voice is rendered in.
+//! - **spectral centroid** — the colour every voice is rendered in, placed in
+//!   the speaker's own brightness range.
 //! - **aperiodicity** — how much of the field is breath.
 //!
-//! Six streams, continuously, against the four the note mapping read at onsets
-//! only.
+//! Eight streams, continuously, against the four the note mapping read at
+//! onsets only.
+//!
+//! **Colour was frontness until it was measured.** The colour stream was set
+//! from the same normalised F2 that walks the root, so the timbre and the
+//! harmony moved as one thing: every chord change was also the only colour
+//! change, and the field had five voices doing four things. Brightness is
+//! measured independently — the same vowel murmured and pressed is one point in
+//! the vowel space and two very different tones — so reading it separately is
+//! the difference between six streams and five.
+//!
+//! **Each stream moves one thing, and only one.** Two streams driving one
+//! parameter is one stream; one stream driving two parameters welds them
+//! together so neither can move alone. What a listener hears as *variety* is how
+//! many things can move independently of each other, which is exactly how many
+//! streams reach something of their own — so the count above is the honest
+//! measure of how much of a voice this mapping can hear.
 //!
 //! **The rule that keeps this from being resynthesis** is the same one as
 //! everywhere else: the voice moves the law, not the notes. Nothing here plays
@@ -91,6 +112,12 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
     let open = smooth(&open_raw, ROOT_FRAMES);
     let front = smooth(&front_raw, ROOT_FRAMES);
     let level = smooth(&linear_level(vp), LEVEL_FRAMES);
+    let bright = smooth(&brightness_track(vp, voice), ROOT_FRAMES);
+    let depth = smooth(&depth_track(vp, voice), ROOT_FRAMES);
+    // Flux is smoothed at the fastest timescale of any stream here. Slower and
+    // it stops being articulation and becomes another loudness curve; this is
+    // the one stream whose whole content is how quickly things are changing.
+    let stir = smooth(&vp.events.flux, LEVEL_FRAMES);
 
     let mut voices = vec![vec![0.0f32; frames]; params.voices];
     let mut gains = vec![vec![0.0f32; frames]; params.voices];
@@ -114,8 +141,20 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
         // An open vowel spreads the voices apart, a closed one gathers them.
         let spread = 1.0 + open[i].clamp(0.0, 1.0);
 
+        // The chord's shape, from the mouth shape the vowel chart cannot see.
+        // Centred so that a speaker at the middle of their own F3 range is
+        // stacked evenly and either half of it leans somewhere: high F3 opens
+        // the top of the chord, low F3 pulls it into a cluster.
+        let skew = (depth[i].clamp(0.0, 1.0) - 0.5) * 2.0 * params.voicing;
+        let top = (params.voices - 1).max(1) as f32;
+
         for v in 0..params.voices {
-            let step = ((v as f32 * params.spacing as f32 * spread) as usize).min(choices * 2);
+            // Applied as a share of how far up the stack this voice is, so the
+            // root never moves and the voicing opens from the top. A skew
+            // applied evenly would just be `spacing` with extra steps.
+            let lean = 1.0 + skew * (v as f32 / top);
+            let raw = v as f32 * params.spacing as f32 * spread * lean;
+            let step = (raw.max(0.0) as usize).min(choices * 2);
             let degree = degrees[step % choices];
             let octave = (step / choices) as f32;
             voices[v][i] = base * 2f32.powf(octave) * degree.ratio;
@@ -123,10 +162,15 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
             // Upper voices fade in as the speaker gets louder, so a quiet
             // passage is a thinner texture and not merely a softer one.
             let reach = (level[i] * params.voices as f32) - v as f32;
-            gains[v][i] = (level[i] * reach.clamp(0.0, 1.0)).max(if v == 0 { FLOOR } else { 0.0 });
+            // ...and a moving mouth lifts them further, so a busy passage is a
+            // busier texture. Weighted up the stack for the same reason the
+            // voicing is: applied to every voice equally it would be loudness.
+            let stirred = 1.0 + params.articulation * stir[i].clamp(0.0, 1.0) * (v as f32 / top);
+            gains[v][i] =
+                (level[i] * reach.clamp(0.0, 1.0) * stirred).max(if v == 0 { FLOOR } else { 0.0 });
         }
 
-        colour[i] = front[i].clamp(0.0, 1.0);
+        colour[i] = bright[i].clamp(0.0, 1.0);
         breath[i] = breath_at(vp, i);
     }
 
@@ -161,6 +205,53 @@ fn vowel_track(vp: &Voiceprint, voice: &Voice) -> (Vec<f32>, Vec<f32>) {
         front[i] = last_front;
     }
     (open, front)
+}
+
+/// Mouth shape per frame, from the third formant, carried across gaps.
+///
+/// Held at the middle of the speaker's range where F3 was never measured well
+/// enough to have one. Unlike the colour, the middle here is not a stand-in for
+/// a measurement: it is the position at which this stream does nothing, so an
+/// unmeasured F3 leaves the chord exactly as the other streams built it.
+fn depth_track(vp: &Voiceprint, voice: &Voice) -> Vec<f32> {
+    let mut last = 0.5f32;
+    (0..vp.frame.count)
+        .map(|i| {
+            if let Some(Some(f3)) = vp.formants.f3.get(i)
+                && let Some(placed) = voice.space.depth(*f3)
+            {
+                last = placed;
+            }
+            last
+        })
+        .collect()
+}
+
+/// Tone colour per frame, from the measured spectral centroid.
+///
+/// Voiced frames only, carried across the gaps for the same reason the vowel
+/// track is: a consonant is far brighter than any tone a throat sustains, and
+/// letting one through would flick the whole field white at every *s*. The
+/// consonants are already sounded as themselves, by the noise layer.
+///
+/// Without a measured brightness range the colour holds still. That is an
+/// absence of information rather than a fallback: the alternative — driving it
+/// from some other stream — is exactly the thing this function exists to undo.
+fn brightness_track(vp: &Voiceprint, voice: &Voice) -> Vec<f32> {
+    let Some(range) = voice.brightness else {
+        return vec![0.5; vp.frame.count];
+    };
+
+    let mut last = 0.5f32;
+    (0..vp.frame.count)
+        .map(|i| {
+            let voiced = vp.pitch.hz.get(i).copied().flatten().is_some();
+            if let (true, Some(centroid)) = (voiced, vp.texture.centroid_hz.get(i)) {
+                last = range.place(*centroid);
+            }
+            last
+        })
+        .collect()
 }
 
 /// Pitch per frame with unvoiced gaps carried across.

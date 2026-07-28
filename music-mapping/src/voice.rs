@@ -15,7 +15,7 @@
 //! everyone remembering.
 
 use music_analysis::partials::Partials;
-use music_analysis::speaker::VowelSpace;
+use music_analysis::speaker::{Brightness, VowelSpace};
 
 use crate::score::{self, Spectrum};
 use crate::tuning::{self, Tuning};
@@ -44,6 +44,12 @@ pub struct Voice {
     pub detune_cents: f32,
     /// The speaker's vowel-space extent, for normalising articulation.
     pub space: VowelSpace,
+    /// The speaker's brightness range, for normalising tone colour.
+    ///
+    /// Optional because it can genuinely be unmeasurable — too few voiced frames
+    /// across every take — and the honest response to that is a colour that
+    /// holds still, not a colour driven by some other stream standing in for it.
+    pub brightness: Option<Brightness>,
     /// Where the music centres. Everything else is an interval from here.
     pub tonic_hz: f32,
 }
@@ -61,6 +67,7 @@ impl Voice {
         palette_from: &[&Partials],
         detune_cents: f32,
         space: VowelSpace,
+        brightness: Option<Brightness>,
         tonic_hz: f32,
     ) -> Option<Self> {
         Self::from_calibration_with(
@@ -68,6 +75,7 @@ impl Voice {
             palette_from,
             detune_cents,
             space,
+            brightness,
             tonic_hz,
             tuning::MIN_DEPTH,
         )
@@ -85,6 +93,7 @@ impl Voice {
         palette_from: &[&Partials],
         detune_cents: f32,
         space: VowelSpace,
+        brightness: Option<Brightness>,
         tonic_hz: f32,
         min_depth: f32,
     ) -> Option<Self> {
@@ -104,6 +113,7 @@ impl Voice {
             palette: score::order_by_brightness(palette),
             detune_cents: detune_cents.clamp(0.0, MAX_DETUNE_CENTS),
             space,
+            brightness,
             tonic_hz,
         })
     }

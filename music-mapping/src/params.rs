@@ -114,6 +114,30 @@ pub const REACH: Knob = Knob {
             the articulation showing up as harmony.",
 };
 
+pub const VOICING: Knob = Knob {
+    name: "voicing",
+    label: "Voicing",
+    min: 0.0,
+    max: 1.0,
+    step: 0.05,
+    default: 0.5,
+    about: "How much the shape of the mouth opens or clusters the chord. Lip \
+            rounding and tongue position move the third formant while leaving \
+            the vowel where it is; this is that showing up as harmony.",
+};
+
+pub const ARTICULATION: Knob = Knob {
+    name: "articulation",
+    label: "Articulation",
+    min: 0.0,
+    max: 1.5,
+    step: 0.05,
+    default: 0.4,
+    about: "How much a moving mouth stirs the texture. A held vowel settles, a \
+            busy passage opens the upper voices — rhythm from how fast the \
+            spectrum is changing, without cutting anything into notes.",
+};
+
 pub const CONSONANTS: Knob = Knob {
     name: "consonants",
     label: "Consonants",
@@ -129,7 +153,17 @@ pub const CONSONANTS: Knob = Knob {
 ///
 /// Ordered by how much each one changes what you hear, so someone exploring
 /// from the top down hears something different at each step.
-pub const KNOBS: [Knob; 7] = [BIND, DENSITY, VOICES, SPACING, DRIFT, REACH, CONSONANTS];
+pub const KNOBS: [Knob; 9] = [
+    BIND,
+    DENSITY,
+    VOICES,
+    SPACING,
+    DRIFT,
+    REACH,
+    VOICING,
+    ARTICULATION,
+    CONSONANTS,
+];
 
 /// How the voice binds, and what it drives.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -164,6 +198,20 @@ pub struct Params {
     pub drift: f32,
     /// Octaves the root travels as the vowel moves front to back.
     pub reach: f32,
+    /// How far the third formant opens or clusters the chord.
+    ///
+    /// The dimension of articulation the vowel chart cannot see. F1 and F2 place
+    /// a vowel; F3 separates mouth shapes that share a place — rounded from
+    /// spread, retroflex from not — and it moves while the other two hold still.
+    /// At 0 the voices are evenly stacked whatever the mouth is doing.
+    pub voicing: f32,
+    /// How much the rate of spectral change stirs the texture.
+    ///
+    /// The field's only answer to rhythm that does not involve cutting anything
+    /// into notes. Spectral flux says *the sound is changing now* without
+    /// claiming a syllable began — which is exactly the weakness that makes it
+    /// a bad onset detector and a good continuous stream.
+    pub articulation: f32,
     /// How loud the consonants are against the pitched material, 0..1.
     ///
     /// At 0 they are silent, which is what every version of this project did
@@ -180,6 +228,8 @@ impl Default for Params {
             spacing: SPACING.default as usize,
             drift: DRIFT.default,
             reach: REACH.default,
+            voicing: VOICING.default,
+            articulation: ARTICULATION.default,
             consonants: CONSONANTS.default,
         }
     }
@@ -199,6 +249,8 @@ impl Params {
             spacing: SPACING.clamped(self.spacing as f32) as usize,
             drift: DRIFT.clamped(self.drift),
             reach: REACH.clamped(self.reach),
+            voicing: VOICING.clamped(self.voicing),
+            articulation: ARTICULATION.clamped(self.articulation),
             consonants: CONSONANTS.clamped(self.consonants),
         }
     }

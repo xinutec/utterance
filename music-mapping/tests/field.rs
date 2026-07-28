@@ -4,14 +4,20 @@
 //! the right thing. That the result is musical, they cannot say.
 
 use music_analysis::partials::{Partial, Partials};
-use music_analysis::speaker::VowelSpace;
+use music_analysis::speaker::{Brightness, Span, VowelSpace};
 use music_analysis::texture::Texture;
 use music_analysis::voiceprint::{Events, Formants, FrameGrid, Pitch, Source, Voiceprint};
 use music_mapping::field::{self, VOICES};
+use music_mapping::params::Params;
 use music_mapping::voice::Voice;
 
 fn space() -> VowelSpace {
     VowelSpace::new(300.0, 800.0, 900.0, 2400.0).unwrap()
+}
+
+/// The speaker's tone brightness range, wide enough for a fixture to move in.
+fn brightness() -> Option<Brightness> {
+    Brightness::new(300.0, 3000.0)
 }
 
 fn calibration() -> Partials {
@@ -31,7 +37,7 @@ fn calibration() -> Partials {
 
 fn voice() -> Voice {
     let p = calibration();
-    Voice::from_calibration(&p, &[&p], 2.0, space(), 120.0).expect("a voice")
+    Voice::from_calibration(&p, &[&p], 2.0, space(), brightness(), 120.0).expect("a voice")
 }
 
 /// A take whose every per-frame series can be set independently.
@@ -213,4 +219,215 @@ fn is_a_pure_function_of_its_input() {
     let vp = take(300);
     let v = voice();
     assert_eq!(field::compose(&vp, &v), field::compose(&vp, &v));
+}
+
+#[test]
+fn colour_follows_measured_brightness_rather_than_the_vowel() {
+    // The bug this replaced: `colour` was the same normalised F2 that walks the
+    // root, so the timbre could only change when the harmony did. Five voices
+    // doing four things. A voice can hold one vowel and change tone completely —
+    // murmured against pressed — and the field has to hear that.
+    let mut vp = take(400);
+    for slot in vp.texture.centroid_hz.iter_mut().skip(200) {
+        *slot = 2400.0;
+    }
+
+    let f = field::compose(&vp, &voice()).unwrap();
+    assert!(
+        f.colour[350] > f.colour[50] + 0.2,
+        "a tone that got much brighter moved the colour from {} to {}",
+        f.colour[50],
+        f.colour[350]
+    );
+}
+
+#[test]
+fn the_vowel_alone_does_not_move_the_colour() {
+    // The other half of the same claim, and the one that would have caught the
+    // bug: articulation must not stand in for tone. Same brightness throughout,
+    // the vowel swept right across the speaker's space.
+    let mut vp = take(400);
+    for slot in vp.formants.f1.iter_mut().skip(200) {
+        *slot = Some(780.0);
+    }
+    for slot in vp.formants.f2.iter_mut().skip(200) {
+        *slot = Some(2350.0);
+    }
+
+    let f = field::compose(&vp, &voice()).unwrap();
+    assert!(
+        (f.colour[350] - f.colour[50]).abs() < 0.01,
+        "the vowel moved the colour from {} to {}",
+        f.colour[50],
+        f.colour[350]
+    );
+    // ...while genuinely moving the harmony, or the fixture proves nothing.
+    assert!(
+        f.voices[0][350] != f.voices[0][50],
+        "the fixture did not actually change the vowel"
+    );
+}
+
+#[test]
+fn a_consonant_does_not_flash_the_colour_white() {
+    // Unvoiced frames are several times brighter than any sustained tone. Read
+    // straight through, every `s` would whiten the whole field for a frame or
+    // two — and the consonants are already sounded as themselves by the noise
+    // layer, so this would be hearing them twice.
+    let mut vp = take(400);
+    for i in 200..210 {
+        vp.pitch.hz[i] = None;
+        vp.texture.centroid_hz[i] = 6000.0;
+    }
+
+    let f = field::compose(&vp, &voice()).unwrap();
+    assert!(
+        (f.colour[205] - f.colour[50]).abs() < 0.05,
+        "a fricative moved the tone colour from {} to {}",
+        f.colour[50],
+        f.colour[205]
+    );
+}
+
+#[test]
+fn without_a_measured_range_the_colour_holds_still() {
+    // No brightness measurement is an absence of information. Substituting
+    // another stream for it is what this whole change exists to undo, so the
+    // honest answer is a colour that does not move.
+    let p = calibration();
+    let voice = Voice::from_calibration(&p, &[&p], 2.0, space(), None, 120.0).unwrap();
+
+    let mut vp = take(400);
+    for slot in vp.texture.centroid_hz.iter_mut().skip(200) {
+        *slot = 2400.0;
+    }
+
+    let f = field::compose(&vp, &voice).unwrap();
+    assert_eq!(f.colour[350], f.colour[50]);
+}
+
+/// A voice whose speaker has a measured third-formant range.
+fn voice_with_depth() -> Voice {
+    let p = calibration();
+    let space = space().with_f3(Span::new(2000.0, 3200.0));
+    Voice::from_calibration(&p, &[&p], 2.0, space, brightness(), 120.0).expect("a voice")
+}
+
+#[test]
+fn the_third_formant_opens_and_clusters_the_chord() {
+    // The dimension the vowel chart cannot see. Two takes with identical F1 and
+    // F2 — the same vowel throughout, by every measure the chart has — differing
+    // only in the mouth shape behind it.
+    let mut rounded = take(300);
+    for slot in rounded.formants.f3.iter_mut() {
+        *slot = Some(2100.0);
+    }
+    let mut spread = take(300);
+    for slot in spread.formants.f3.iter_mut() {
+        *slot = Some(3100.0);
+    }
+
+    let voice = voice_with_depth();
+    let a = field::compose(&rounded, &voice).unwrap();
+    let b = field::compose(&spread, &voice).unwrap();
+
+    let top = VOICES - 1;
+    assert!(
+        b.voices[top][150] > a.voices[top][150],
+        "a spread mouth did not open the chord: top voice {} against {}",
+        b.voices[top][150],
+        a.voices[top][150]
+    );
+    // The root is the anchor and must not move, or this is a transposition
+    // wearing a voicing's clothes.
+    assert_eq!(a.voices[0][150], b.voices[0][150]);
+}
+
+#[test]
+fn voicing_at_zero_ignores_the_third_formant() {
+    let mut rounded = take(300);
+    for slot in rounded.formants.f3.iter_mut() {
+        *slot = Some(2100.0);
+    }
+    let mut spread = take(300);
+    for slot in spread.formants.f3.iter_mut() {
+        *slot = Some(3100.0);
+    }
+
+    let voice = voice_with_depth();
+    let off = Params {
+        voicing: 0.0,
+        ..Params::default()
+    };
+    let a = field::compose_with(&rounded, &voice, off).unwrap();
+    let b = field::compose_with(&spread, &voice, off).unwrap();
+    assert_eq!(a.voices, b.voices);
+}
+
+#[test]
+fn an_unmeasured_third_formant_leaves_the_chord_alone() {
+    // No F3 range is a dimension nobody measured. The field must build exactly
+    // the chord the other streams asked for rather than guess at this one.
+    let mut vp = take(300);
+    for slot in vp.formants.f3.iter_mut() {
+        *slot = Some(3100.0);
+    }
+
+    let without = field::compose(&vp, &voice()).unwrap();
+    let flat = field::compose_with(
+        &vp,
+        &voice(),
+        Params {
+            voicing: 0.0,
+            ..Params::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(without.voices, flat.voices);
+}
+
+#[test]
+fn a_moving_mouth_stirs_the_upper_voices() {
+    // Rhythm without cutting anything into notes: where the spectrum is changing
+    // fastest, the texture opens. Nothing about the level changes.
+    let mut vp = take(400);
+    for slot in vp.events.flux.iter_mut().take(300).skip(200) {
+        *slot = 0.9;
+    }
+
+    let f = field::compose(&vp, &voice()).unwrap();
+    let top = VOICES - 1;
+    assert!(
+        f.gains[top][250] > f.gains[top][50] * 1.1,
+        "flux did not stir the top voice: {} against {}",
+        f.gains[top][250],
+        f.gains[top][50]
+    );
+    // The root carries the level and must not follow the flux, or this is a
+    // volume envelope rather than a change of texture.
+    assert!(
+        (f.gains[0][250] - f.gains[0][50]).abs() < 1e-6,
+        "the root moved with the flux: {} against {}",
+        f.gains[0][250],
+        f.gains[0][50]
+    );
+}
+
+#[test]
+fn articulation_at_zero_ignores_the_flux() {
+    let mut vp = take(400);
+    for slot in vp.events.flux.iter_mut().take(300).skip(200) {
+        *slot = 0.9;
+    }
+
+    let f = field::compose_with(
+        &vp,
+        &voice(),
+        Params {
+            articulation: 0.0,
+            ..Params::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(f.gains[VOICES - 1][250], f.gains[VOICES - 1][50]);
 }

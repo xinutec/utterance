@@ -25,7 +25,9 @@ use crate::voiceprint::Voiceprint;
 /// reason: a profile is a cache of a pure function of the voiceprints it was
 /// built from, so this number identifies the function, and an algorithm change
 /// invalidates a stored profile exactly as thoroughly as a shape change does.
-pub const PROFILE_VERSION: u32 = 1;
+/// - 2: added `brightness` (the spectral range this speaker's voiced tone
+///   moves through).
+pub const PROFILE_VERSION: u32 = 2;
 
 /// Percentiles taken as the low and high edge of a measured range.
 ///
@@ -47,6 +49,28 @@ const HIGH_PERCENTILE: f32 = 0.95;
 /// nothing — the caller can handle an absent range, but cannot detect a wrong one.
 const MIN_FRAMES: usize = 200;
 
+/// A measured range with somewhere to put a value inside it.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Span {
+    pub low_hz: f32,
+    pub high_hz: f32,
+}
+
+impl Span {
+    /// A span, or `None` if it has no extent — nothing can be placed in one.
+    pub fn new(low_hz: f32, high_hz: f32) -> Option<Self> {
+        (high_hz > low_hz).then_some(Self { low_hz, high_hz })
+    }
+
+    /// Where a value sits in this span, `0` at the low edge and `1` at the high.
+    ///
+    /// Unclamped, like [`VowelSpace::normalise`] and for the same reason.
+    pub fn place(&self, value: f32) -> f32 {
+        (value - self.low_hz) / (self.high_hz - self.low_hz)
+    }
+}
+
 /// The extent of a speaker's vowel space, in Hz.
 ///
 /// Build one with [`Self::new`], which refuses a degenerate span so
@@ -58,6 +82,17 @@ pub struct VowelSpace {
     pub f1_high: f32,
     pub f2_low: f32,
     pub f2_high: f32,
+    /// The third formant's range, when enough frames carried one.
+    ///
+    /// The same space's third dimension rather than a separate measurement. F1
+    /// and F2 place a vowel on the chart everyone draws; F3 is what distinguishes
+    /// mouth shapes that chart cannot tell apart — lip rounding and tongue
+    /// retroflexion, which move it and leave the other two where they were.
+    ///
+    /// Optional because the formant fit recovers F3 far less reliably than the
+    /// two below it: it is the highest pole and the first to be lost to a noisy
+    /// frame.
+    pub f3: Option<Span>,
 }
 
 impl VowelSpace {
@@ -72,7 +107,22 @@ impl VowelSpace {
             f1_high,
             f2_low,
             f2_high,
+            f3: None,
         })
+    }
+
+    /// The same space with its third dimension measured.
+    pub fn with_f3(self, f3: Option<Span>) -> Self {
+        Self { f3, ..self }
+    }
+
+    /// Where one F3 measurement sits in this speaker's third-formant range.
+    ///
+    /// `None` when F3 was never measured well enough to have a range, which is
+    /// the state a caller has to handle rather than paper over: there is no
+    /// sensible stand-in for a dimension nobody measured.
+    pub fn depth(&self, f3: f32) -> Option<f32> {
+        self.f3.map(|span| span.place(f3))
     }
 
     /// Place one vowel measurement within this speaker's own space.
@@ -89,6 +139,52 @@ impl VowelSpace {
             (f1 - self.f1_low) / (self.f1_high - self.f1_low),
             (f2 - self.f2_low) / (self.f2_high - self.f2_low),
         )
+    }
+}
+
+/// The spectral range a speaker's voiced tone moves through, in Hz.
+///
+/// Brightness is a dimension of a voice quite separate from which vowel is being
+/// said: the same *ah* pressed hard and murmured are the same point in the vowel
+/// space and nowhere near each other in tone. Measuring it per person, like the
+/// vowel space next door, is what makes a bright frame mean *bright for them*.
+///
+/// Build with [`Self::new`], which refuses a degenerate range so [`Self::place`]
+/// can divide without a guard.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Brightness {
+    pub low_hz: f32,
+    pub high_hz: f32,
+}
+
+impl Brightness {
+    /// A brightness range, or `None` if it has no extent or reaches below zero.
+    pub fn new(low_hz: f32, high_hz: f32) -> Option<Self> {
+        if low_hz <= 0.0 || high_hz <= low_hz {
+            return None;
+        }
+        Some(Self { low_hz, high_hz })
+    }
+
+    /// Place one measured centroid within this speaker's range.
+    ///
+    /// Interpolated in log frequency, because that is how brightness is heard:
+    /// the midpoint between 500 Hz and 2000 Hz sounds like 1000 Hz, not like the
+    /// arithmetic 1250. A linear axis would spend most of its length on the
+    /// bright end, where a listener hears the least difference.
+    ///
+    /// Outside `0..1` is expected and not clamped, for the same reason
+    /// [`VowelSpace::normalise`] does not clamp: the edges are percentiles, so a
+    /// frame past one is real evidence rather than an error.
+    pub fn place(&self, centroid_hz: f32) -> f32 {
+        // No energy is not a dark tone, it is no tone — but the darkest end of
+        // the axis is the only honest place to put it, and the caller's own
+        // level stream is what says whether anything sounds there at all.
+        if centroid_hz <= 0.0 {
+            return 0.0;
+        }
+        (centroid_hz / self.low_hz).log2() / (self.high_hz / self.low_hz).log2()
     }
 }
 
@@ -118,6 +214,13 @@ pub struct SpeakerProfile {
     pub voiced_frames: usize,
     pub vowel_space: Option<VowelSpace>,
     pub f0: Option<F0Range>,
+    /// Where this speaker's voiced tone sits on the bright-to-dark axis.
+    ///
+    /// Measured over voiced frames only. Unvoiced frames are consonants, which
+    /// are far brighter than any tone and would stretch the top of the range to
+    /// somewhere no sustained note ever reaches — leaving every vowel crowded
+    /// into the bottom of an axis mostly describing sibilance.
+    pub brightness: Option<Brightness>,
 }
 
 /// Measure a speaker from everything they have recorded.
@@ -139,13 +242,36 @@ pub fn profile(voiceprints: &[&Voiceprint]) -> SpeakerProfile {
         f2.push(b);
     }
 
+    // F3 pooled on its own rather than gated on the two below it. It is the
+    // first formant lost to a noisy frame, so requiring all three would throw
+    // away most of the evidence there is for the range it moves in.
+    let mut f3: Vec<f32> = voiceprints
+        .iter()
+        .flat_map(|vp| vp.formants.f3.iter().flatten().copied())
+        .collect();
+
     let mut f0: Vec<f32> = voiceprints
         .iter()
         .flat_map(|vp| vp.pitch.hz.iter().flatten().copied())
         .collect();
 
+    // Brightness of the voiced material only, take by take, so an unvoiced frame
+    // never contributes its centroid to the range a tone is placed in.
+    let mut centroid: Vec<f32> = voiceprints
+        .iter()
+        .flat_map(|vp| {
+            vp.pitch
+                .hz
+                .iter()
+                .zip(&vp.texture.centroid_hz)
+                .filter(|(hz, c)| hz.is_some() && **c > 0.0)
+                .map(|(_, c)| *c)
+        })
+        .collect();
+
     let vowel_frames = f1.len();
     let voiced_frames = f0.len();
+    let bright_frames = centroid.len();
 
     SpeakerProfile {
         profile_version: PROFILE_VERSION,
@@ -156,12 +282,22 @@ pub fn profile(voiceprints: &[&Voiceprint]) -> SpeakerProfile {
             .then(|| {
                 sort(&mut f1);
                 sort(&mut f2);
+                let depth = (f3.len() >= MIN_FRAMES)
+                    .then(|| {
+                        sort(&mut f3);
+                        Span::new(
+                            percentile(&f3, LOW_PERCENTILE),
+                            percentile(&f3, HIGH_PERCENTILE),
+                        )
+                    })
+                    .flatten();
                 VowelSpace::new(
                     percentile(&f1, LOW_PERCENTILE),
                     percentile(&f1, HIGH_PERCENTILE),
                     percentile(&f2, LOW_PERCENTILE),
                     percentile(&f2, HIGH_PERCENTILE),
                 )
+                .map(|space| space.with_f3(depth))
             })
             .flatten(),
         f0: (voiced_frames >= MIN_FRAMES).then(|| {
@@ -172,6 +308,15 @@ pub fn profile(voiceprints: &[&Voiceprint]) -> SpeakerProfile {
                 high_hz: percentile(&f0, HIGH_PERCENTILE),
             }
         }),
+        brightness: (bright_frames >= MIN_FRAMES)
+            .then(|| {
+                sort(&mut centroid);
+                Brightness::new(
+                    percentile(&centroid, LOW_PERCENTILE),
+                    percentile(&centroid, HIGH_PERCENTILE),
+                )
+            })
+            .flatten(),
     }
 }
 

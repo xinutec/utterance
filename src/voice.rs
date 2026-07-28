@@ -138,6 +138,7 @@ pub fn calibrate_with(
         &palette,
         detune_cents,
         space,
+        profile.brightness,
         tonic_hz,
         min_depth,
     )

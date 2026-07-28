@@ -13,7 +13,7 @@ the voiceprint as the interface between its layers.
 | voicing | done | Gates everything pitch-derived and the formants. |
 | events (spectral flux) | done, with a known limit | See "onsets" below. |
 | formants F1/F2/F3 | done | LPC + Durand-Kerner. Range-constrained assignment. |
-| speaker profile | done | Per-person vowel-space corners and f0 range. |
+| speaker profile | done | Vowel-space corners, F3 range, f0 range, brightness range. |
 | measured partial ratios | done | Per take, over frames steady enough to use. |
 | noise shape (texture) | done | Centroid and flatness above 300 Hz. The consonants. |
 | stress hierarchy | **not started** | Was needed to fix onsets; the field mapping sidesteps it. |
@@ -84,9 +84,10 @@ In rough order of how much each unlocks.
   open questions below are a slider and a button away rather than an exercise in
   editing URLs — but the questions themselves are still open, and they can only
   be closed by someone listening.
-- **The field reads six streams; the voice emits about ten.** F3, spectral tilt
-  and the flux curve are measured and unread. They are the likeliest source of
-  internal movement if the field turns out to drone.
+- **The field reads eight streams; the voice emits about ten.** What is still
+  unread is the *shape* of the spectrum beyond its centroid — a tilt measurement
+  proper, and the harmonic-to-noise balance per band. Neither is measured yet, so
+  this is analysis work rather than mapping work.
 - **Nothing operates above the phrase.** The field moves at three timescales —
   level, articulation, prosodic drift — and the longest is two seconds. A piece
   has a shape across its whole length and nothing here produces one.
@@ -172,6 +173,25 @@ source, plus the one that most shapes daily work.
   mobile connection; this one is served from a Mac on a LAN to two people, so
   the old number measured nothing anyone cares about while making a real warning
   easy to miss. The error ceiling is untouched.
+
+- **One stream drives one parameter** (2026-07-28). Found by counting rather
+  than by listening: the field's doc claimed six streams while `colour` was set
+  from the same normalised F2 that walks the root, so the timbre could only
+  change when the harmony did. Two streams welded into one. What a listener
+  hears as variety is how many things can move *independently*, so the count is
+  only honest if each stream reaches something of its own — and a mapping that
+  quietly doubles up will always sound simpler than the voice it came from. The
+  field now reads eight: f0, frontness, openness, F3, flux, energy, centroid,
+  aperiodicity.
+
+- **Anything a mapping normalises against is measured per speaker**
+  (2026-07-28). Brightness and F3 join the vowel space and the pitch range in
+  `SpeakerProfile`. The alternative — a fixed range, or the take's own — fails
+  the same way each time: against a constant it stops meaning *bright for them*,
+  and against the take it normalises away the difference between two things the
+  same person said. This is the third time that reasoning has decided a design
+  question, which is why it is written here as a rule rather than a third time
+  as a case.
 
 - **The mapping publishes its own controls** (2026-07-28). `GET /api/controls`
   serves `music_mapping::params::KNOBS` — each knob's range, step, starting

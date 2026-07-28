@@ -74,6 +74,12 @@ pub struct VoiceParams {
     /// Octaves the root travels as the vowel moves front to back.
     #[serde(default)]
     pub reach: Option<f32>,
+    /// How far the third formant opens or clusters the chord.
+    #[serde(default)]
+    pub voicing: Option<f32>,
+    /// How much the rate of spectral change stirs the texture.
+    #[serde(default)]
+    pub articulation: Option<f32>,
     /// Loudness of the consonants against the pitched material.
     #[serde(default)]
     pub consonants: Option<f32>,
@@ -90,6 +96,8 @@ impl VoiceParams {
             spacing: self.spacing.unwrap_or(base.spacing),
             drift: self.drift.unwrap_or(base.drift),
             reach: self.reach.unwrap_or(base.reach),
+            voicing: self.voicing.unwrap_or(base.voicing),
+            articulation: self.articulation.unwrap_or(base.articulation),
             consonants: self.consonants.unwrap_or(base.consonants),
         }
         .sane()

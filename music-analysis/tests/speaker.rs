@@ -43,9 +43,11 @@ fn voiceprint(f1: Vec<Option<f32>>, f2: Vec<Option<f32>>, hz: Vec<Option<f32>>) 
             onset_frames: Vec::new(),
             onset_times_s: Vec::new(),
         },
-        // Profiling reads pitch and formants; neither the harmonic series nor
-        // the noise shape is read here, so both are left empty rather than
-        // faked into plausibility.
+        // The harmonic series is not read by profiling, so it is left empty
+        // rather than faked into plausibility. The centroid *is* read — for the
+        // brightness range — and zero is how a frame says it carried no energy,
+        // so a fixture that never sets it reports no brightness at all. The
+        // tests that care set it themselves.
         partials: Partials {
             frames_used: 0,
             f0_hz: None,
@@ -233,4 +235,83 @@ fn survives_having_nothing_to_measure() {
     assert_eq!(p.takes, 0);
     assert_eq!(p.vowel_frames, 0);
     assert!(p.vowel_space.is_none() && p.f0.is_none());
+}
+
+/// A speaker whose tone sweeps a known brightness range while voiced throughout.
+fn brightening_speaker(frames: usize) -> Voiceprint {
+    let mut vp = voiceprint(
+        vec![Some(500.0); frames],
+        vec![Some(1500.0); frames],
+        vec![Some(120.0); frames],
+    );
+    // Geometric, because the range is read on a log axis and a linear ramp
+    // would put the median somewhere the percentiles disagree with.
+    vp.texture.centroid_hz = (0..frames)
+        .map(|i| 400.0 * 4f32.powf(i as f32 / (frames - 1) as f32))
+        .collect();
+    vp
+}
+
+#[test]
+fn brightness_spans_the_tone_a_speaker_actually_produced() {
+    let vp = brightening_speaker(1000);
+    let range = speaker::profile(&[&vp])
+        .brightness
+        .expect("a brightness range");
+
+    // 400 Hz to 1600 Hz, trimmed a twentieth from each end on a log axis.
+    assert!(
+        (range.low_hz - 428.0).abs() < 15.0,
+        "low edge was {}",
+        range.low_hz
+    );
+    assert!(
+        (range.high_hz - 1495.0).abs() < 40.0,
+        "high edge was {}",
+        range.high_hz
+    );
+}
+
+#[test]
+fn brightness_places_a_tone_within_that_range() {
+    let vp = brightening_speaker(1000);
+    let range = speaker::profile(&[&vp]).brightness.unwrap();
+
+    // The geometric middle of the range, which is where a listener hears halfway.
+    let middle = (range.low_hz * range.high_hz).sqrt();
+    assert!(
+        (range.place(middle) - 0.5).abs() < 0.01,
+        "the perceptual midpoint landed at {}",
+        range.place(middle)
+    );
+    assert!(range.place(range.low_hz).abs() < 0.001);
+    assert!((range.place(range.high_hz) - 1.0).abs() < 0.001);
+}
+
+#[test]
+fn an_unvoiced_frame_never_widens_the_brightness_range() {
+    // Consonants are several times brighter than any sustained tone. Counted in,
+    // they would stretch the top of the axis to somewhere no note ever reaches
+    // and crowd every vowel into the bottom of a range describing sibilance.
+    let mut vp = brightening_speaker(1000);
+    for i in 0..200 {
+        vp.pitch.hz[i] = None;
+        vp.texture.centroid_hz[i] = 9000.0;
+    }
+
+    let range = speaker::profile(&[&vp]).brightness.unwrap();
+    assert!(
+        range.high_hz < 2000.0,
+        "sibilance stretched the tone range to {}",
+        range.high_hz
+    );
+}
+
+#[test]
+fn no_brightness_is_reported_from_too_few_voiced_frames() {
+    // Same bar as the other ranges: a profile confidently reporting a range
+    // measured over half a second is worse than one reporting nothing, because
+    // a caller can handle an absence and cannot detect a wrong answer.
+    let vp = brightening_speaker(100);
+    assert!(speaker::profile(&[&vp]).brightness.is_none());
 }

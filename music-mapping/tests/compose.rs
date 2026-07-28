@@ -56,7 +56,7 @@ fn brighter() -> Partials {
 fn voice() -> Voice {
     let dark = calibration();
     let light = brighter();
-    Voice::from_calibration(&dark, &[&dark, &light], 4.0, space(), 120.0)
+    Voice::from_calibration(&dark, &[&dark, &light], 4.0, space(), None, 120.0)
         .expect("a rich spectrum gives a voice")
 }
 

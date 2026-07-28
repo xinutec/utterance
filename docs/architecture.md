@@ -176,6 +176,12 @@ Two properties are worth knowing from outside the module:
 - **A range is withheld rather than guessed** when there is too little material
   to measure it, with the frame counts still reported so a caller can tell "too
   little" from "none".
+- **Everything a mapping normalises against belongs here.** Vowel-space corners,
+  the third formant's range, pitch, and the brightness the speaker's voiced tone
+  moves through. The rule is not about tidiness: normalised against a fixed
+  range, a measurement stops meaning *bright for them*; normalised against the
+  take, the difference between two things one person said is normalised away —
+  and that second failure has already shipped once, in the field's pitch drift.
 
 Because a profile is a pure function of the voiceprints it is built from, it is a
 cache in the same sense they are, and carries its own version for the same
