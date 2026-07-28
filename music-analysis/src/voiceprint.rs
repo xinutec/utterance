@@ -28,7 +28,9 @@ use serde::{Deserialize, Serialize};
 /// - 4: added `formants` (F1/F2/F3 by linear prediction).
 /// - 5: added `partials` (the measured harmonic series).
 /// - 6: added `texture` (spectral centroid and flatness per frame).
-pub const SCHEMA_VERSION: u32 = 6;
+/// - 7: `texture` measured above 300 Hz — below it, room rumble dominated
+///   both series and every consonant read as tonal.
+pub const SCHEMA_VERSION: u32 = 7;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]

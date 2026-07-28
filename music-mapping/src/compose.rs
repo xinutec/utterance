@@ -213,9 +213,18 @@ fn amplitude_at(vp: &Voiceprint, frame: usize, loudest_db: f32) -> f32 {
 /// Flatness above which a frame counts as noise rather than tone.
 ///
 /// A vowel's energy sits in harmonics and measures near zero; a fricative's is
-/// spread across everything and measures high. The bar sits well above any vowel
-/// and well below white noise, so what it selects is genuinely the consonants.
-const NOISE_FLATNESS: f32 = 0.12;
+/// spread across everything and measures high.
+///
+/// Set against the first real speech take by sweeping this and [`NOISE_FLOOR`]
+/// together and counting how many selected runs had a centroid below 1.5 kHz —
+/// too low for any fricative, so almost certainly room rather than voice. The
+/// answer was to be **strict about shape and lenient about level**: at this bar
+/// with a floor of 1.5%, 66 runs came through with none of them low-centred,
+/// where relaxing the shape bar to 0.08 gave 119 runs of which 28 were room
+/// tone. Shape is what identifies a consonant; quietness is a property
+/// consonants genuinely have, so screening hard on level throws away the real
+/// ones first.
+const NOISE_FLATNESS: f32 = 0.20;
 
 /// Shortest run of noise worth sounding, in frames.
 ///
@@ -234,9 +243,11 @@ const MAX_NOISE_S: f32 = 0.5;
 
 /// Quietest noise run kept, relative to the loudest moment in the take.
 ///
-/// Higher than the bar for notes. Room tone is flat, continuous and quiet, and
-/// without this every gap between phrases would sound as a wash.
-const NOISE_FLOOR: f32 = 0.06;
+/// About 36 dB below the loudest moment, which is low. A fricative is far
+/// quieter than a stressed vowel — that is what a fricative is — so a floor set
+/// where it feels comfortable removes the consonants before it removes the room.
+/// See [`NOISE_FLATNESS`] for the measurement that set both.
+const NOISE_FLOOR: f32 = 0.015;
 
 /// How wide a band the measured flatness is spread across, in Hz.
 ///

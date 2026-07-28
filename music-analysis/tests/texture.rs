@@ -129,3 +129,42 @@ fn is_a_pure_function_of_its_input() {
     assert_eq!(a.centroid_hz, b.centroid_hz);
     assert_eq!(a.flatness, b.flatness);
 }
+
+#[test]
+fn a_fricative_under_room_rumble_still_reads_as_noise() {
+    // The failure that made the first version useless on real speech. Every
+    // recording has low-frequency energy in it — room, proximity, the tail of
+    // the last vowel — and measuring across the whole spectrum let that dominate
+    // both numbers, so genuine consonants came back reading as tonal.
+    let hiss = band(6_000.0, 3_000.0, 1.0);
+    let rumble = band(80.0, 40.0, 1.0);
+    let mixed: Vec<f32> = hiss
+        .iter()
+        .zip(&rumble)
+        // Rumble far louder than the hiss, as it is in a real recording.
+        .map(|(h, r)| h * 0.2 + r * 0.8)
+        .collect();
+
+    let t = texture::track(&mixed);
+    let flat = steady_median(&t.flatness);
+    let centre = steady_median(&t.centroid_hz);
+    assert!(
+        flat > 0.15,
+        "a fricative buried under rumble measured only {flat:.3} flat"
+    );
+    assert!(
+        centre > 2_000.0,
+        "the centroid followed the rumble to {centre:.0} Hz"
+    );
+}
+
+#[test]
+fn nothing_below_the_band_reaches_either_measure() {
+    // A pure low tone carries no information about consonants, and must not be
+    // able to move a measurement that is about them.
+    let t = texture::track(&common::sine(120.0, ANALYSIS_RATE, 1.0));
+    assert!(
+        steady_median(&t.centroid_hz) > texture::NOISE_BAND_LOW_HZ,
+        "a 120 Hz tone moved a measurement that starts at 300 Hz"
+    );
+}

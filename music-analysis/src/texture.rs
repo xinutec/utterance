@@ -30,6 +30,21 @@ use serde::{Deserialize, Serialize};
 use crate::frame::{self, SPECTRAL_WINDOW};
 use crate::resample::ANALYSIS_RATE;
 
+/// Lowest frequency either measure looks at.
+///
+/// Both are measured above this rather than across everything, and the reason is
+/// empirical: on real speech the unvoiced frames came back with a median
+/// centroid of 153 Hz and a flatness of 0.001 — reading as *tonal* — because a
+/// room's rumble, a microphone's proximity boost and the tail of the previous
+/// vowel all pile up at the bottom of the spectrum and dominate the average. A
+/// fricative's energy lives from about 2 kHz up, so a measure swamped by the
+/// bottom octave describes the room instead of the consonant.
+///
+/// Set below the lowest fricative energy and above where rumble lives. It makes
+/// these measurements *about* the band consonants occupy, which is the point of
+/// having them.
+pub const NOISE_BAND_LOW_HZ: f32 = 300.0;
+
 /// Floor added to every bin before the flatness ratio.
 ///
 /// A geometric mean collapses to zero if any single bin is zero, which in a
@@ -39,6 +54,9 @@ use crate::resample::ANALYSIS_RATE;
 const BIN_FLOOR: f32 = 1e-10;
 
 /// Per-frame description of the noise in a recording.
+///
+/// Both series are measured above [`NOISE_BAND_LOW_HZ`], so they describe the
+/// band consonants occupy rather than the whole spectrum.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -68,6 +86,7 @@ pub fn track(samples: &[f32]) -> Texture {
     let window = frame::hann(SPECTRAL_WINDOW);
     let bins = SPECTRAL_WINDOW / 2 + 1; // real input: the upper half mirrors.
     let bin_hz = ANALYSIS_RATE as f32 / SPECTRAL_WINDOW as f32;
+    let lowest = ((NOISE_BAND_LOW_HZ / bin_hz).ceil() as usize).min(bins - 1);
 
     let mut centroid_hz = vec![0.0f32; n];
     let mut flatness = vec![0.0f32; n];
@@ -83,7 +102,7 @@ pub fn track(samples: &[f32]) -> Texture {
         // Power rather than magnitude: flatness is defined on the power
         // spectrum, and using magnitudes would report every frame flatter than
         // it is.
-        let power: Vec<f32> = buf[..bins]
+        let power: Vec<f32> = buf[lowest..bins]
             .iter()
             .map(|c| c.norm_sqr() + BIN_FLOOR)
             .collect();
@@ -95,7 +114,7 @@ pub fn track(samples: &[f32]) -> Texture {
             power
                 .iter()
                 .enumerate()
-                .map(|(k, p)| k as f32 * bin_hz * p)
+                .map(|(k, p)| (k + lowest) as f32 * bin_hz * p)
                 .sum::<f32>()
                 / total
         };

@@ -2,6 +2,9 @@
 
 /**
  * Per-frame description of the noise in a recording.
+ *
+ * Both series are measured above [`NOISE_BAND_LOW_HZ`], so they describe the
+ * band consonants occupy rather than the whole spectrum.
  */
 export type Texture = { 
 /**
