@@ -22,6 +22,7 @@ pub fn router(state: AppState) -> Router {
         .route("/recordings/{id}", get(api::detail).delete(api::delete))
         .route("/recordings/{id}/audio", get(api::audio))
         .route("/recordings/{id}/render", get(api::render))
+        .route("/recordings/{id}/score", get(api::score))
         .route("/voice", get(api::voice_summary))
         .route("/controls", get(api::controls))
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES));

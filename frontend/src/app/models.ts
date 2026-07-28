@@ -19,6 +19,7 @@ export type { Pitch } from "./generated/Pitch";
 export type { RecordingDetail } from "./generated/RecordingDetail";
 export type { RecordingMeta } from "./generated/RecordingMeta";
 export type { ScaleDegree } from "./generated/ScaleDegree";
+export type { ScoreView } from "./generated/ScoreView";
 export type { Source } from "./generated/Source";
 export type { Texture } from "./generated/Texture";
 export type { Voiceprint } from "./generated/Voiceprint";

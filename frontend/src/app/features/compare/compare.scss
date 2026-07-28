@@ -1,0 +1,139 @@
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+
+  h2 {
+    margin: 0;
+    font: var(--mat-sys-headline-small);
+  }
+}
+
+.take {
+  min-width: 14rem;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.differing {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: baseline;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.diff {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: baseline;
+
+  .a {
+    color: var(--mat-sys-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .b {
+    color: var(--mat-sys-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 0.25rem;
+  border-radius: 0.125rem;
+
+  &.a {
+    background: var(--mat-sys-primary);
+  }
+
+  &.b {
+    background: var(--mat-sys-tertiary);
+  }
+
+  &.strip {
+    background: var(--mat-sys-on-surface);
+    opacity: 0.45;
+  }
+}
+
+// Two players, both hidden: the transport above drives them, and a pair of
+// native control bars would invite someone to scrub one out of step with the
+// other, which is the one thing this page exists to prevent.
+audio {
+  display: none;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 0.75rem;
+}
+
+// The two cards carry the colours their series are drawn in, so which panel of
+// sliders feeds which line on the chart is answered by looking rather than by
+// reading the heading.
+.side-a {
+  border-left: 3px solid var(--mat-sys-primary);
+}
+
+.side-b {
+  border-left: 3px solid var(--mat-sys-tertiary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+mat-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.note {
+  margin: 0;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.scales {
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  color: var(--mat-sys-error);
+  margin: 0;
+}

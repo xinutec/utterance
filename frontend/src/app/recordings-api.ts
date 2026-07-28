@@ -8,6 +8,7 @@ import type {
   Deleted,
   RecordingDetail,
   RecordingMeta,
+  ScoreView,
   VoiceSummary,
 } from "./models";
 
@@ -134,6 +135,19 @@ export class RecordingsApi {
    */
   voice(query = ""): Observable<VoiceSummary> {
     return this.http.get<VoiceSummary>(`/api/voice${suffix(query)}`).pipe(catchError(rethrow));
+  }
+
+  /**
+   * What a render is made of, for the same parameters the render takes.
+   *
+   * The streams rather than the audio: the question a comparison asks is which
+   * knob changed what, and that is legible in the score and buried in a
+   * waveform.
+   */
+  score(id: string, query = ""): Observable<ScoreView> {
+    return this.http
+      .get<ScoreView>(`/api/recordings/${id}/score${suffix(query)}`)
+      .pipe(catchError(rethrow));
   }
 
   audioUrl(id: string): string {

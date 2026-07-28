@@ -342,6 +342,145 @@ pub async fn voice_summary(
     }))
 }
 
+/// Points a stream is reduced to before it is sent to a browser.
+///
+/// A 46-second take is 4,600 frames per stream and there are a dozen streams;
+/// at a screen's width that is several frames per pixel, so the wire cost buys
+/// nothing anyone can see. Reduced by taking the extreme of each bucket rather
+/// than the mean — a spike that survives averaging is a spike that was long, and
+/// what someone comparing two renders is looking for is exactly the brief
+/// divergence a mean would erase.
+const STREAM_POINTS: usize = 1200;
+
+/// A score as something to draw.
+///
+/// Why the score and not the audio: the question this answers is *which knob
+/// changed what*, and the score is where that is legible. Two renders differing
+/// in a waveform tell you they differ; two scores differing in `colour` and
+/// nowhere else tell you the colour moved, which is the sentence someone
+/// actually wants.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct ScoreView {
+    pub duration_s: f32,
+    /// Seconds per point after reduction, so a chart can label its time axis.
+    pub step_s: f32,
+    /// Position on the dark-to-bright axis, per point.
+    pub colour: Vec<f32>,
+    /// Fraction of the tone that is breath, per point.
+    pub breath: Vec<f32>,
+    /// Total amplitude across every voice, per point.
+    pub level: Vec<f32>,
+    /// Frequency per voice per point, in Hz. Outer index is the voice.
+    pub voices: Vec<Vec<f32>>,
+    /// Amplitude per voice per point, indexed the same way.
+    pub gains: Vec<Vec<f32>>,
+    /// The scale this render is played in, in cents. Moves with `bind`.
+    pub degrees: Vec<f32>,
+    /// Where the consonants are, in seconds.
+    pub consonants: Vec<f32>,
+    /// Notes, for the mappings that emit them: `[start_s, duration_s, hz]`.
+    pub events: Vec<[f32; 3]>,
+}
+
+/// `GET /api/recordings/{id}/score` — what the render is made of.
+///
+/// Takes exactly the parameters `render` takes and answers about the same score,
+/// so a chart drawn from this describes the audio at the matching URL rather
+/// than something near it.
+pub async fn score(
+    State(app): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<VoiceParams>,
+) -> Result<Json<ScoreView>, AppError> {
+    let (score, tuning) = build_score(&app, &id, &params)?;
+
+    let (colour, breath, level, voices, gains, step_s) = match &score.field {
+        Some(field) => {
+            let frames = field.frames();
+            let step_s = field.hop_s * bucket(frames) as f32;
+            let level: Vec<f32> = (0..frames)
+                .map(|i| field.gains.iter().map(|g| g[i]).sum::<f32>())
+                .collect();
+            (
+                reduce(&field.colour),
+                reduce(&field.breath),
+                reduce(&level),
+                field.voices.iter().map(|v| reduce(v)).collect(),
+                field.gains.iter().map(|g| reduce(g)).collect(),
+                step_s,
+            )
+        }
+        // A note mapping has no per-frame streams at all. Empty series and the
+        // events below is the honest shape for it, rather than a field
+        // synthesised from the notes so the chart has something to draw.
+        None => (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            0.0,
+        ),
+    };
+
+    Ok(Json(ScoreView {
+        duration_s: score.duration_s,
+        step_s,
+        colour,
+        breath,
+        level,
+        voices,
+        gains,
+        degrees: tuning.degrees.iter().map(|d| d.cents).collect(),
+        consonants: score.noise.iter().map(|n| n.start_s).collect(),
+        events: score
+            .events
+            .iter()
+            .map(|e| [e.start_s, e.duration_s, e.hz])
+            .collect(),
+    }))
+}
+
+/// Frames per output point, at least one.
+fn bucket(frames: usize) -> usize {
+    frames.div_ceil(STREAM_POINTS).max(1)
+}
+
+/// Reduce a per-frame series to something a chart can draw.
+///
+/// Each bucket contributes the value furthest from the series' own middle, so a
+/// brief excursion survives instead of being averaged into the surrounding
+/// frames. Comparing two renders is looking for exactly those.
+fn reduce(values: &[f32]) -> Vec<f32> {
+    let step = bucket(values.len());
+    if step == 1 {
+        return values.to_vec();
+    }
+
+    let (lo, hi) = values
+        .iter()
+        .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &v| {
+            (lo.min(v), hi.max(v))
+        });
+    let middle = (lo + hi) / 2.0;
+
+    values
+        .chunks(step)
+        .map(|chunk| {
+            chunk.iter().copied().fold(middle, |best, v| {
+                if (v - middle).abs() > (best - middle).abs() {
+                    v
+                } else {
+                    best
+                }
+            })
+        })
+        .collect()
+}
+
 /// `GET /api/recordings/{id}/render` — this take as music, in the speaker's
 /// own scale and timbre.
 ///
@@ -353,10 +492,36 @@ pub async fn render(
     Path(id): Path<String>,
     Query(params): Query<VoiceParams>,
 ) -> Result<Response, AppError> {
+    let (score, tuning) = build_score(&app, &id, &params)?;
+    tracing::info!(
+        "rendered {} as {} notes, {} consonants and {} field voices in a {}-degree scale",
+        id,
+        score.events.len(),
+        score.noise.len(),
+        score.field.as_ref().map(|f| f.voice_count()).unwrap_or(0),
+        tuning.degrees.len(),
+    );
+
+    let bytes = music_realisation::wav::encode(&music_realisation::synth::render(&score));
+    Ok(([(header::CONTENT_TYPE, "audio/wav")], bytes).into_response())
+}
+
+/// The score a set of parameters asks for, and the scale it is played in.
+///
+/// Shared by `render` and `score` rather than written twice, because the whole
+/// value of the second is that it describes the first. Two copies of this would
+/// drift, and the way that failure presents is a chart that disagrees with the
+/// audio next to it — which is worse than no chart, since the chart is what
+/// someone would believe.
+fn build_score(
+    app: &AppState,
+    id: &str,
+    params: &VoiceParams,
+) -> Result<(music_mapping::score::Score, music_mapping::tuning::Tuning), AppError> {
     let knobs = params.params();
     let calibrated =
         voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
-    let voiceprint = app.store.voiceprint(&id)?;
+    let voiceprint = app.store.voiceprint(id)?;
 
     let wanted = params.mapping.as_deref().unwrap_or("field");
     let names: Vec<&str> = wanted
@@ -390,16 +555,7 @@ pub async fn render(
         score.events =
             music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs).events;
     }
-    tracing::info!(
-        "rendered {} as {} notes, {} consonants and {} field voices in a {}-degree scale from {}",
-        id,
-        score.events.len(),
-        score.noise.len(),
-        score.field.as_ref().map(|f| f.voice_count()).unwrap_or(0),
-        calibrated.voice.tuning.degrees.len(),
-        calibrated.source.label
-    );
 
-    let bytes = music_realisation::wav::encode(&music_realisation::synth::render(&score));
-    Ok(([(header::CONTENT_TYPE, "audio/wav")], bytes).into_response())
+    let tuning = music_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
+    Ok((score, tuning))
 }

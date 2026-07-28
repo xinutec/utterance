@@ -1,0 +1,143 @@
+<section class="compare">
+  <header class="head">
+    <h2>Compare</h2>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="take">
+      <mat-label>Take</mat-label>
+      <mat-select [value]="chosen()" (selectionChange)="choose($event.value)">
+        @for (take of store.recordings(); track take.id) {
+          <mat-option [value]="take.id">
+            {{ take.label || take.id }} · {{ take.durationS | number: "1.0-0" }}s
+          </mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <button matButton="filled" type="button" [disabled]="loading() || !chosen()" (click)="load()">
+      <mat-icon>compare_arrows</mat-icon>
+      {{ urlA() ? "Render both again" : "Render both" }}
+    </button>
+    <button matButton type="button" (click)="editing.set(!editing())">
+      {{ editing() ? "Hide settings" : "Change settings" }}
+    </button>
+  </header>
+
+  @if (differing().length > 0) {
+    <p class="differing">
+      Differing:
+      @for (d of differing(); track d.name) {
+        <span class="diff">
+          <strong>{{ d.label }}</strong>
+          <span class="a">{{ d.a }}</span> vs <span class="b">{{ d.b }}</span>
+        </span>
+      }
+    </p>
+  } @else {
+    <p class="note">
+      Both sides are set identically — nothing to compare. Open the settings and move something on
+      one side.
+    </p>
+  }
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Rendering both"></mat-progress-bar>
+  }
+  @if (stale()) {
+    <p class="note">The settings have moved since these were rendered.</p>
+  }
+
+  @if (urlA(); as srcA) {
+    <div class="transport">
+      <button matButton="filled" type="button" (click)="toggle()">
+        <mat-icon>{{ playing() ? "pause" : "play_arrow" }}</mat-icon>
+        {{ playing() ? "Pause" : "Play both" }}
+      </button>
+
+      <mat-button-toggle-group
+        aria-label="Which side you are hearing"
+        [value]="side()"
+        (change)="chooseSide($event.value)"
+      >
+        <mat-button-toggle value="a">Hearing A</mat-button-toggle>
+        <mat-button-toggle value="b">Hearing B</mat-button-toggle>
+      </mat-button-toggle-group>
+
+      <span class="clock">{{ playhead() | number: "1.1-1" }}s</span>
+
+      @if (mostDifferent(); as at) {
+        <button matButton type="button" (click)="seekTo(at)">
+          <mat-icon>my_location</mat-icon>
+          Jump to the biggest difference ({{ at | number: "1.1-1" }}s)
+        </button>
+      }
+    </div>
+
+    <p class="note">
+      Both are playing at once and one is muted, so switching is instant and at the same moment of
+      the piece. Click the chart to move both.
+    </p>
+
+    <audio #playerA preload="auto" [src]="srcA" (timeupdate)="onTimeUpdate()" (ended)="onEnded()"></audio>
+    @if (urlB(); as srcB) {
+      <audio #playerB preload="auto" [src]="srcB" (ended)="onEnded()"></audio>
+    }
+  }
+
+  @if (scoreA(); as viewA) {
+    @if (scoreB(); as viewB) {
+      <app-compare-chart
+        [a]="viewA"
+        [b]="viewB"
+        [playhead]="playhead()"
+        (seek)="seekTo($event)"
+      ></app-compare-chart>
+      <p class="legend">
+        <span class="swatch a"></span> A
+        <span class="swatch b"></span> B
+        <span class="swatch strip"></span> where they differ — click to listen there
+      </p>
+
+      @if (viewA.degrees.join() !== viewB.degrees.join()) {
+        <p class="note scales">
+          A is in <strong>{{ viewA.degrees.length }}</strong> degrees:
+          {{ degreeList(viewA.degrees) }}¢ — B in <strong>{{ viewB.degrees.length }}</strong>:
+          {{ degreeList(viewB.degrees) }}¢.
+        </p>
+      }
+    }
+  }
+
+  @if (editing()) {
+    <div class="settings">
+      <mat-card appearance="outlined" class="side-a">
+        <mat-card-header><mat-card-title>A</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <app-mapping-controls
+            [knobs]="controls.knobs()"
+            [mappings]="controls.mappings()"
+            [(settings)]="a"
+          ></app-mapping-controls>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined" class="side-b">
+        <mat-card-header>
+          <mat-card-title>B</mat-card-title>
+          <span class="spacer"></span>
+          <button matButton type="button" (click)="copyAcross()">Copy A here</button>
+          <button matButton type="button" (click)="swap()">Swap</button>
+        </mat-card-header>
+        <mat-card-content>
+          <app-mapping-controls
+            [knobs]="controls.knobs()"
+            [mappings]="controls.mappings()"
+            [(settings)]="b"
+          ></app-mapping-controls>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
+
+  @if (error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  }
+</section>

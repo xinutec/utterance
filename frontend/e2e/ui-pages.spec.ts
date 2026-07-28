@@ -120,6 +120,33 @@ const CONTROLS = {
   ],
 };
 
+/**
+ * A score, as the compare page charts it.
+ *
+ * Two of these are drawn on one axis, so what matters for layout is that the
+ * series are long enough for the canvas to fill and the degrees long enough to
+ * push the scale caption onto a second line on a phone.
+ */
+function score(offset: number) {
+  const points = 600;
+  const at = (i: number) => i / points;
+  return {
+    durationS: 46.4,
+    stepS: 46.4 / points,
+    colour: Array.from({ length: points }, (_, i) => 0.4 + 0.3 * Math.sin(at(i) * 12 + offset)),
+    breath: Array.from({ length: points }, (_, i) => 0.05 + 0.03 * Math.cos(at(i) * 20 + offset)),
+    level: Array.from({ length: points }, (_, i) => 0.5 + 0.4 * Math.sin(at(i) * 7 + offset)),
+    voices: [
+      Array.from({ length: points }, (_, i) => 120 + 20 * Math.sin(at(i) * 5 + offset)),
+      Array.from({ length: points }, (_, i) => 480 + 60 * Math.sin(at(i) * 5 + offset)),
+    ],
+    gains: [Array.from({ length: points }, () => 0.6), Array.from({ length: points }, () => 0.3)],
+    degrees: [0, 316, 386, 582, 702, 813, 884, 1200],
+    consonants: [1.2, 4.8, 9.1],
+    events: [],
+  };
+}
+
 /** Catch-all first, then the specific routes. */
 async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/**", (r) =>
@@ -134,6 +161,11 @@ async function mockApi(page: Page): Promise<void> {
   // parameter is added — silently, by falling through to the catch-all above.
   await page.route("**/api/voice*", (r) => r.fulfill({ json: VOICE }));
   await page.route("**/api/controls", (r) => r.fulfill({ json: CONTROLS }));
+  // Both sides of the comparison, told apart by the query so the two charts are
+  // genuinely different curves rather than one drawn twice.
+  await page.route("**/score*", (r) =>
+    r.fulfill({ json: score(r.request().url().includes("bind=0") ? 2 : 0) }),
+  );
 }
 
 test("the suite really runs at phone geometry", async ({ page }) => {
@@ -209,6 +241,38 @@ test("studio — the derived scale lays out cleanly @ phone", async ({ page }, t
   // sticky toolbar. The toolbar is opaque, so that is not a visual defect — but
   // the overlap check measures geometry and cannot know that. Return to the top
   // so the assertions describe the layout rather than the scroll position.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
+test("compare — two renders side by side lay out cleanly @ phone", async ({ page }, testInfo) => {
+  // The densest page in the app: a take picker, a transport, a five-panel chart
+  // and two full sets of sliders. A phone is where it collides first.
+  await mockApi(page);
+  await page.goto("/compare");
+  await page.getByRole("button", { name: "Render both" }).click();
+  await page.locator("app-compare-chart canvas").waitFor();
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
+test("compare — both settings panels open lay out cleanly @ phone", async ({ page }, testInfo) => {
+  // Two `app-mapping-controls` side by side is nine sliders twice over, and the
+  // grid has to drop to one column rather than squeezing both in.
+  await mockApi(page);
+  await page.goto("/compare");
+  await page.getByRole("button", { name: "Change settings" }).click();
+  await page.locator("app-mapping-controls mat-slider").last().waitFor();
   await page.evaluate(() => {
     window.scrollTo(0, 0);
   });

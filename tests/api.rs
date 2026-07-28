@@ -805,3 +805,106 @@ async fn taking_no_knobs_renders_the_defaults() {
     .await;
     assert_eq!(plain, explicit);
 }
+
+#[tokio::test]
+async fn the_score_describes_the_render_it_shares_a_url_with() {
+    // The chart drawn from this sits beside a player pointed at the render. A
+    // score that described a different set of parameters would be worse than no
+    // chart at all, because the chart is the part someone would believe.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (status, plain) = send(
+        &app,
+        Request::get(format!("/api/recordings/{id}/score"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{plain}");
+
+    // Every per-frame stream is the same length, or they cannot be drawn on one
+    // time axis — which is the only thing this endpoint exists for.
+    let points = plain["colour"].as_array().unwrap().len();
+    assert!(points > 0, "no colour stream");
+    assert_eq!(plain["breath"].as_array().unwrap().len(), points);
+    assert_eq!(plain["level"].as_array().unwrap().len(), points);
+    for voice in plain["voices"].as_array().unwrap() {
+        assert_eq!(voice.as_array().unwrap().len(), points);
+    }
+    assert_eq!(
+        plain["gains"].as_array().unwrap().len(),
+        plain["voices"].as_array().unwrap().len()
+    );
+
+    // The time axis has to be real, or a click on the chart seeks to the wrong
+    // second.
+    let step = plain["stepS"].as_f64().unwrap();
+    let duration = plain["durationS"].as_f64().unwrap();
+    let spanned = step * points as f64;
+    assert!(
+        (spanned - duration).abs() < duration * 0.05,
+        "{points} points of {step}s span {spanned}s against a {duration}s take"
+    );
+
+    // And the knobs have to reach it, or the two sides of a comparison are the
+    // same picture twice.
+    let (_, bound) = send(
+        &app,
+        Request::get(format!("/api/recordings/{id}/score?bind=0"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_ne!(
+        plain["degrees"], bound["degrees"],
+        "bind did not reach the score view"
+    );
+}
+
+#[tokio::test]
+async fn the_score_never_exceeds_what_a_chart_can_draw() {
+    // A 46-second take is thousands of frames per stream across a dozen streams.
+    // Sending all of it costs megabytes to draw sub-pixel detail nobody sees.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(20.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (_, view) = send(
+        &app,
+        Request::get(format!("/api/recordings/{id}/score"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let points = view["colour"].as_array().unwrap().len();
+    assert!(points <= 1200, "{points} points is more than a chart needs");
+    // ...and not so few that the shape is gone.
+    assert!(points > 100, "only {points} points for a 20-second take");
+}
+
+#[tokio::test]
+async fn a_note_mapping_reports_its_notes_and_no_streams() {
+    // `notes` has no per-frame material at all. Empty series is the honest shape;
+    // a field synthesised from the notes so the chart has something to draw would
+    // be the chart inventing its own subject.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (status, view) = send(
+        &app,
+        Request::get(format!("/api/recordings/{id}/score?mapping=notes"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{view}");
+    assert!(view["colour"].as_array().unwrap().is_empty());
+    assert!(view["voices"].as_array().unwrap().is_empty());
+    assert!(
+        !view["events"].as_array().unwrap().is_empty(),
+        "a note mapping with no notes"
+    );
+}
