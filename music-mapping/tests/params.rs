@@ -129,3 +129,57 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
     assert!(wild.reach <= 3.0);
     assert!(wild.consonants >= 0.0);
 }
+
+/// Invariants of the knob table itself.
+///
+/// It is published to the UI, which builds a slider per row from the range and
+/// the starting value — so a row that contradicts itself becomes a control that
+/// cannot be used, and one that says nothing becomes a control nobody can
+/// interpret.
+mod table {
+    use music_mapping::params::{KNOBS, Params};
+
+    #[test]
+    fn every_knob_starts_somewhere_it_is_allowed_to_be() {
+        for knob in KNOBS {
+            assert!(
+                knob.min <= knob.default && knob.default <= knob.max,
+                "{} starts at {} outside {}..{}",
+                knob.name,
+                knob.default,
+                knob.min,
+                knob.max
+            );
+            assert!(knob.step > 0.0, "{} has no step", knob.name);
+            assert!(
+                knob.step <= knob.max - knob.min,
+                "{} steps past its own range",
+                knob.name
+            );
+            assert!(!knob.about.is_empty(), "{} explains nothing", knob.name);
+            assert!(
+                !knob.label.is_empty(),
+                "{} has no name for a person",
+                knob.name
+            );
+        }
+    }
+
+    #[test]
+    fn the_defaults_are_already_sane() {
+        // If clamping moved a default, the table and the ranges disagree — and
+        // every render taking no parameters would quietly be a different render
+        // from the one the table describes.
+        assert_eq!(Params::default().sane(), Params::default());
+    }
+
+    #[test]
+    fn no_two_knobs_share_a_name() {
+        // They are query parameters; two of a name means one is unreachable.
+        for (i, a) in KNOBS.iter().enumerate() {
+            for b in &KNOBS[i + 1..] {
+                assert_ne!(a.name, b.name);
+            }
+        }
+    }
+}

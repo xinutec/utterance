@@ -89,7 +89,11 @@ separately or together, because the only way to judge either is against the
 other. Anything a mapping chooses that could reasonably be chosen differently
 belongs in `params::Params` and is reachable from the render URL — a constant can
 only be changed by editing and rebuilding, and these are meant to be swept by
-whoever is listening.
+whoever is listening. `params::KNOBS` describes each one well enough to be
+offered as a control — range, step, starting value, and a line saying what it
+does — and the server publishes that table at `GET /api/controls`, so the
+sliders in the browser are generated from the crate that obeys them rather than
+maintained alongside it.
 
 **realisation** (`music-realisation`) turns a score into sound. Mechanical, and
 additive rather than sampled — forced rather than chosen, because a derived

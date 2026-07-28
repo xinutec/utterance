@@ -23,6 +23,7 @@ pub fn router(state: AppState) -> Router {
         .route("/recordings/{id}/audio", get(api::audio))
         .route("/recordings/{id}/render", get(api::render))
         .route("/voice", get(api::voice_summary))
+        .route("/controls", get(api::controls))
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES));
 
     let mut app = Router::new()

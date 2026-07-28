@@ -1,0 +1,59 @@
+<div class="controls">
+  <div class="choices">
+    @if (mappings().length > 0) {
+      <div class="choice">
+        <span class="choice-label">Mapping</span>
+        <mat-button-toggle-group
+          multiple
+          aria-label="Which mappings to hear"
+          [value]="chosenMappings()"
+          (change)="setMappings($event.value)"
+        >
+          @for (mapping of mappings(); track mapping.name) {
+            <mat-button-toggle [value]="mapping.name" [matTooltip]="mapping.about">
+              {{ mapping.label }}
+            </mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+      </div>
+    }
+
+    <mat-form-field class="choice calibration" appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Scale from</mat-label>
+      <mat-select
+        [value]="settings().calibration"
+        (selectionChange)="setCalibration($event.value)"
+      >
+        <mat-option [value]="null">whichever take gives the richest scale</mat-option>
+        @for (take of store.recordings(); track take.id) {
+          <mat-option [value]="take.id">{{ take.label || take.id }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  @for (knob of knobs(); track knob.name) {
+    <div class="knob">
+      <div class="knob-head">
+        <span class="knob-label">{{ knob.label }}</span>
+        <span class="knob-value" [class.moved]="value(knob) !== knob.default">
+          {{ value(knob) | number: "1.0-4" }}
+        </span>
+      </div>
+      <mat-slider [min]="knob.min" [max]="knob.max" [step]="knob.step">
+        <input
+          matSliderThumb
+          [attr.aria-label]="knob.label"
+          [value]="value(knob)"
+          (valueChange)="setKnob(knob, $event)"
+        />
+      </mat-slider>
+      <p class="knob-about">{{ knob.about }}</p>
+    </div>
+  }
+
+  @if (touched()) {
+    <button matButton type="button" class="reset" (click)="reset()">Back to the defaults</button>
+  }
+
+</div>

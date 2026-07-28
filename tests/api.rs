@@ -687,26 +687,106 @@ async fn both_mappings_can_sound_together() {
 }
 
 #[tokio::test]
-async fn the_knobs_change_what_is_rendered() {
-    // A knob that silently does nothing is worse than no knob.
+async fn every_published_knob_changes_what_is_rendered() {
+    // A knob that silently does nothing is worse than no knob — and the list is
+    // taken from what the API publishes rather than written out here, so a knob
+    // added to the table and never wired into the render fails this test instead
+    // of appearing in the UI as a slider that does nothing.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
 
+    let (status, controls) = send(
+        &app,
+        Request::get("/api/controls").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{controls}");
+    let knobs = controls["knobs"].as_array().unwrap();
+    assert!(!knobs.is_empty(), "no knobs published at all");
+
     let (_, _, plain) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
-    for knob in [
-        "bind=0",
-        "density=0.15",
-        "voices=2",
-        "spacing=1",
-        "drift=1.5",
-        "reach=0",
-        "consonants=0",
-    ] {
+    for knob in knobs {
+        let name = knob["name"].as_str().unwrap();
+        let value = a_quarter_from_default(knob);
         let (status, _, altered) =
-            fetch(&app, &format!("/api/recordings/{id}/render?{knob}")).await;
-        assert_eq!(status, StatusCode::OK, "{knob} was refused");
-        assert_ne!(altered, plain, "{knob} changed nothing");
+            fetch(&app, &format!("/api/recordings/{id}/render?{name}={value}")).await;
+        assert_eq!(status, StatusCode::OK, "{name}={value} was refused");
+        assert_ne!(altered, plain, "{name}={value} changed nothing");
+    }
+}
+
+/// A value a quarter of the way from a knob's default toward its far end.
+///
+/// Far enough to be audible, near enough that it stays somewhere a person would
+/// plausibly leave the slider — so a knob failing the test above has failed at a
+/// setting someone would really use, not at an extreme nothing was built for.
+fn a_quarter_from_default(knob: &Value) -> f32 {
+    let (min, max, step, default) = (
+        knob["min"].as_f64().unwrap() as f32,
+        knob["max"].as_f64().unwrap() as f32,
+        knob["step"].as_f64().unwrap() as f32,
+        knob["default"].as_f64().unwrap() as f32,
+    );
+    let far = if (default - min).abs() > (max - default).abs() {
+        min
+    } else {
+        max
+    };
+    let raw = default + (far - default) * 0.25;
+    // Onto the step grid, since that is the only place the UI can put it.
+    (min + ((raw - min) / step).round() * step).clamp(min, max)
+}
+
+#[tokio::test]
+async fn the_scale_shown_is_the_scale_that_sounds() {
+    // The summary is what someone reads while deciding whether they like the
+    // tuning. Reporting the derived degrees beside a render that snapped them to
+    // equal temperament would misrepresent the one claim this project makes.
+    let app = TestApp::new();
+    upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/voice?bind=0")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    for degree in body["degrees"].as_array().unwrap() {
+        let cents = degree["cents"].as_f64().unwrap();
+        let off = cents - (cents / 100.0).round() * 100.0;
+        assert!(
+            off.abs() < 1.0,
+            "bind=0 reported {cents}¢, which is {off:.1}¢ off equal temperament"
+        );
+    }
+}
+
+#[tokio::test]
+async fn every_published_mapping_can_be_rendered() {
+    // Same contract in the other direction: the UI offers exactly what the
+    // render route accepts, so a listed mapping cannot 400.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (_, controls) = send(
+        &app,
+        Request::get("/api/controls").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let mappings = controls["mappings"].as_array().unwrap();
+    assert!(!mappings.is_empty(), "no mappings published at all");
+
+    for mapping in mappings {
+        let name = mapping["name"].as_str().unwrap();
+        let (status, _, audio) =
+            fetch(&app, &format!("/api/recordings/{id}/render?mapping={name}")).await;
+        assert_eq!(status, StatusCode::OK, "{name} was refused");
+        assert!(!audio.is_empty(), "{name} rendered nothing");
     }
 }
 

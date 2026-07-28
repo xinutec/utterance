@@ -10,6 +10,13 @@
   width: 100%;
 }
 
+.render {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .provenance,
 .note {
   margin: 0;

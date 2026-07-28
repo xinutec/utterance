@@ -80,10 +80,10 @@ In rough order of how much each unlocks.
   milliseconds. Acceptable because it runs once per recording and the result is
   cached, but it is the reason a re-analysis sweep after a schema bump is now
   something you wait for.
-- **The knobs are reachable only as query parameters.** Every mapping choice can
-  be swept from the render URL, and none of it is in the UI. Sliders that
-  re-render on release would turn exploring from an exercise in editing URLs into
-  something anyone can do.
+- **No one has listened to the sweep.** The knobs are in the UI now, so the
+  open questions below are a slider and a button away rather than an exercise in
+  editing URLs — but the questions themselves are still open, and they can only
+  be closed by someone listening.
 - **The field reads six streams; the voice emits about ten.** F3, spectral tilt
   and the flux curve are measured and unread. They are the likeliest source of
   internal movement if the field turns out to drone.
@@ -165,6 +165,24 @@ source, plus the one that most shapes daily work.
   settled by ear. Defaults reproduce the unparameterised behaviour, so old
   renders stay comparable with new ones.
 
+- **The bundle budget describes this app, not a public one** (2026-07-28). The
+  initial-bundle warning was raised from 500 kB to 800 kB when the knobs brought
+  Material's slider, select and form-field in — about 230 kB uncompressed. The
+  500 was the figure `ng new` writes for a site served to strangers over a
+  mobile connection; this one is served from a Mac on a LAN to two people, so
+  the old number measured nothing anyone cares about while making a real warning
+  easy to miss. The error ceiling is untouched.
+
+- **The mapping publishes its own controls** (2026-07-28). `GET /api/controls`
+  serves `music_mapping::params::KNOBS` — each knob's range, step, starting
+  value and one line saying what it does — and the UI builds its sliders from
+  that rather than from a list of its own. A knob added to the table appears in
+  the browser with no frontend change, and a range that moves cannot leave a
+  slider offering values the mapping clamps away. The failure this prevents is
+  specific and hard to spot: a control that appears to work, moves, and changes
+  nothing. `tests/api.rs` closes the loop by driving every published knob
+  through a real render and failing if the audio is unchanged.
+
 - **Prosody is measured against the speaker, not the take** (2026-07-28). The
   field's pitch drift is relative to the profile's tonic rather than to the
   utterance's own median. Against the take's median, an utterance spoken entirely
@@ -174,11 +192,12 @@ source, plus the one that most shapes daily work.
 ## Open questions
 
 - **Where on the convention-to-speaker axis is the music?** No longer a question
-  anyone has to answer from an armchair: `?bind=` sweeps it, from the speaker's
-  own scale at 1 to equal temperament at 0. What nobody has yet done is listen to
-  the sweep and decide. The pair worth comparing first is `bind=0` against
-  `bind=1` on the same take — the same derivation, once in this voice's tuning
-  and once in everyone's.
+  anyone has to answer from an armchair: the *Bind to the voice* slider sweeps
+  it, from the speaker's own scale at 1 to equal temperament at 0, and the scale
+  shown beneath the player is the one that will sound at the current setting.
+  What nobody has yet done is listen to the sweep and decide. The pair worth
+  comparing first is 0 against 1 on the same take — the same derivation, once in
+  this voice's tuning and once in everyone's.
 
 - **Should a listener be able to perceive the connection back to the voice?**
   Not yet answered. It is the largest single constraint on the mapping layer: a

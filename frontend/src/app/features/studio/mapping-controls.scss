@@ -1,0 +1,85 @@
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.choice-label {
+  font: var(--mat-sys-label-large);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.calibration {
+  // Wide enough for a take label without pushing the sliders off a narrow
+  // window, and free to shrink on one.
+  min-width: 14rem;
+  flex: 1 1 14rem;
+}
+
+.knob {
+  display: grid;
+  // Slider and value on one row, explanation under both: the explanation is
+  // read once and the value is read every time it moves.
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 0.75rem;
+}
+
+.knob-head {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.knob-label {
+  font: var(--mat-sys-label-large);
+}
+
+.knob-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--mat-sys-on-surface-variant);
+
+  // Somewhere other than where it started. Worth marking, because a URL only
+  // carries the knobs that moved and this is the same fact on screen.
+  &.moved {
+    color: var(--mat-sys-tertiary);
+    font-weight: 500;
+  }
+}
+
+mat-slider {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.knob-about {
+  grid-column: 1 / -1;
+  margin: 0 0 0.5rem;
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.reset {
+  align-self: flex-start;
+}
+
+.error {
+  color: var(--mat-sys-error);
+  margin: 0;
+}

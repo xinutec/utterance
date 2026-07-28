@@ -14,6 +14,28 @@ use crate::store::RecordingMeta;
 use crate::voice;
 use music_mapping::params::Params;
 
+/// The mappings a render may ask for.
+///
+/// Name, label, and what it does — in one table because the render route
+/// validates against it and the UI offers it, and a UI listing a mapping the
+/// route rejects is worse than no UI at all. Adding a mapping means adding a row
+/// and a branch in `render`, and the compiler will not remind you about the
+/// second, which is why the branch is a `match` on these names.
+const MAPPINGS: [(&str, &str, &str); 2] = [
+    (
+        "field",
+        "Field",
+        "Every frame sounds. A continuous texture that moves with the voice \
+         rather than a sequence of notes.",
+    ),
+    (
+        "notes",
+        "Notes",
+        "Discrete events at onsets. Closer to a melody, and the weaker of the \
+         two — kept because comparing them is how either gets judged.",
+    ),
+];
+
 /// Query string of the endpoints that need a speaker's musical world.
 #[derive(Debug, Deserialize)]
 pub struct VoiceParams {
@@ -205,21 +227,97 @@ pub struct VoiceSummary {
     pub takes: usize,
 }
 
+/// One control the UI should offer, as the browser sees it.
+///
+/// A wire type rather than `music_mapping::params::Knob` re-exported, for the
+/// same reason `ScaleDegree` is one: the mapping crate carries no serialisation
+/// for a UI. The numbers are copied straight from the knob table, so the two
+/// cannot disagree about what a slider may offer.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Knob {
+    /// Query-parameter name. Sent back on a render exactly as it arrives here.
+    pub name: String,
+    pub label: String,
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub default: f32,
+    pub about: String,
+}
+
+/// One mapping a render may ask for.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct MappingChoice {
+    pub name: String,
+    pub label: String,
+    pub about: String,
+}
+
+/// Everything a person can turn, described by the code that obeys it.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Controls {
+    pub knobs: Vec<Knob>,
+    pub mappings: Vec<MappingChoice>,
+}
+
+/// `GET /api/controls` — the knobs, their ranges and what each one does.
+///
+/// The UI builds its controls from this rather than from its own list, so a knob
+/// added to `music_mapping::params::KNOBS` appears in the browser without anyone
+/// editing the browser, and a range changed in the mapping cannot leave a slider
+/// offering values the mapping clamps away.
+pub async fn controls() -> Json<Controls> {
+    Json(Controls {
+        knobs: music_mapping::params::KNOBS
+            .iter()
+            .map(|k| Knob {
+                name: k.name.to_string(),
+                label: k.label.to_string(),
+                min: k.min,
+                max: k.max,
+                step: k.step,
+                default: k.default,
+                about: k.about.to_string(),
+            })
+            .collect(),
+        mappings: MAPPINGS
+            .iter()
+            .map(|(name, label, about)| MappingChoice {
+                name: (*name).to_string(),
+                label: (*label).to_string(),
+                about: (*about).to_string(),
+            })
+            .collect(),
+    })
+}
+
 /// `GET /api/voice` — the scale, timbre and tonic the speaker's takes imply.
 pub async fn voice_summary(
     State(app): State<AppState>,
     Query(params): Query<VoiceParams>,
 ) -> Result<Json<VoiceSummary>, AppError> {
-    let calibrated = voice::calibrate_with(
-        &app.store,
-        params.calibration.as_deref(),
-        params.params().density,
-    )?;
+    let knobs = params.params();
+    let calibrated =
+        voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
+
+    // Bound here as well as in the mappings, because this is the scale someone
+    // is shown while deciding whether they like it. Showing the derived degrees
+    // beside a render that snapped them to equal temperament would make the one
+    // number this project is trying to demonstrate a lie.
+    let tuning = music_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
+
     Ok(Json(VoiceSummary {
         tonic_hz: calibrated.voice.tonic_hz,
-        degrees: calibrated
-            .voice
-            .tuning
+        degrees: tuning
             .degrees
             .iter()
             .map(|d| ScaleDegree {
@@ -258,9 +356,14 @@ pub async fn render(
         .map(str::trim)
         .filter(|n| !n.is_empty())
         .collect();
-    if let Some(unknown) = names.iter().find(|n| !matches!(**n, "field" | "notes")) {
+    if let Some(unknown) = names
+        .iter()
+        .find(|n| !MAPPINGS.iter().any(|(known, ..)| known == *n))
+    {
+        let known: Vec<&str> = MAPPINGS.iter().map(|(name, ..)| *name).collect();
         return Err(AppError::BadRequest(format!(
-            "no mapping called {unknown} — try 'field', 'notes', or both"
+            "no mapping called {unknown} — try {}, or several at once",
+            known.join(", ")
         )));
     }
     if names.is_empty() {

@@ -17,6 +17,120 @@
 
 use crate::tuning::{Degree, Tuning};
 
+/// One knob, described well enough that a UI can offer it without being told.
+///
+/// **Why the range lives here and not in the UI.** A slider needs a minimum, a
+/// maximum, a step and a starting position, and every one of those is a fact
+/// about the mapping rather than about the browser. Written twice they drift,
+/// and the way that failure shows up is a slider that cheerfully offers a value
+/// the mapping quietly clamps away — the person moves it and hears nothing
+/// change. Declared once here, `Params::default`, `Params::sane` and the
+/// controls in the UI cannot disagree, and a knob added to this table appears
+/// in the UI without anyone editing the UI.
+#[derive(Clone, Copy, Debug)]
+pub struct Knob {
+    /// Query-parameter name, which is also the field name on `Params`.
+    pub name: &'static str,
+    /// What to call it in front of a person.
+    pub label: &'static str,
+    pub min: f32,
+    pub max: f32,
+    /// Smallest move worth offering. 1.0 where the value counts things.
+    pub step: f32,
+    pub default: f32,
+    /// What moving it does, and what each end sounds like.
+    pub about: &'static str,
+}
+
+impl Knob {
+    /// The nearest value this knob actually accepts.
+    pub fn clamped(&self, value: f32) -> f32 {
+        value.clamp(self.min, self.max)
+    }
+}
+
+pub const BIND: Knob = Knob {
+    name: "bind",
+    label: "Bind to the voice",
+    min: 0.0,
+    max: 1.0,
+    step: 0.05,
+    default: 1.0,
+    about: "At 1 the notes are exactly where this voice's spectrum puts them. \
+            At 0 they snap to the twelve everyone else uses.",
+};
+
+pub const DENSITY: Knob = Knob {
+    name: "density",
+    label: "Scale density",
+    min: 0.0005,
+    max: 0.5,
+    step: 0.002,
+    default: crate::tuning::MIN_DEPTH,
+    about: "How firm a note has to be to count. Low gives a crowded microtonal \
+            set, high gives a handful of very stable intervals.",
+};
+
+pub const VOICES: Knob = Knob {
+    name: "voices",
+    label: "Voices",
+    min: 1.0,
+    max: 12.0,
+    step: 1.0,
+    default: 5.0,
+    about: "How many tones sound at once.",
+};
+
+pub const SPACING: Knob = Knob {
+    name: "spacing",
+    label: "Spacing",
+    min: 1.0,
+    max: 6.0,
+    step: 1.0,
+    default: 2.0,
+    about: "Scale degrees between one voice and the next. 1 is a cluster, \
+            higher is an open chord.",
+};
+
+pub const DRIFT: Knob = Knob {
+    name: "drift",
+    label: "Follow the pitch",
+    min: 0.0,
+    max: 2.0,
+    step: 0.05,
+    default: 0.25,
+    about: "How far the music transposes with the speaker's pitch. At 0 it sits \
+            still; near 1 it reads as a parallel melody.",
+};
+
+pub const REACH: Knob = Knob {
+    name: "reach",
+    label: "Follow the vowel",
+    min: 0.0,
+    max: 3.0,
+    step: 0.05,
+    default: 1.0,
+    about: "Octaves the root travels as the vowel moves front to back. This is \
+            the articulation showing up as harmony.",
+};
+
+pub const CONSONANTS: Knob = Knob {
+    name: "consonants",
+    label: "Consonants",
+    min: 0.0,
+    max: 2.0,
+    step: 0.05,
+    default: 1.0,
+    about: "How loud the unpitched material is against the tones. At 0 they are \
+            silent.",
+};
+
+/// Every knob, in the order a person should meet them.
+///
+/// Ordered by how much each one changes what you hear, so someone exploring
+/// from the top down hears something different at each step.
+pub const KNOBS: [Knob; 7] = [BIND, DENSITY, VOICES, SPACING, DRIFT, REACH, CONSONANTS];
+
 /// How the voice binds, and what it drives.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Params {
@@ -60,13 +174,13 @@ pub struct Params {
 impl Default for Params {
     fn default() -> Self {
         Params {
-            bind: 1.0,
-            density: crate::tuning::MIN_DEPTH,
-            voices: 5,
-            spacing: 2,
-            drift: 0.25,
-            reach: 1.0,
-            consonants: 1.0,
+            bind: BIND.default,
+            density: DENSITY.default,
+            voices: VOICES.default as usize,
+            spacing: SPACING.default as usize,
+            drift: DRIFT.default,
+            reach: REACH.default,
+            consonants: CONSONANTS.default,
         }
     }
 }
@@ -79,13 +193,13 @@ impl Params {
     /// useful response is the nearest thing that works.
     pub fn sane(self) -> Self {
         Params {
-            bind: self.bind.clamp(0.0, 1.0),
-            density: self.density.clamp(0.0005, 0.5),
-            voices: self.voices.clamp(1, 12),
-            spacing: self.spacing.clamp(1, 6),
-            drift: self.drift.clamp(0.0, 2.0),
-            reach: self.reach.clamp(0.0, 3.0),
-            consonants: self.consonants.clamp(0.0, 2.0),
+            bind: BIND.clamped(self.bind),
+            density: DENSITY.clamped(self.density),
+            voices: VOICES.clamped(self.voices as f32) as usize,
+            spacing: SPACING.clamped(self.spacing as f32) as usize,
+            drift: DRIFT.clamped(self.drift),
+            reach: REACH.clamped(self.reach),
+            consonants: CONSONANTS.clamped(self.consonants),
         }
     }
 }

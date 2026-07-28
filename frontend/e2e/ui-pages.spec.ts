@@ -95,6 +95,31 @@ const VOICE = {
   takes: 7,
 };
 
+/**
+ * The mapping's knobs, as the backend publishes them.
+ *
+ * Copied from `music_mapping::params::KNOBS` rather than fetched, because this
+ * suite is about layout: what matters is that seven sliders, a toggle group and
+ * a select fit on a phone, not that these are the current ranges. Drift here
+ * costs nothing — the ranges are checked against the mapping in `tests/api.rs`,
+ * where getting them wrong actually matters.
+ */
+const CONTROLS = {
+  knobs: [
+    { name: "bind", label: "Bind to the voice", min: 0, max: 1, step: 0.05, default: 1, about: "At 1 the notes are exactly where this voice's spectrum puts them. At 0 they snap to the twelve everyone else uses." },
+    { name: "density", label: "Scale density", min: 0.0005, max: 0.5, step: 0.002, default: 0.02, about: "How firm a note has to be to count. Low gives a crowded microtonal set, high gives a handful of very stable intervals." },
+    { name: "voices", label: "Voices", min: 1, max: 12, step: 1, default: 5, about: "How many tones sound at once." },
+    { name: "spacing", label: "Spacing", min: 1, max: 6, step: 1, default: 2, about: "Scale degrees between one voice and the next. 1 is a cluster, higher is an open chord." },
+    { name: "drift", label: "Follow the pitch", min: 0, max: 2, step: 0.05, default: 0.25, about: "How far the music transposes with the speaker's pitch. At 0 it sits still; near 1 it reads as a parallel melody." },
+    { name: "reach", label: "Follow the vowel", min: 0, max: 3, step: 0.05, default: 1, about: "Octaves the root travels as the vowel moves front to back. This is the articulation showing up as harmony." },
+    { name: "consonants", label: "Consonants", min: 0, max: 2, step: 0.05, default: 1, about: "How loud the unpitched material is against the tones. At 0 they are silent." },
+  ],
+  mappings: [
+    { name: "field", label: "Field", about: "Every frame sounds." },
+    { name: "notes", label: "Notes", about: "Discrete events at onsets." },
+  ],
+};
+
 /** Catch-all first, then the specific routes. */
 async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/**", (r) =>
@@ -104,7 +129,11 @@ async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/recordings/0123456789abcdef", (r) =>
     r.fulfill({ json: { meta: META, voiceprint: voiceprint() } }),
   );
-  await page.route("**/api/voice", (r) => r.fulfill({ json: VOICE }));
+  // Trailing wildcard because the summary now carries the mapping settings in
+  // its query string, and a glob without one stops matching the moment a
+  // parameter is added — silently, by falling through to the catch-all above.
+  await page.route("**/api/voice*", (r) => r.fulfill({ json: VOICE }));
+  await page.route("**/api/controls", (r) => r.fulfill({ json: CONTROLS }));
 }
 
 test("the suite really runs at phone geometry", async ({ page }) => {
@@ -121,6 +150,9 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
   // both, so the layout assertions run against the fully painted page.
   await page.locator("app-voiceprint-chart canvas").waitFor();
   await page.locator("app-vowel-space canvas").waitFor();
+  // The knobs are the densest thing on the page — seven sliders, a toggle group
+  // and a select — and a phone is where they are likeliest to collide.
+  await page.locator("app-mapping-controls mat-slider").last().waitFor();
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);

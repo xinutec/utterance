@@ -3,13 +3,27 @@
     <audio class="player" controls preload="none" [src]="url"></audio>
   } @else {
     <p class="note">Hear this take as music, in a scale derived from the speaker's own harmonic series.</p>
-    <button matButton="filled" type="button" [disabled]="loading()" (click)="load()">
+  }
+
+  <div class="render">
+    <button matButton="filled" type="button" [disabled]="loading() || (!!renderUrl() && !stale())" (click)="load()">
       <mat-icon>graphic_eq</mat-icon>
-      Render as music
+      {{ renderUrl() ? "Render again" : "Render as music" }}
     </button>
-    @if (loading()) {
-      <mat-progress-bar mode="indeterminate" aria-label="Deriving the scale"></mat-progress-bar>
+    @if (stale()) {
+      <span class="note">the settings have moved since this was made</span>
     }
+  </div>
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Deriving the scale"></mat-progress-bar>
+  }
+
+  @if (knobs().length > 0) {
+    <app-mapping-controls
+      [knobs]="knobs()"
+      [mappings]="mappings()"
+      [(settings)]="settings"
+    ></app-mapping-controls>
   }
 
   @if (voice(); as summary) {

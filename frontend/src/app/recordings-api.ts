@@ -3,7 +3,14 @@ import { Injectable, inject } from "@angular/core";
 import { Observable, throwError } from "rxjs";
 import { catchError } from "rxjs/operators";
 
-import type { Deleted, ErrorBody, RecordingDetail, RecordingMeta, VoiceSummary } from "./models";
+import type {
+  Controls,
+  Deleted,
+  ErrorBody,
+  RecordingDetail,
+  RecordingMeta,
+  VoiceSummary,
+} from "./models";
 
 /**
  * A classified request failure.
@@ -88,9 +95,27 @@ export class RecordingsApi {
     return this.http.delete<Deleted>(`/api/recordings/${id}`).pipe(catchError(rethrow));
   }
 
-  /** The scale, timbre and tonic derived from everything recorded so far. */
-  voice(): Observable<VoiceSummary> {
-    return this.http.get<VoiceSummary>("/api/voice").pipe(catchError(rethrow));
+  /**
+   * Every control the mapping offers, with the range each one accepts.
+   *
+   * Fetched rather than written down here: the ranges are facts about the
+   * mapping, and a slider offering a value the backend clamps away is a control
+   * that appears to do nothing.
+   */
+  controls(): Observable<Controls> {
+    return this.http.get<Controls>("/api/controls").pipe(catchError(rethrow));
+  }
+
+  /**
+   * The scale, timbre and tonic derived from everything recorded so far.
+   *
+   * Takes the settings because two of them change the answer: `calibration`
+   * picks the take the scale comes from, and `bind` decides how far those
+   * degrees are pulled toward equal temperament. Showing a scale that the
+   * render will not play would defeat the point of showing it.
+   */
+  voice(query = ""): Observable<VoiceSummary> {
+    return this.http.get<VoiceSummary>(`/api/voice${suffix(query)}`).pipe(catchError(rethrow));
   }
 
   audioUrl(id: string): string {
@@ -104,7 +129,12 @@ export class RecordingsApi {
    * backend renders on demand, so nothing here has to hold several megabytes of
    * WAV in memory to play it.
    */
-  renderUrl(id: string): string {
-    return `/api/recordings/${id}/render`;
+  renderUrl(id: string, query = ""): string {
+    return `/api/recordings/${id}/render${suffix(query)}`;
   }
+}
+
+/** A query string as a URL suffix: prefixed when there is one, absent when not. */
+function suffix(query: string): string {
+  return query ? `?${query}` : "";
 }

@@ -1,11 +1,22 @@
 import { DecimalPipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  type OnInit,
+  computed,
+  inject,
+  input,
+  signal,
+} from "@angular/core";
 import { MatButtonModule } from "@angular/material/button";
 import { MatIconModule } from "@angular/material/icon";
 import { MatProgressBarModule } from "@angular/material/progress-bar";
 
+import { ControlsStore } from "../../controls-store";
 import type { ScaleDegree, VoiceSummary } from "../../models";
 import { ApiError, RecordingsApi } from "../../recordings-api";
+import { MappingControls } from "./mapping-controls";
+import { INITIAL_SETTINGS, settingsQuery, type MappingSettings } from "./mapping-settings";
 
 /** Cents of the nearest equal-tempered note, for showing how far off it sits. */
 const SEMITONE_CENTS = 100;
@@ -33,13 +44,36 @@ interface ShownDegree {
   templateUrl: "./derived-music.html",
   styleUrl: "./derived-music.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DecimalPipe, MatButtonModule, MatIconModule, MatProgressBarModule],
+  imports: [
+    DecimalPipe,
+    MatButtonModule,
+    MatIconModule,
+    MatProgressBarModule,
+    MappingControls,
+  ],
 })
-export class DerivedMusic {
+export class DerivedMusic implements OnInit {
   private readonly api = inject(RecordingsApi);
 
   /** The take to render. */
   readonly recordingId = input.required<string>();
+
+  /**
+   * What the next render will be made with.
+   *
+   * Held here rather than in the controls because two other things depend on
+   * it: the render URL, and the scale shown below it — `bind` and `calibration`
+   * both change which degrees the backend reports.
+   */
+  readonly settings = signal<MappingSettings>(INITIAL_SETTINGS);
+
+  /** What the mapping accepts. Held app-wide: it cannot change while open. */
+  private readonly controls = inject(ControlsStore);
+  readonly knobs = this.controls.knobs;
+  readonly mappings = this.controls.mappings;
+
+  /** The query the current settings imply, shared by both requests. */
+  private readonly query = computed(() => settingsQuery(this.settings(), this.knobs()));
 
   /**
    * The speaker's scale. Kept across takes on purpose — it is a fact about the
@@ -49,21 +83,33 @@ export class DerivedMusic {
   readonly error = signal<string | null>(null);
   readonly loading = signal(false);
 
-  /** Which take the person last asked to hear. */
-  private readonly rendered = signal<string | null>(null);
+  /** The take and the URL the person last asked to hear, exactly as asked. */
+  private readonly rendered = signal<{ id: string; url: string } | null>(null);
 
   /**
    * Where the player points, or `null` until asked.
    *
-   * Derived from the current input rather than stored, so selecting a different
-   * take clears the player instead of leaving it offering audio for a recording
-   * no longer on screen. Rendering is seconds of backend work, so it starts only
+   * Keyed on the take rather than stored flat, so selecting a different take
+   * clears the player instead of leaving it offering audio for a recording no
+   * longer on screen. Rendering is seconds of backend work, so it starts only
    * when someone asks: otherwise clicking through takes would queue a render for
    * each one.
    */
   readonly renderUrl = computed(() => {
-    const id = this.recordingId();
-    return this.rendered() === id ? this.api.renderUrl(id) : null;
+    const rendered = this.rendered();
+    return rendered?.id === this.recordingId() ? rendered.url : null;
+  });
+
+  /**
+   * True when the settings have moved since what is playing was made.
+   *
+   * The player keeps the old audio rather than clearing it, so a knob can be
+   * moved while listening and the comparison is against something still
+   * audible — which is the only way any of these questions get settled.
+   */
+  readonly stale = computed(() => {
+    const url = this.renderUrl();
+    return url !== null && url !== this.api.renderUrl(this.recordingId(), this.query());
   });
 
   readonly degrees = computed<ShownDegree[]>(() => {
@@ -81,13 +127,27 @@ export class DerivedMusic {
     }));
   });
 
+  ngOnInit(): void {
+    this.controls.ensure();
+  }
+
+  /**
+   * Fetch the scale and point the player at a render, both under the current
+   * settings.
+   *
+   * One button for both because they are one answer: the degrees shown are the
+   * degrees that sound, and refreshing either without the other would put a
+   * scale on screen that belongs to different audio.
+   */
   load(): void {
     this.loading.set(true);
     this.error.set(null);
-    this.api.voice().subscribe({
+    const id = this.recordingId();
+    const query = this.query();
+    this.api.voice(query).subscribe({
       next: (summary) => {
         this.voice.set(summary);
-        this.rendered.set(this.recordingId());
+        this.rendered.set({ id, url: this.api.renderUrl(id, query) });
         this.loading.set(false);
       },
       error: (err: unknown) => {
