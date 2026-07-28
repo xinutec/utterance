@@ -1,3 +1,13 @@
+/// Taken off a slider's width to leave a strip a thumb can scroll from.
+///
+/// **Not the same number as the gutter it produces.** A Material slider carries
+/// its own horizontal margin, so 3.25rem here measures 44 px of clear space on
+/// the right — which is where touch-target guidance settles for a thumb, about
+/// 9 mm. The harness asserts the *measured* gap rather than this value, so a
+/// future Material release changing its margin fails a test instead of quietly
+/// closing the gutter back up.
+$scroll-gutter: 3.25rem;
+
 .controls {
   display: flex;
   flex-direction: column;
@@ -65,7 +75,22 @@
 
 mat-slider {
   grid-column: 1 / -1;
-  width: 100%;
+
+  // **A strip down the side that is not a control**, so a phone has somewhere
+  // to scroll from.
+  //
+  // A Material slider takes its value from where a pointer goes *down*, before
+  // the browser has decided whether the gesture was a scroll — so a thumb that
+  // lands on one has already moved it, and no amount of `touch-action` gets
+  // that back. That much is the framework's. What was ours is that ten sliders
+  // at full width left nowhere else to put a thumb: the whole knob column was
+  // control, so scrolling past the settings meant nudging them every time.
+  //
+  // The gutter is on the right because that is where a thumb rests, and wide
+  // enough for one at the 9 mm most touch guidance settles on. It costs a
+  // little of every slider's travel, which is the cheapest thing here — a knob
+  // is swept and listened to, not dialled to a number.
+  width: calc(100% - #{$scroll-gutter});
 }
 
 .knob-about {

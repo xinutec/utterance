@@ -173,6 +173,36 @@ async function mockApi(page: Page): Promise<void> {
   );
 }
 
+/**
+ * A strip beside the sliders that a thumb can land on without turning a knob.
+ *
+ * A Material slider takes its value from where a pointer goes down, before the
+ * browser has decided the gesture was a scroll — so on a phone a full-width
+ * column of them has no safe place to start a scroll, and reading down the page
+ * quietly changes the settings. The fix is layout, so this is where it is
+ * guarded: assert the gutter exists rather than trust a `calc()` nobody reads.
+ *
+ * Every slider is checked, not the first: the failure that matters is one knob
+ * reaching the edge, and that is exactly the one a spot check misses.
+ */
+async function expectSomewhereToScrollFrom(page: Page) {
+  const gutters = await page.locator("app-mapping-controls .knob").evaluateAll((knobs) =>
+    knobs.map((knob) => {
+      const slider = knob.querySelector("mat-slider");
+      if (!slider) return null;
+      return Math.round(knob.getBoundingClientRect().right - slider.getBoundingClientRect().right);
+    }),
+  );
+
+  expect(gutters.length, "no knobs to check").toBeGreaterThan(0);
+  for (const gutter of gutters) {
+    // Against the 44 px that touch guidance settles on for a thumb, less a
+    // little for rounding and the slider's own end padding.
+    expect(gutter, `a slider reaches the edge, leaving ${gutter}px to scroll from`)
+      .toBeGreaterThanOrEqual(40);
+  }
+}
+
 test("the suite really runs at phone geometry", async ({ page }) => {
   await mockApi(page);
   await page.goto("/");
@@ -194,6 +224,7 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
+  await expectSomewhereToScrollFrom(page);
 });
 
 test("studio — empty state lays out cleanly @ phone", async ({ page }, testInfo) => {
