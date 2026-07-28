@@ -21,7 +21,7 @@ utterance-mapping = { path = "utterance-mapping" }
 utterance-realisation = { path = "utterance-realisation" }
 tokio = { version = "1.53.1", features = ["full"] }
 axum = "0.8.9"
-tower-http = { version = "0.7.0", features = ["fs"] }
+tower-http = { version = "0.7.0", features = ["fs", "trace"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 # Content-addressed recording ids: the same audio must land on the same id.

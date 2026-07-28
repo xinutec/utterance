@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod error;
+pub mod http_trace;
 pub mod routes;
 pub mod state;
 pub mod store;

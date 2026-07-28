@@ -9,6 +9,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use tower_http::services::{ServeDir, ServeFile};
 
+use crate::http_trace;
 use crate::state::AppState;
 use crate::webauth::{self, WebAuth};
 
@@ -35,7 +36,8 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         .route("/recordings/{id}/score", get(api::score))
         .route("/voice", get(api::voice_summary))
         .route("/controls", get(api::controls))
-        .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES));
+        .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES))
+        .layer(http_trace::layer());
 
     // Applied to the API router alone, so the health check the cluster probes
     // and the sign-in routes themselves stay reachable without a session.
@@ -57,7 +59,9 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
     // `/login` to do, and a route that redirects to a Nextcloud this deployment
     // never heard of is worse than a 404.
     if let Some(gate) = auth {
-        app = app.merge(webauth::routes(gate));
+        // Traced too, and the reason this module exists: a sign-in that fails
+        // silently is the failure nobody can diagnose from the outside.
+        app = app.merge(webauth::routes(gate).layer(http_trace::layer()));
     }
 
     // Serve the built Angular bundle from the same origin, falling back to
