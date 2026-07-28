@@ -7,8 +7,8 @@
 //! be, since every musical consequence here rests on that geometry.
 
 use music_mapping::dissonance::Component;
-use music_mapping::lattice::{Lattice, Triangle, generators, settle, triangle_at};
-use music_mapping::tuning::{self, Tuning};
+use music_mapping::lattice::{Lattice, NoPlane, Triangle, generators, settle, triangle_at};
+use music_mapping::tuning::{self, Degree, Tuning};
 
 /// A harmonic spectrum, as a voice makes.
 fn harmonic() -> Tuning {
@@ -86,29 +86,86 @@ fn an_inharmonic_spectrum_is_spanned_by_something_else() {
     );
 }
 
+/// A scale built by hand, to reach shapes a real spectrum reaches only rarely.
+///
+/// Interior degrees as `(cents, depth)`; the tonic and the octave are added the
+/// way `tuning` adds them, with no depth.
+fn scale(interior: &[(f32, f32)]) -> Tuning {
+    let degree = |cents: f32, depth: f32| Degree {
+        cents,
+        ratio: tuning::cents_to_ratio(cents),
+        dissonance: 0.0,
+        depth,
+    };
+    let mut degrees = vec![degree(0.0, 0.0)];
+    degrees.extend(interior.iter().map(|(c, d)| degree(*c, *d)));
+    degrees.push(degree(1200.0, 0.0));
+    Tuning {
+        degrees,
+        curve: vec![0.0; tuning::RESOLUTION + 1],
+    }
+}
+
 #[test]
 fn a_scale_with_one_interval_spans_no_plane() {
     // A steady *ee* in the calibration set gave the fifth and nothing else. That
     // is a line, and saying so beats folding the plane flat and letting one of
     // the two vowel dimensions reach nothing.
-    let line = Tuning {
-        degrees: vec![
-            tuning::from_spectrum(&[
-                Component {
-                    hz: 100.0,
-                    amplitude: 1.0,
-                },
-                Component {
-                    hz: 200.0,
-                    amplitude: 1.0,
-                },
-            ])
-            .unwrap()
-            .degrees[0],
-        ],
-        curve: vec![0.0; tuning::RESOLUTION + 1],
-    };
-    assert!(Lattice::from_tuning(&line).is_none());
+    let refused = Lattice::from_tuning(&scale(&[(702.0, 0.3)])).expect_err("a plane from a line");
+    assert_eq!(
+        refused,
+        NoPlane::TooFewIntervals {
+            interior: vec![702.0]
+        }
+    );
+}
+
+#[test]
+fn a_refusal_says_which_intervals_there_were_and_what_to_move() {
+    // The whole reason the failure carries a reason. Someone who raised one
+    // slider until the music stopped needs to be told *that* slider, and a
+    // message that leaves out the intervals cannot be checked against the scale
+    // shown on the same screen.
+    let refused = Lattice::from_tuning(&scale(&[(702.0, 0.3)])).expect_err("a plane from a line");
+    let said = refused.to_string();
+    assert!(
+        said.contains("702"),
+        "the interval it had is not named: {said}"
+    );
+    assert!(
+        said.contains("density"),
+        "the knob that undoes this is not named: {said}"
+    );
+}
+
+#[test]
+fn a_scale_of_the_fifth_and_the_fourth_is_refused_as_one_direction() {
+    // Two intervals, and still no plane: they sum to the octave, so the second
+    // axis lies along the first and the two triangles of every cell would be the
+    // same three pitches. The trap a harmonic spectrum lays, since these are the
+    // two deepest minima any voice has.
+    let refused = Lattice::from_tuning(&scale(&[(498.0, 0.4), (702.0, 0.5)]))
+        .expect_err("a plane from the fifth and the fourth");
+    assert_eq!(
+        refused,
+        NoPlane::NoIndependentPair {
+            first: 702.0,
+            rejected: vec![498.0]
+        }
+    );
+    let said = refused.to_string();
+    assert!(said.contains("702") && said.contains("498"), "{said}");
+}
+
+#[test]
+fn a_scale_of_nothing_but_the_tonic_and_the_octave_is_refused_too() {
+    let refused = Lattice::from_tuning(&scale(&[])).expect_err("a plane from a point");
+    assert_eq!(
+        refused,
+        NoPlane::TooFewIntervals {
+            interior: Vec::new()
+        }
+    );
 }
 
 #[test]

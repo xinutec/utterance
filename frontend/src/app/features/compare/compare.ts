@@ -89,6 +89,16 @@ export class Compare implements OnInit {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
+  /**
+   * Why one of the two sides cannot be played at all, if it cannot.
+   *
+   * Held apart from {@link error} because it survives differently: an error is
+   * cleared by trying again, while this is a property of the settings and stays
+   * true until one of them moves. Without it, pressing play after a refusal
+   * cleared the explanation and pointed both players at a URL that fails.
+   */
+  readonly unplayable = signal<string | null>(null);
+
   /** Where the players are, for the chart's playhead. */
   readonly playhead = signal(0);
 
@@ -201,10 +211,19 @@ export class Compare implements OnInit {
           this.scoreA.set(a);
           this.scoreB.set(b);
           this.error.set(null);
+          this.unplayable.set(null);
         },
         error: (err: unknown) => {
-          if (token === this.scoreRequest) {
-            this.error.set(err instanceof ApiError ? err.message : String(err));
+          if (token !== this.scoreRequest) return;
+          const message = err instanceof ApiError ? err.message : String(err);
+          // A refusal is not a failure to retry: the settings and this
+          // speaker's scale have no answer for each other, and the way out is
+          // to move one of them.
+          if (err instanceof ApiError && err.code === "unplayable") {
+            this.unplayable.set(message);
+            this.error.set(null);
+          } else {
+            this.error.set(message);
           }
         },
       });
@@ -214,7 +233,10 @@ export class Compare implements OnInit {
   /** Point the players at renders of the current settings. */
   load(): void {
     const id = this.chosen();
-    if (!id) return;
+    // Nothing is pointed anywhere while a side is unplayable. The render would
+    // fail, and a failing `<audio>` says only that it is broken — so the reason
+    // already on screen is the better thing to leave there.
+    if (!id || this.unplayable()) return;
 
     this.loading.set(true);
     this.error.set(null);

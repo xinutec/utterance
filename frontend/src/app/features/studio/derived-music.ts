@@ -112,6 +112,17 @@ export class DerivedMusic implements OnInit {
     return url !== null && url !== this.api.renderUrl(this.recordingId(), this.query());
   });
 
+  /**
+   * Why the chosen mapping cannot be played in this scale, if it cannot.
+   *
+   * Shown rather than left to the player, because a mapping that declines still
+   * renders — to consonants over silence — and a listener who pressed a button
+   * and heard nothing has no way to tell that from a broken build. The backend
+   * refuses the render outright; this is the copy of the same verdict that
+   * arrives in time to say so.
+   */
+  readonly refusal = computed(() => this.voice()?.refusal ?? null);
+
   readonly degrees = computed<ShownDegree[]>(() => {
     const summary = this.voice();
     if (!summary) return [];
@@ -147,7 +158,13 @@ export class DerivedMusic implements OnInit {
     this.api.voice(query).subscribe({
       next: (summary) => {
         this.voice.set(summary);
-        this.rendered.set({ id, url: this.api.renderUrl(id, query) });
+        // Whatever was playing is left alone when the mapping is refused. The
+        // render would fail, and an `<audio>` element handed a failing URL shows
+        // a broken control and no reason — so replacing audible audio with one
+        // would lose both the sound and the explanation.
+        if (!summary.refusal) {
+          this.rendered.set({ id, url: this.api.renderUrl(id, query) });
+        }
         this.loading.set(false);
       },
       error: (err: unknown) => {

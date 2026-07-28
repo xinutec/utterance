@@ -657,6 +657,127 @@ async fn the_two_mappings_render_differently() {
     assert_ne!(field, notes, "both mappings rendered identical audio");
 }
 
+/// The density at which the fixture's scale stops spanning a plane.
+///
+/// Top of the knob's published range. Which value does it is a property of the
+/// speaker rather than a constant — a real take goes thin somewhere near 0.14 —
+/// so the tests that use this check the scale really did collapse rather than
+/// trusting the number.
+const DENSITY_TOO_HIGH: &str = "density=0.5";
+
+#[tokio::test]
+async fn a_scale_too_thin_for_a_lattice_says_so_rather_than_rendering_silence() {
+    // The failure this replaces was silent and looked exactly like a bug: the
+    // lattice mapping declines a scale that points one way only, a score with no
+    // field in it renders to consonants over silence, and the response is a
+    // perfectly good 200 full of nothing.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (status, summary) = send(
+        &app,
+        Request::get(format!("/api/voice?mapping=tonnetz&{DENSITY_TOO_HIGH}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{summary}");
+
+    // Checked rather than assumed, so this cannot quietly become a test of a
+    // scale that was fine all along.
+    let interior = summary["degrees"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|d| {
+            let cents = d["cents"].as_f64().unwrap();
+            cents > 0.0 && cents < 1200.0
+        })
+        .count();
+    assert!(
+        interior < 2,
+        "the fixture still spans a plane at this density: {summary}"
+    );
+
+    // The summary is what the studio reads before it points a player anywhere,
+    // because an `<audio>` element handed a failing URL shows a broken control
+    // and no message.
+    let refusal = summary["refusal"]
+        .as_str()
+        .unwrap_or_else(|| panic!("no refusal in {summary}"));
+    assert!(
+        refusal.contains("density"),
+        "the refusal does not name the setting that undoes it: {refusal}"
+    );
+
+    let (status, _, _) = fetch(
+        &app,
+        &format!("/api/recordings/{id}/render?mapping=tonnetz&{DENSITY_TOO_HIGH}"),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "a scale that spans no lattice still rendered"
+    );
+}
+
+#[tokio::test]
+async fn only_the_mapping_that_needs_a_plane_is_refused_for_want_of_one() {
+    // The refusal is the lattice's, not the density knob's. Every other mapping
+    // works from a list of degrees and plays whatever is left, so a scale pruned
+    // past a plane must still make music by some other route — otherwise this
+    // reads as the knob having a broken upper half.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    for mapping in ["field", "notes"] {
+        let (status, _, audio) = fetch(
+            &app,
+            &format!("/api/recordings/{id}/render?mapping={mapping}&{DENSITY_TOO_HIGH}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{mapping} was refused a thin scale");
+        assert_eq!(&audio[0..4], b"RIFF");
+
+        let (_, summary) = send(
+            &app,
+            Request::get(format!("/api/voice?mapping={mapping}&{DENSITY_TOO_HIGH}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert!(
+            summary["refusal"].is_null(),
+            "{mapping} was reported unplayable: {summary}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_scale_that_spans_a_plane_is_not_reported_as_a_problem() {
+    // The other half of the claim, and the one that catches a check left
+    // permanently on: at the default density the lattice plays, and a warning
+    // shown then would train someone to ignore it.
+    let app = TestApp::new();
+    upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+
+    let (status, summary) = send(
+        &app,
+        Request::get("/api/voice?mapping=tonnetz")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{summary}");
+    assert!(
+        summary["refusal"].is_null(),
+        "the default scale was called unplayable: {summary}"
+    );
+}
+
 #[tokio::test]
 async fn an_unknown_mapping_is_refused_rather_than_ignored() {
     // Silently falling back to the default would render something the caller
@@ -751,13 +872,148 @@ async fn every_published_knob_changes_what_is_rendered() {
             let base = format!("/api/recordings/{id}/render?mapping={mapping}");
             let (_, _, plain) = fetch(&app, &base).await;
             let (status, _, altered) = fetch(&app, &format!("{base}&{name}={value}")).await;
-            assert_eq!(status, StatusCode::OK, "{name}={value} was refused");
-            assert_ne!(
-                altered, plain,
-                "{name}={value} changed nothing in {mapping}"
-            );
+            match status {
+                StatusCode::OK => assert_ne!(
+                    altered, plain,
+                    "{name}={value} changed nothing in {mapping}"
+                ),
+                // A refusal is a change, and the loudest one available: a value
+                // the slider can reach that this mapping has no answer for.
+                // Density does it to the lattice a quarter of the way up, by
+                // pruning the scale past a plane. Accepted only when it explains
+                // itself — an unexplained one is the silence this check exists
+                // to catch — and safe to accept because
+                // `every_published_mapping_can_be_rendered` fails if a mapping
+                // refuses everything.
+                StatusCode::UNPROCESSABLE_ENTITY => {
+                    let body: Value = serde_json::from_slice(&altered)
+                        .unwrap_or_else(|_| panic!("{name}={value}: refusal is not JSON"));
+                    assert_eq!(body["code"], "unplayable", "{body}");
+                    assert!(
+                        body["message"].as_str().unwrap_or_default().contains(name),
+                        "{name}={value} was refused without naming {name}: {body}"
+                    );
+                }
+                other => panic!("{name}={value} in {mapping}: {other}"),
+            }
         }
     }
+}
+
+#[tokio::test]
+async fn every_setting_a_slider_can_reach_either_sounds_or_says_why_not() {
+    // The generalisation of a real failure. `density` past about a quarter of its
+    // travel prunes this speaker's scale below a plane, and the lattice mapping
+    // answered with a perfectly good 200 containing no field — audible as
+    // nothing, and reported as success. The test above sweeps one value per
+    // knob, which is the wrong shape for this: what a published range promises
+    // is that *every* position on the slider means something, and the ends are
+    // exactly where nobody drags by hand.
+    //
+    // Two acceptable answers per position, and the whole point is that there is
+    // no third: it makes sound, or it refuses and says which setting to move.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (_, controls) = send(
+        &app,
+        Request::get("/api/controls").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let every: Vec<String> = controls["mappings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["name"].as_str().unwrap().to_string())
+        .collect();
+
+    // Tallied so this cannot pass by refusing everything, which would satisfy
+    // the letter of the check and leave an app that makes no sound.
+    let mut sounded = 0usize;
+
+    for knob in controls["knobs"].as_array().unwrap() {
+        let name = knob["name"].as_str().unwrap();
+        let claimed: Vec<String> = knob["mappings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m.as_str().unwrap().to_string())
+            .collect();
+        let against = if claimed.is_empty() { &every } else { &claimed };
+
+        for value in ends_and_middle(knob) {
+            for mapping in against {
+                // The score rather than the render: it is the same decision made
+                // by the same code, without the seconds of synthesis after it,
+                // and it is the thing that says whether anything sounds.
+                let (status, view) = send(
+                    &app,
+                    Request::get(format!(
+                        "/api/recordings/{id}/score?mapping={mapping}&{name}={value}"
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+                )
+                .await;
+                let at = format!("{name}={value} in {mapping}");
+
+                if status == StatusCode::UNPROCESSABLE_ENTITY {
+                    assert_eq!(view["code"], "unplayable", "{at}: {view}");
+                    assert!(
+                        view["message"].as_str().unwrap_or_default().contains(name),
+                        "{at} was refused without naming {name}: {view}"
+                    );
+                    continue;
+                }
+                assert_eq!(status, StatusCode::OK, "{at}: {view}");
+                assert!(sounds(&view), "{at} is silent and does not say why: {view}");
+                sounded += 1;
+            }
+        }
+    }
+
+    assert!(
+        sounded > 0,
+        "every setting on every slider was refused — nothing here makes a sound"
+    );
+}
+
+/// Whether a score has anything in it a listener would hear.
+///
+/// Either material counts, because the mappings make different ones — a texture
+/// is heard through its gains and a note mapping through its events. The
+/// consonants deliberately do not count: they are carried by every mapping, so a
+/// pitched layer that fell silent would hide behind them, which is precisely how
+/// the lattice failure sounded.
+fn sounds(view: &Value) -> bool {
+    let gains = view["gains"].as_array().unwrap();
+    let audible = gains.iter().any(|voice| {
+        voice
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g.as_f64().unwrap_or(0.0) > 0.0)
+    });
+    audible || !view["events"].as_array().unwrap().is_empty()
+}
+
+/// Both ends of a knob's published range, and one position between them.
+///
+/// The ends because they are what the range promises and what a slider dragged
+/// to its stop produces; the middle because a range can also fail in the part
+/// everyone does use. All three land on the step grid, which is the only place
+/// the UI can put a value.
+fn ends_and_middle(knob: &Value) -> Vec<f32> {
+    let (min, max, step) = (
+        knob["min"].as_f64().unwrap() as f32,
+        knob["max"].as_f64().unwrap() as f32,
+        knob["step"].as_f64().unwrap() as f32,
+    );
+    let on_grid = |raw: f32| (min + ((raw - min) / step).round() * step).clamp(min, max);
+    let mut values = vec![min, on_grid((min + max) / 2.0), max];
+    values.dedup();
+    values
 }
 
 /// A value a quarter of the way from a knob's default toward its far end.

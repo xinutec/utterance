@@ -87,3 +87,14 @@
   color: var(--mat-sys-error);
   margin: 0;
 }
+
+.refusal {
+  align-self: stretch;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  // Deliberately not the error colour. Nothing failed: the mapping and the
+  // scale have no answer for each other, and the way out of it is a slider.
+  border-left: 3px solid var(--mat-sys-tertiary);
+  background: var(--mat-sys-surface-container-high);
+}

@@ -25,6 +25,8 @@
 //! way, and the honest answer is to say so rather than to fold the plane flat
 //! and pretend.
 
+use std::fmt;
+
 use crate::tuning::{Degree, Tuning};
 
 /// How near two intervals may be before they count as the same one, in cents.
@@ -33,6 +35,71 @@ use crate::tuning::{Degree, Tuning};
 /// it are recognised as one interval rather than two; narrow enough to keep
 /// genuinely distinct neighbouring degrees apart.
 const SAME_INTERVAL_CENTS: f32 = 50.0;
+
+/// Why a scale spans no lattice.
+///
+/// A reason rather than an absence, because of how the refusal presents. What
+/// reaches a listener when this mapping declines is a player that makes
+/// consonants and silence, and *nothing happened* is indistinguishable from a
+/// broken build. The scale is usually fine and one knob has pruned it too hard —
+/// which is recoverable, and only if someone is told.
+#[derive(Clone, Debug, PartialEq)]
+pub enum NoPlane {
+    /// Fewer than two intervals to choose axes from. One is a line; none is a
+    /// point.
+    TooFewIntervals {
+        /// The interior degrees there were, in cents.
+        interior: Vec<f32>,
+    },
+    /// Intervals enough, but every one of them is the deepest one over again or
+    /// its complement, so the second axis would lie along the first.
+    NoIndependentPair {
+        /// The deepest interval, which would have been the first axis.
+        first: f32,
+        /// The ones tried against it and refused, in cents.
+        rejected: Vec<f32>,
+    },
+}
+
+impl fmt::Display for NoPlane {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Every message names the density knob, because it is the one that
+        // caused this in every case seen so far and the only one that undoes it.
+        match self {
+            NoPlane::TooFewIntervals { interior } => write!(
+                f,
+                "this voice's scale has {} besides the tonic and the octave, and a \
+                 lattice is spanned by two intervals pointing different ways. \
+                 Lowering the scale density keeps more of them.",
+                match interior.as_slice() {
+                    [] => "nothing".to_string(),
+                    [one] => format!("one interval ({})", cents_list(&[*one])),
+                    many => format!("only {} intervals", many.len()),
+                }
+            ),
+            NoPlane::NoIndependentPair { first, rejected } => write!(
+                f,
+                "this voice's scale points one way only: beside {}, every interval \
+                 in it ({}) is that same interval again or the rest of the octave \
+                 after it, so both axes would lie along one line. Lowering the \
+                 scale density keeps more of them.",
+                cents_list(&[*first]),
+                cents_list(rejected)
+            ),
+        }
+    }
+}
+
+impl std::error::Error for NoPlane {}
+
+/// Intervals as someone reads them, in the unit the rest of the UI uses.
+fn cents_list(cents: &[f32]) -> String {
+    cents
+        .iter()
+        .map(|c| format!("{c:.0}¢"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
 /// Two independent intervals, and the plane they span.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -46,12 +113,13 @@ pub struct Lattice {
 impl Lattice {
     /// Lay a lattice out over a derived scale.
     ///
-    /// Returns `None` when the scale has no two independent interior degrees —
-    /// one steady *ee* in the calibration set gave a scale of the fifth and
-    /// nothing else, and there is no plane to be had from that.
-    pub fn from_tuning(tuning: &Tuning) -> Option<Self> {
+    /// Fails when the scale has no two independent interior degrees — one steady
+    /// *ee* in the calibration set gave a scale of the fifth and nothing else,
+    /// and there is no plane to be had from that. The failure carries its reason
+    /// rather than being an empty answer, for the reason on [`NoPlane`].
+    pub fn from_tuning(tuning: &Tuning) -> Result<Self, NoPlane> {
         let (a, b) = generators(tuning)?;
-        Some(Lattice {
+        Ok(Lattice {
             a_cents: a.cents,
             b_cents: b.cents,
         })
@@ -83,7 +151,7 @@ impl Lattice {
 /// measure of how firmly a note is somewhere a listener rests. Ordering by that
 /// picks the intervals this speaker's spectrum makes most stable, which is
 /// exactly what an axis has to be if the chords built on it are to hold together.
-pub fn generators(tuning: &Tuning) -> Option<(Degree, Degree)> {
+pub fn generators(tuning: &Tuning) -> Result<(Degree, Degree), NoPlane> {
     // Interior degrees only. The tonic and the octave are degrees by decision
     // rather than by measurement and carry a depth of zero, and neither spans
     // anything: an axis of 0 cents is a point and one of 1200 is the octave the
@@ -103,9 +171,27 @@ pub fn generators(tuning: &Tuning) -> Option<(Degree, Degree)> {
             .then(p.cents.total_cmp(&q.cents))
     });
 
-    let a = *candidates.first()?;
-    let b = *candidates.iter().skip(1).find(|d| independent(a, **d))?;
-    Some((a, b))
+    let interior = |from: usize| candidates[from..].iter().map(|d| d.cents).collect();
+    let Some(&a) = candidates.first() else {
+        return Err(NoPlane::TooFewIntervals {
+            interior: Vec::new(),
+        });
+    };
+    if candidates.len() < 2 {
+        return Err(NoPlane::TooFewIntervals {
+            interior: interior(0),
+        });
+    }
+    match candidates.iter().skip(1).find(|d| independent(a, **d)) {
+        Some(&b) => Ok((a, b)),
+        // Every one of them was the first axis wearing a different name. The
+        // pair that does this to a voice is the fifth and the fourth, which are
+        // its two deepest minima and which sum to the octave.
+        None => Err(NoPlane::NoIndependentPair {
+            first: a.cents,
+            rejected: interior(1),
+        }),
+    }
 }
 
 /// Whether a second interval spans a direction the first does not.

@@ -329,6 +329,15 @@ pub struct VoiceSummary {
     pub calibration_label: String,
     /// How many takes went into the speaker profile.
     pub takes: usize,
+    /// Why the mapping asked for cannot be played in this scale, if it cannot.
+    ///
+    /// **Here rather than only on the render, because of when it is needed.**
+    /// The render is fetched by an `<audio>` element, which is handed a URL and
+    /// reports a failure as a broken player with no message — so a refusal that
+    /// only lives there is a refusal nobody reads. This summary is fetched by
+    /// script, under the same settings, before the player is pointed anywhere.
+    /// The render refuses too; this is what makes the refusal legible.
+    pub refusal: Option<String>,
 }
 
 /// One control the UI should offer, as the browser sees it.
@@ -449,6 +458,9 @@ pub async fn voice_summary(
         calibration_id: calibrated.source.id.clone(),
         calibration_label: calibrated.source.label.clone(),
         takes: calibrated.profile.takes,
+        // The same verdict the render will reach, from the same tuning, so what
+        // is on screen cannot promise audio the render then refuses.
+        refusal: refusal(&tuning, &mapping_names(&params)),
     }))
 }
 
@@ -637,12 +649,7 @@ fn build_score(
         voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
     let voiceprint = app.store.voiceprint(id)?;
 
-    let wanted = params.mapping.as_deref().unwrap_or("field");
-    let names: Vec<&str> = wanted
-        .split(',')
-        .map(str::trim)
-        .filter(|n| !n.is_empty())
-        .collect();
+    let names = mapping_names(params);
     if let Some(unknown) = names
         .iter()
         .find(|n| !MAPPINGS.iter().any(|(known, ..)| known == *n))
@@ -675,6 +682,14 @@ fn build_score(
         }
     }
 
+    let tuning = music_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
+    // Refused before anything is rendered. A mapping that cannot be applied
+    // still produces a score — one with no field in it — and that renders to
+    // consonants over silence, which is indistinguishable from a broken build.
+    if let Some(why) = refusal(&tuning, &names) {
+        return Err(AppError::Unplayable(why));
+    }
+
     // Built by starting from one mapping and lifting the other's material into
     // it. Both carry the consonants, so taking them from the first and leaving
     // the second's behind is what stops the noise layer being played twice.
@@ -691,6 +706,40 @@ fn build_score(
             music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs).events;
     }
 
-    let tuning = music_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
     Ok((score, tuning))
+}
+
+/// The mappings a query asked for, defaulting to the one someone starts with.
+///
+/// Trimmed and emptied of blanks, so `field,` and `field, notes` mean what they
+/// look like. Shared by the render and the voice summary, which have to agree
+/// about what was asked for or the summary will describe a different render.
+fn mapping_names(params: &VoiceParams) -> Vec<&str> {
+    params
+        .mapping
+        .as_deref()
+        .unwrap_or("field")
+        .split(',')
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+/// Why the mappings asked for cannot be played in this scale, if they cannot.
+///
+/// Only the lattice can fail this way, and it is the only one that needs a
+/// *shape* from the scale rather than a list of degrees: two intervals that
+/// point different ways. Everything else works with whatever degrees it is
+/// given, down to a scale of the tonic and the octave.
+fn refusal(tuning: &music_mapping::tuning::Tuning, names: &[&str]) -> Option<String> {
+    if !names.contains(&"tonnetz") {
+        return None;
+    }
+    let label = MAPPINGS
+        .iter()
+        .find(|(name, ..)| *name == "tonnetz")
+        .map_or("tonnetz", |(_, label, ..)| *label);
+    music_mapping::lattice::Lattice::from_tuning(tuning)
+        .err()
+        .map(|no_plane| format!("{label} cannot be played in this scale: {no_plane}"))
 }

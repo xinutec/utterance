@@ -110,7 +110,10 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
 pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Field> {
     let params = params.sane();
     let tuning = params::bind_toward_equal(&voice.tuning, params.bind);
-    let lattice = Lattice::from_tuning(&tuning)?;
+    // The reason it spans no plane is not thrown away here so much as asked for
+    // somewhere else: `routes::api` calls `Lattice::from_tuning` itself, so a
+    // refusal reaches the browser as a sentence rather than as silence.
+    let lattice = Lattice::from_tuning(&tuning).ok()?;
     if vp.frame.count == 0 {
         return None;
     }

@@ -5,6 +5,10 @@
     <p class="note">Hear this take as music, in a scale derived from the speaker's own harmonic series.</p>
   }
 
+  @if (refusal(); as why) {
+    <p class="refusal" role="alert">{{ why }}</p>
+  }
+
   <div class="render">
     <button matButton="filled" type="button" [disabled]="loading() || (!!renderUrl() && !stale())" (click)="load()">
       <mat-icon>graphic_eq</mat-icon>

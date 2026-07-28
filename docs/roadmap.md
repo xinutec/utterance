@@ -111,9 +111,23 @@ In rough order of how much each unlocks.
   should be settled by ear.
 - **A scale of the fourth and the fifth spans no lattice**, and the honest
   response is that the Tonnetz mapping produces nothing at all for that speaker.
-  Real takes have not hit it — one *ah* gives six interior degrees — but a thin
-  calibration would, and what a listener would hear is consonants and silence
-  with no explanation. It should say so instead.
+  *Hit in listening, 2026-07-28, and now said out loud.* It was not a thin
+  calibration that got there but the `density` knob: past about 0.14 on a real
+  take the scale prunes to the tonic, the fifth and the octave, which is one
+  direction and no plane. The render refused nothing and returned a score with
+  no field in it, so the answer was a valid 200 containing consonants over
+  silence — indistinguishable from a broken build.
+
+  `Lattice::from_tuning` now fails with a reason rather than an absence; the
+  route turns that into a 422 `unplayable` naming the intervals it had and the
+  knob that undoes it; and the voice summary carries the same verdict, because
+  it is fetched by script before the player is pointed anywhere and an `<audio>`
+  element handed a failing URL shows a broken control and no words.
+
+  **Where the threshold is, is a fact about the speaker**, not a constant — it is
+  wherever their second-deepest minimum falls. Nothing clamps the slider for
+  that reason: a limit that moves per person, silently, would be a worse lie
+  than the refusal.
 
 - **Comparing is now a page rather than an exercise in URLs.** `/compare` plays
   two settings at once with one muted, so switching is instant and at the same
@@ -223,6 +237,25 @@ source, plus the one that most shapes daily work.
   rebuilding and re-rendering, which is the wrong loop for decisions that are
   settled by ear. Defaults reproduce the unparameterised behaviour, so old
   renders stay comparable with new ones.
+
+- **A published range is a promise about every position on it** (2026-07-28).
+  A knob declares `min`, `max` and `step`, and a slider will be dragged to both
+  stops — so every value it can produce has to either make a sound or refuse and
+  say which setting to move. There is deliberately no third answer, because the
+  third answer is what `density` did to the lattice: a valid 200 carrying no
+  field, heard as nothing and reported as success.
+
+  Checked over the whole range rather than at one sample, by
+  `every_setting_a_slider_can_reach_either_sounds_or_says_why_not` in
+  `tests/api.rs`. The ends are the interesting part: they are what the range
+  promises and the part nobody drags to by hand. The neighbouring test sweeps one
+  value per knob and asks a different question — whether the knob does anything
+  at all.
+
+  **The alternative, clamping the range, was rejected.** Where the lattice gives
+  out depends on where a speaker's second-deepest minimum falls, so the limit
+  moves per person; a slider that silently stopped somewhere different for
+  everyone would be a worse lie than the refusal.
 
 - **The bundle budget describes this app, not a public one** (2026-07-28). The
   initial-bundle warning was raised from 500 kB to 800 kB when the knobs brought

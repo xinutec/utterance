@@ -169,3 +169,13 @@ mat-card-header {
   color: var(--mat-sys-error);
   margin: 0;
 }
+
+.refusal {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  // Not the error colour: nothing failed. One of the two sides asks for a
+  // mapping this speaker's scale cannot carry, and moving a slider fixes it.
+  border-left: 3px solid var(--mat-sys-tertiary);
+  background: var(--mat-sys-surface-container-high);
+}

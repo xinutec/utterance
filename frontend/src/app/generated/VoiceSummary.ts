@@ -28,4 +28,15 @@ calibrationId: string, calibrationLabel: string,
 /**
  * How many takes went into the speaker profile.
  */
-takes: number, };
+takes: number, 
+/**
+ * Why the mapping asked for cannot be played in this scale, if it cannot.
+ *
+ * **Here rather than only on the render, because of when it is needed.**
+ * The render is fetched by an `<audio>` element, which is handed a URL and
+ * reports a failure as a broken player with no message — so a refusal that
+ * only lives there is a refusal nobody reads. This summary is fetched by
+ * script, under the same settings, before the player is pointed anywhere.
+ * The render refuses too; this is what makes the refusal legible.
+ */
+refusal: string | null, };

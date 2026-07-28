@@ -20,6 +20,14 @@ pub enum AppError {
     Store(#[from] StoreError),
     #[error("{0}")]
     BadRequest(String),
+    /// A request that makes sense and asks for something this scale cannot give.
+    ///
+    /// Separate from `BadRequest` because nothing about it is a mistake: the
+    /// mapping exists, the knob is inside its published range, and the pair
+    /// simply has no answer for this speaker. The client's move is to change a
+    /// setting rather than to fix a malformed request, and the code says which.
+    #[error("{0}")]
+    Unplayable(String),
 }
 
 /// The JSON body of any failed request.
@@ -54,6 +62,7 @@ impl IntoResponse for AppError {
                 (StatusCode::INTERNAL_SERVER_ERROR, "storage_io")
             }
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
+            AppError::Unplayable(_) => (StatusCode::UNPROCESSABLE_ENTITY, "unplayable"),
         };
 
         // Server-side faults are logged where they happen; client-side ones are

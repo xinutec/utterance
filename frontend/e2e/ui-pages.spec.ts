@@ -93,7 +93,16 @@ const VOICE = {
   calibrationId: "0123456789abcdef",
   calibrationLabel: "steady-ah",
   takes: 7,
+  // Present and null, not absent. A mock missing a field the wire really
+  // carries makes every assertion about that field pass by not running.
+  refusal: null,
 };
+
+/** What the backend says when the chosen mapping has no answer for this scale. */
+const REFUSAL =
+  "Lattice cannot be played in this scale: this voice's scale has one interval " +
+  "(702¢) besides the tonic and the octave, and a lattice is spanned by two " +
+  "intervals pointing different ways. Lowering the scale density keeps more of them.";
 
 /**
  * The mapping's knobs, as the backend publishes them.
@@ -281,6 +290,31 @@ test("studio — the derived scale lays out cleanly @ phone", async ({ page }, t
     window.scrollTo(0, 0);
   });
 
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
+test("studio — a scale that carries no lattice says so @ phone", async ({ page }, testInfo) => {
+  // The state this replaced was a player that produced consonants and silence,
+  // which reads as a broken build rather than as a setting to move. It is a
+  // paragraph of prose in a page otherwise made of numbers and controls, so it
+  // is also the likeliest thing here to overflow a phone.
+  await mockApi(page);
+  await page.route("**/api/voice*", (r) => r.fulfill({ json: { ...VOICE, refusal: REFUSAL } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Render as music" }).click();
+  await page.getByRole("alert").filter({ hasText: "Lattice cannot be played" }).waitFor();
+
+  // No player for the *derived* music: pointing one at a render the backend
+  // refuses gives a broken control and no reason, which is the failure this
+  // whole message exists for. Scoped to the component, because the page also
+  // carries a player for the recording itself and that one plays fine.
+  await expect(page.locator("app-derived-music audio.player")).toHaveCount(0);
+
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
   await expectNoOccludedControls(page, testInfo);

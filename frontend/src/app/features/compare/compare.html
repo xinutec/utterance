@@ -43,6 +43,10 @@
     <span class="b">B</span> <code>{{ queryB() }}</code>
   </p>
 
+  @if (unplayable(); as why) {
+    <p class="refusal" role="alert">{{ why }}</p>
+  }
+
   @if (loading()) {
     <mat-progress-bar mode="indeterminate" aria-label="Rendering both"></mat-progress-bar>
   }
