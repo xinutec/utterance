@@ -1,0 +1,15 @@
+# Keep the build context to source. `data/` matters most: it is real recordings
+# of real voices, and a build context is copied wholesale to the daemon — so a
+# local `docker build` would ship 51 MB of someone's voice to it even though no
+# COPY names it. CI never has the directory (it is gitignored), which is exactly
+# why the risk here is local and worth naming.
+data/
+target/
+result
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/test-results/
+.direnv/
+.git/
+.DS_Store
