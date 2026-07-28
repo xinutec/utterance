@@ -53,20 +53,27 @@ const CELLS_PER_REACH: f32 = 3.0;
 /// Where one voice sits above the next at `spacing = 1`, in cents.
 ///
 /// A target rather than a rule: each voice takes whichever octave of its pitch
-/// falls nearest to its own place in the register. 150 cents is close position —
-/// near enough for two voices' partials to beat against each other, which is the
-/// whole point of holding a chord still.
-const CLOSE_POSITION_CENTS: f32 = 150.0;
+/// falls nearest to its own place in the register. A quarter of an octave, so
+/// the closest a chord is ever voiced still spreads five voices across one —
+/// near enough for two voices' partials to beat against each other, which is
+/// the whole point of holding a chord still.
+///
+/// Set by measuring against the other mapping rather than by taste. At half
+/// this, the default chord occupied 113–237 Hz where the field mapping's
+/// occupied 122–928: five voices inside one octave at the bottom of a man's
+/// range, which is mud whatever its tuning. Two mappings meant to be compared
+/// have to sit in the same register or the comparison is about register.
+const CLOSE_POSITION_CENTS: f32 = 300.0;
 
 /// Widest the chord is allowed to be laid out across, in cents.
 ///
-/// Three octaves, which is what the field mapping's own stacking works out to.
+/// Four octaves, a little past what the field mapping's own stacking reaches.
 /// Without it, twelve voices at the widest spacing would target more than eight
 /// octaves above the tonic and the upper ones would leave the range a person
 /// hears — a voice count that silently stops meaning voices. Spacing is capped
 /// against the voice count rather than in itself, so a small chord can still be
 /// as open as it likes.
-const MAX_SPAN_CENTS: f32 = 3600.0;
+const MAX_SPAN_CENTS: f32 = 4800.0;
 
 /// Least distance between two voices, in cents.
 ///

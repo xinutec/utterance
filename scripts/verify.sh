@@ -5,6 +5,37 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# One run at a time, and say so rather than queueing.
+#
+# Two of these overlapping do not merely waste a CPU: they share the working
+# tree. `scripts/check-types.sh` regenerates into `frontend/src/app/generated`
+# while the other run is comparing that directory against a snapshot, so the
+# second reports drift that does not exist — and worse, leaves the loser's temp
+# directory behind inside `generated/`, which the *next* run then reports as
+# drift too. That happened, and cost more time to diagnose than every run it
+# would ever block.
+#
+# Refused rather than queued. A second run started by hand is nearly always
+# someone who forgot the first, and telling them beats silently making them wait
+# for two full gates.
+# `mkdir` rather than `flock`, which macOS does not ship. Creating a directory
+# is atomic everywhere, and the pid inside it is what lets a lock left behind by
+# a killed run be told from a live one.
+lock="${TMPDIR:-/tmp}/music-verify.lock"
+if ! mkdir "$lock" 2>/dev/null; then
+  owner="$(cat "$lock/pid" 2>/dev/null || true)"
+  if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then
+    echo "verify is already running as pid $owner." >&2
+    echo "Wait for it or kill it — two at once corrupt each other's generated types." >&2
+    exit 2
+  fi
+  echo "clearing a stale lock left by pid ${owner:-unknown}" >&2
+  rm -rf "$lock"
+  mkdir "$lock"
+fi
+printf '%s\n' "$$" >"$lock/pid"
+trap 'rm -rf "$lock"' EXIT
+
 nix develop -c bash -c '
   set -euo pipefail
   cargo fmt --all --check
