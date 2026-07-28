@@ -2,7 +2,7 @@
 
 use axum::body::Bytes;
 use axum::extract::{Path, Query, State};
-use axum::http::header;
+use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use axum::{Json, response::Response};
 use music_analysis::voiceprint::Voiceprint;
@@ -13,6 +13,74 @@ use crate::state::AppState;
 use crate::store::RecordingMeta;
 use crate::voice;
 use music_mapping::params::Params;
+
+/// Serve audio so a browser can seek in it.
+///
+/// **Why this is not just a body with a content type.** An `<audio>` element
+/// will only move its playhead to a position it can actually fetch, and without
+/// `Accept-Ranges` it has no way to ask for one — so `currentTime = 27.5` is
+/// silently ignored and the element stays where it was. That failure looks
+/// exactly like a broken button: the page asks to jump, nothing happens, and
+/// the next `timeupdate` reports zero.
+///
+/// Both audio endpoints go through here, because the compare page seeks in
+/// renders and the studio seeks in the original recording, and neither has any
+/// reason to be the one that cannot.
+fn audio_response(bytes: Vec<u8>, range: Option<&str>) -> Response {
+    let total = bytes.len() as u64;
+    let common = [
+        (header::CONTENT_TYPE, "audio/wav".to_string()),
+        // Advertised even on a full response: it is how the element learns that
+        // seeking is available at all.
+        (header::ACCEPT_RANGES, "bytes".to_string()),
+    ];
+
+    let Some((start, end)) = range.and_then(|r| parse_range(r, total)) else {
+        return (common, bytes).into_response();
+    };
+
+    let slice = bytes[start as usize..=end as usize].to_vec();
+    (
+        StatusCode::PARTIAL_CONTENT,
+        common,
+        [(
+            header::CONTENT_RANGE,
+            format!("bytes {start}-{end}/{total}"),
+        )],
+        slice,
+    )
+        .into_response()
+}
+
+/// The inclusive byte range a `Range` header asks for, if it asks for one we
+/// serve.
+///
+/// Only the single-range `bytes=start-end` forms, which is all any media element
+/// sends. A multi-range request would need a multipart body; answering `None`
+/// sends the whole file instead, which is correct if wasteful and cannot be
+/// heard.
+fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
+    let spec = header.strip_prefix("bytes=")?;
+    if spec.contains(',') || total == 0 {
+        return None;
+    }
+    let (from, to) = spec.split_once('-')?;
+
+    let (start, end) = match (from.trim(), to.trim()) {
+        // `bytes=-500`: the last 500 bytes.
+        ("", last) => {
+            let len: u64 = last.parse().ok()?;
+            (total.saturating_sub(len), total - 1)
+        }
+        (first, "") => (first.parse().ok()?, total - 1),
+        (first, last) => (
+            first.parse().ok()?,
+            last.parse::<u64>().ok()?.min(total - 1),
+        ),
+    };
+
+    (start <= end && start < total).then_some((start, end))
+}
 
 /// The mappings a render may ask for.
 ///
@@ -172,9 +240,13 @@ pub async fn detail(
 pub async fn audio(
     State(app): State<AppState>,
     Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Response, AppError> {
     let bytes = app.store.audio(&id)?;
-    Ok(([(header::CONTENT_TYPE, "audio/wav")], bytes).into_response())
+    Ok(audio_response(
+        bytes,
+        headers.get(header::RANGE).and_then(|v| v.to_str().ok()),
+    ))
 }
 
 /// `DELETE /api/recordings/{id}`.
@@ -491,6 +563,7 @@ pub async fn render(
     State(app): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<VoiceParams>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Response, AppError> {
     let (score, tuning) = build_score(&app, &id, &params)?;
     tracing::info!(
@@ -503,7 +576,10 @@ pub async fn render(
     );
 
     let bytes = music_realisation::wav::encode(&music_realisation::synth::render(&score));
-    Ok(([(header::CONTENT_TYPE, "audio/wav")], bytes).into_response())
+    Ok(audio_response(
+        bytes,
+        headers.get(header::RANGE).and_then(|v| v.to_str().ok()),
+    ))
 }
 
 /// The score a set of parameters asks for, and the scale it is played in.

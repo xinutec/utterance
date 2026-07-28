@@ -257,10 +257,25 @@ export class Compare implements OnInit {
     this.applySide();
   }
 
+  /**
+   * Move both players to the same moment.
+   *
+   * **A seek before the element knows how long it is does nothing at all.**
+   * Assigning `currentTime` while `readyState` is still `HAVE_NOTHING` is
+   * dropped in silence, and the next `timeupdate` then reports zero — so the
+   * playhead snaps back and the button looks broken. Waiting for metadata is
+   * what makes an early click work rather than being swallowed.
+   */
   seekTo(seconds: number): void {
-    this.both().forEach((p) => {
-      p.currentTime = seconds;
-    });
+    for (const player of this.both()) {
+      if (player.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        player.currentTime = seconds;
+      } else {
+        player.addEventListener("loadedmetadata", () => (player.currentTime = seconds), {
+          once: true,
+        });
+      }
+    }
     this.playhead.set(seconds);
   }
 

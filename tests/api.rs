@@ -908,3 +908,111 @@ async fn a_note_mapping_reports_its_notes_and_no_streams() {
         "a note mapping with no notes"
     );
 }
+
+#[tokio::test]
+async fn audio_can_be_seeked_in() {
+    // An `<audio>` element only moves its playhead to a position it can fetch,
+    // and without this it has no way to ask for one — so `currentTime = 27.5`
+    // is dropped in silence and the compare page's jump-to-the-difference
+    // button appears to do nothing.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    for path in [
+        format!("/api/recordings/{id}/render"),
+        format!("/api/recordings/{id}/audio"),
+    ] {
+        let res = app
+            .router
+            .clone()
+            .oneshot(Request::get(&path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            res.headers()
+                .get("accept-ranges")
+                .map(|v| v.to_str().unwrap()),
+            Some("bytes"),
+            "{path} never told the browser it could be seeked in"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_range_request_is_answered_with_that_range() {
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+    let path = format!("/api/recordings/{id}/render");
+
+    let (_, _, whole) = fetch(&app, &path).await;
+
+    let res = app
+        .router
+        .clone()
+        .oneshot(
+            Request::get(&path)
+                .header("range", "bytes=1000-1999")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        res.headers()
+            .get("content-range")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        format!("bytes 1000-1999/{}", whole.len())
+    );
+
+    let part = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(part.len(), 1000);
+    // The bytes served have to be the bytes asked for, or a seek lands somewhere
+    // other than where the chart said it would.
+    assert_eq!(&part[..], &whole[1000..2000]);
+}
+
+#[tokio::test]
+async fn a_range_past_the_end_is_refused_rather_than_truncated_wrongly() {
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+    let path = format!("/api/recordings/{id}/render");
+    let (_, _, whole) = fetch(&app, &path).await;
+
+    // A start beyond the file has no sensible partial answer; the whole file is
+    // the safe response and is what an element recovers from.
+    let res = app
+        .router
+        .clone()
+        .oneshot(
+            Request::get(&path)
+                .header("range", format!("bytes={}-", whole.len() + 10))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // An open-ended range runs to the last byte.
+    let res = app
+        .router
+        .clone()
+        .oneshot(
+            Request::get(&path)
+                .header("range", "bytes=100-")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
+    let part = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(part.len(), whole.len() - 100);
+}
