@@ -87,8 +87,15 @@ const MAX_BREATH: f32 = 0.3;
 /// make the same sentence produce a different piece depending on how much of the
 /// speaker's range it happened to use.
 pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
+    compose_with(vp, voice, crate::params::Params::default())
+}
+
+/// The same, with the knobs set explicitly.
+pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: crate::params::Params) -> Score {
+    let params = params.sane();
+    let tuning = crate::params::bind_toward_equal(&voice.tuning, params.bind);
     // The octave duplicates the tonic, so it is not a separate choice.
-    let degrees = &voice.tuning.degrees;
+    let degrees = &tuning.degrees;
     let choices = &degrees[..degrees.len().saturating_sub(1)];
     if choices.is_empty() {
         return empty(vp, voice);
@@ -150,7 +157,7 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
         duration_s: vp.source.duration_s,
         palette: voice.palette.clone(),
         detune_cents: voice.detune_cents,
-        noise: compose_noise(vp, loudest),
+        noise: compose_noise(vp, loudest, params.consonants),
         // This mapping produces notes, not a field. Emitting both would sound
         // both at once; they are alternatives to be judged against each other,
         // which is what the mapping layer is for.
@@ -289,7 +296,10 @@ const MIN_NOISE_BANDWIDTH_HZ: f32 = 250.0;
 /// Each run of consecutive noise-like frames becomes one event, keeping the
 /// speaker's own consonant timing — which is also the fastest structural layer
 /// in speech, and the only one the note stream cannot carry.
-pub fn compose_noise(vp: &Voiceprint, loudest_db: f32) -> Vec<NoiseEvent> {
+pub fn compose_noise(vp: &Voiceprint, loudest_db: f32, level: f32) -> Vec<NoiseEvent> {
+    if level <= 0.0 {
+        return Vec::new();
+    }
     let flatness = &vp.texture.flatness;
     let centroid = &vp.texture.centroid_hz;
     let voiced = &vp.pitch.hz;
@@ -305,7 +315,8 @@ pub fn compose_noise(vp: &Voiceprint, loudest_db: f32) -> Vec<NoiseEvent> {
         match (noisy, run) {
             (true, None) => run = Some(i),
             (false, Some(start)) => {
-                if let Some(event) = noise_run(vp, start, i, centroid, flatness, loudest_db) {
+                if let Some(mut event) = noise_run(vp, start, i, centroid, flatness, loudest_db) {
+                    event.amplitude *= level;
                     out.push(event);
                 }
                 run = None;

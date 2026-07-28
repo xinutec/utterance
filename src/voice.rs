@@ -50,6 +50,15 @@ pub struct Calibrated {
 /// Everything else pools across every take, because vowel-space corners and
 /// pitch range improve with material where a harmonic series does not.
 pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated, AppError> {
+    calibrate_with(store, override_id, music_mapping::tuning::MIN_DEPTH)
+}
+
+/// The same, choosing how dense the derived scale is.
+pub fn calibrate_with(
+    store: &Store,
+    override_id: Option<&str>,
+    min_depth: f32,
+) -> Result<Calibrated, AppError> {
     let metas = store.list()?;
     let takes: Vec<(RecordingMeta, Voiceprint)> = metas
         .into_iter()
@@ -89,7 +98,7 @@ pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated,
             .iter()
             .filter(|(_, v)| v.partials.frames_used >= MIN_CALIBRATION_FRAMES)
             .max_by_key(|(_, v)| {
-                let degrees = tuning::from_partials(&v.partials)
+                let degrees = tuning::from_partials_with(&v.partials, min_depth)
                     .map(|t| t.degrees.len())
                     .unwrap_or(0);
                 (degrees, v.partials.frames_used)
@@ -124,12 +133,13 @@ pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated,
     // make the timbre depend on the mood.
     let detune_cents = voice::jitter_cents(&voiceprint.pitch.hz);
 
-    let voice = Voice::from_calibration(
+    let voice = Voice::from_calibration_with(
         &voiceprint.partials,
         &palette,
         detune_cents,
         space,
         tonic_hz,
+        min_depth,
     )
     .ok_or_else(|| {
         AppError::BadRequest(

@@ -63,7 +63,32 @@ impl Voice {
         space: VowelSpace,
         tonic_hz: f32,
     ) -> Option<Self> {
-        let tuning = tuning::from_partials(tuning_from)?;
+        Self::from_calibration_with(
+            tuning_from,
+            palette_from,
+            detune_cents,
+            space,
+            tonic_hz,
+            tuning::MIN_DEPTH,
+        )
+    }
+
+    /// The same, choosing how dense the derived scale is.
+    ///
+    /// Density belongs here rather than downstream because it decides how many
+    /// degrees the scale *has*, and that happens when the scale is derived. A
+    /// mapping handed a finished tuning can move its degrees but cannot conjure
+    /// the ones the derivation already discarded.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_calibration_with(
+        tuning_from: &Partials,
+        palette_from: &[&Partials],
+        detune_cents: f32,
+        space: VowelSpace,
+        tonic_hz: f32,
+        min_depth: f32,
+    ) -> Option<Self> {
+        let tuning = tuning::from_partials_with(tuning_from, min_depth)?;
 
         let mut palette: Vec<Spectrum> = palette_from
             .iter()

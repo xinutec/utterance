@@ -363,12 +363,31 @@ fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
     let formant = |hz: f32, center: f32, bw: f32| 1.0 / (1.0 + ((hz - center) / bw).powi(2));
 
     let total = (RATE as f32 * secs) as usize;
+    // Deterministic, so the fixture is the same every run.
+    let mut state: u32 = 0x9E37_79B9;
+    let mut hiss = (0.0f32, 0.0f32);
     let samples: Vec<f32> = (0..total)
         .map(|i| {
             let t = i as f32 / RATE as f32;
             if (t / 0.5).fract() >= 0.6 {
                 return 0.0;
             }
+            // The last 80 ms of each burst is a fricative rather than a vowel:
+            // band-limited noise where the tone would be. Without it the fixture
+            // is all vowel and all silence, and nothing exercises the consonant
+            // path — a knob that turns consonants off then changes nothing, and
+            // a test that sweeps it passes while proving nothing.
+            if (t / 0.5).fract() >= 0.52 {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                let white = (state as f32 / u32::MAX as f32) * 2.0 - 1.0;
+                let y = white + 1.2 * hiss.0 - 0.72 * hiss.1;
+                hiss.1 = hiss.0;
+                hiss.0 = y;
+                return y * 0.12;
+            }
+
             // Alternate vowels every half second, so both ends of the space are
             // visited often enough to survive the profile's percentile trim.
             let (f1, f2) = if ((t / 0.5) as u32).is_multiple_of(2) {
@@ -638,4 +657,71 @@ async fn an_unknown_mapping_is_refused_rather_than_ignored() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn both_mappings_can_sound_together() {
+    // Freedom to combine, not only to choose: a stream of events over a texture
+    // is a third thing, and neither mapping alone can produce it.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (status, _, both) = fetch(
+        &app,
+        &format!("/api/recordings/{id}/render?mapping=field,notes"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, _, field) = fetch(&app, &format!("/api/recordings/{id}/render?mapping=field")).await;
+    let (_, _, notes) = fetch(&app, &format!("/api/recordings/{id}/render?mapping=notes")).await;
+    assert_ne!(
+        both, field,
+        "combining changed nothing against the field alone"
+    );
+    assert_ne!(
+        both, notes,
+        "combining changed nothing against the notes alone"
+    );
+}
+
+#[tokio::test]
+async fn the_knobs_change_what_is_rendered() {
+    // A knob that silently does nothing is worse than no knob.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (_, _, plain) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
+    for knob in [
+        "bind=0",
+        "density=0.15",
+        "voices=2",
+        "spacing=1",
+        "drift=1.5",
+        "reach=0",
+        "consonants=0",
+    ] {
+        let (status, _, altered) =
+            fetch(&app, &format!("/api/recordings/{id}/render?{knob}")).await;
+        assert_eq!(status, StatusCode::OK, "{knob} was refused");
+        assert_ne!(altered, plain, "{knob} changed nothing");
+    }
+}
+
+#[tokio::test]
+async fn taking_no_knobs_renders_the_defaults() {
+    // Every earlier render has to stay comparable with every later one.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (_, _, plain) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
+    let (_, _, explicit) = fetch(
+        &app,
+        &format!("/api/recordings/{id}/render?bind=1&voices=5&spacing=2&drift=0.25&reach=1"),
+    )
+    .await;
+    assert_eq!(plain, explicit);
 }

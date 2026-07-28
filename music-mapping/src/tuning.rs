@@ -75,6 +75,11 @@ pub struct Tuning {
 /// partial has nothing to collide with, so its curve is flat and every point on
 /// it is equally consonant, which is true and useless.
 pub fn from_partials(partials: &Partials) -> Option<Tuning> {
+    from_partials_with(partials, MIN_DEPTH)
+}
+
+/// Derive a scale, choosing how deep a dip has to be to count as a note.
+pub fn from_partials_with(partials: &Partials, min_depth: f32) -> Option<Tuning> {
     let f0 = partials.f0_hz?;
     let spectrum: Vec<Component> = partials
         .partials
@@ -84,7 +89,7 @@ pub fn from_partials(partials: &Partials) -> Option<Tuning> {
             amplitude: p.amplitude,
         })
         .collect();
-    from_spectrum(&spectrum)
+    from_spectrum_with(&spectrum, min_depth)
 }
 
 /// Derive a scale from any spectrum, harmonic or not.
@@ -94,6 +99,11 @@ pub fn from_partials(partials: &Partials) -> Option<Tuning> {
 /// answer must come out somewhere other than just intonation or the procedure is
 /// only rediscovering its own assumptions.
 pub fn from_spectrum(spectrum: &[Component]) -> Option<Tuning> {
+    from_spectrum_with(spectrum, MIN_DEPTH)
+}
+
+/// Derive a scale from any spectrum at a chosen depth threshold.
+pub fn from_spectrum_with(spectrum: &[Component], min_depth: f32) -> Option<Tuning> {
     if spectrum.len() < 2 {
         return None;
     }
@@ -109,7 +119,7 @@ pub fn from_spectrum(spectrum: &[Component]) -> Option<Tuning> {
     let curve: Vec<f32> = raw.iter().map(|v| v / peak).collect();
 
     let mut degrees = vec![endpoint(&curve, 0)];
-    degrees.extend(interior_minima(&curve));
+    degrees.extend(interior_minima(&curve, min_depth));
     degrees.push(endpoint(&curve, RESOLUTION));
 
     Some(Tuning { degrees, curve })
@@ -131,7 +141,7 @@ fn endpoint(curve: &[f32], index: usize) -> Degree {
 }
 
 /// Every local minimum deep enough to call a note.
-fn interior_minima(curve: &[f32]) -> Vec<Degree> {
+fn interior_minima(curve: &[f32], min_depth: f32) -> Vec<Degree> {
     let mut found = Vec::new();
     for i in 1..curve.len() - 1 {
         // Strict on one side and weak on the other, so a flat-bottomed valley
@@ -140,7 +150,7 @@ fn interior_minima(curve: &[f32]) -> Vec<Degree> {
             continue;
         }
         let depth = prominence(curve, i);
-        if depth >= MIN_DEPTH {
+        if depth >= min_depth {
             found.push(Degree {
                 cents: i as f32,
                 ratio: cents_to_ratio(i as f32),

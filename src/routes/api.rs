@@ -12,6 +12,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 use crate::store::RecordingMeta;
 use crate::voice;
+use music_mapping::params::Params;
 
 /// Query string of the endpoints that need a speaker's musical world.
 #[derive(Debug, Deserialize)]
@@ -23,13 +24,54 @@ pub struct VoiceParams {
     /// vowel a tuning should come from is not settled.
     #[serde(default)]
     pub calibration: Option<String>,
-    /// Which mapping to hear.
+    /// Which mapping or mappings to hear, comma separated.
     ///
     /// `field` (the default) sounds every frame as a continuous texture;
-    /// `notes` sounds discrete events at onsets. They are alternatives over the
-    /// same voiceprint and the only way to judge either is against the other.
+    /// `notes` sounds discrete events at onsets; `field,notes` sounds both, so
+    /// a stream of events sits over a texture. The only way to judge any of them
+    /// is against the others.
     #[serde(default)]
     pub mapping: Option<String>,
+
+    /// How far the speaker's own scale is used, 0..1. See
+    /// `music_mapping::params::Params::bind`.
+    #[serde(default)]
+    pub bind: Option<f32>,
+    /// How deep a dip must be to count as a note.
+    #[serde(default)]
+    pub density: Option<f32>,
+    /// Voices sounding at once in the field.
+    #[serde(default)]
+    pub voices: Option<usize>,
+    /// Scale degrees between one field voice and the next.
+    #[serde(default)]
+    pub spacing: Option<usize>,
+    /// Octaves the field transposes across the speaker's pitch range.
+    #[serde(default)]
+    pub drift: Option<f32>,
+    /// Octaves the root travels as the vowel moves front to back.
+    #[serde(default)]
+    pub reach: Option<f32>,
+    /// Loudness of the consonants against the pitched material.
+    #[serde(default)]
+    pub consonants: Option<f32>,
+}
+
+impl VoiceParams {
+    /// The mapping knobs, defaulted where the caller said nothing.
+    fn params(&self) -> Params {
+        let base = Params::default();
+        Params {
+            bind: self.bind.unwrap_or(base.bind),
+            density: self.density.unwrap_or(base.density),
+            voices: self.voices.unwrap_or(base.voices),
+            spacing: self.spacing.unwrap_or(base.spacing),
+            drift: self.drift.unwrap_or(base.drift),
+            reach: self.reach.unwrap_or(base.reach),
+            consonants: self.consonants.unwrap_or(base.consonants),
+        }
+        .sane()
+    }
 }
 
 /// Query string of `POST /api/recordings`.
@@ -168,7 +210,11 @@ pub async fn voice_summary(
     State(app): State<AppState>,
     Query(params): Query<VoiceParams>,
 ) -> Result<Json<VoiceSummary>, AppError> {
-    let calibrated = voice::calibrate(&app.store, params.calibration.as_deref())?;
+    let calibrated = voice::calibrate_with(
+        &app.store,
+        params.calibration.as_deref(),
+        params.params().density,
+    )?;
     Ok(Json(VoiceSummary {
         tonic_hz: calibrated.voice.tonic_hz,
         degrees: calibrated
@@ -201,18 +247,38 @@ pub async fn render(
     Path(id): Path<String>,
     Query(params): Query<VoiceParams>,
 ) -> Result<Response, AppError> {
-    let calibrated = voice::calibrate(&app.store, params.calibration.as_deref())?;
+    let knobs = params.params();
+    let calibrated =
+        voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
     let voiceprint = app.store.voiceprint(&id)?;
 
-    let score = match params.mapping.as_deref() {
-        Some("notes") => music_mapping::compose::compose(&voiceprint, &calibrated.voice),
-        Some(other) if other != "field" => {
-            return Err(AppError::BadRequest(format!(
-                "no mapping called {other} — try 'field' or 'notes'"
-            )));
-        }
-        _ => music_mapping::field::score(&voiceprint, &calibrated.voice),
+    let wanted = params.mapping.as_deref().unwrap_or("field");
+    let names: Vec<&str> = wanted
+        .split(',')
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .collect();
+    if let Some(unknown) = names.iter().find(|n| !matches!(**n, "field" | "notes")) {
+        return Err(AppError::BadRequest(format!(
+            "no mapping called {unknown} — try 'field', 'notes', or both"
+        )));
+    }
+    if names.is_empty() {
+        return Err(AppError::BadRequest("no mapping asked for".into()));
+    }
+
+    // Built by starting from one mapping and lifting the other's material into
+    // it. Both carry the consonants, so taking them from the first and leaving
+    // the second's behind is what stops the noise layer being played twice.
+    let mut score = if names.contains(&"field") {
+        music_mapping::field::score_with(&voiceprint, &calibrated.voice, knobs)
+    } else {
+        music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs)
     };
+    if names.contains(&"field") && names.contains(&"notes") {
+        score.events =
+            music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs).events;
+    }
     tracing::info!(
         "rendered {} as {} notes, {} consonants and {} field voices in a {}-degree scale from {}",
         id,

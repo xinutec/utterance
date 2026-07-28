@@ -26,33 +26,16 @@
 use music_analysis::voiceprint::Voiceprint;
 
 use crate::compose::compose_noise;
+use crate::params::{self, Params};
 use crate::score::{Field, Score};
 use crate::voice::Voice;
 
-/// How many voices sound at once.
+/// Voices the field sounds with when nobody says otherwise.
 ///
-/// Five. Enough that the result is a texture rather than a chord anyone counts,
-/// few enough that each is separately audible — past about seven, added voices
-/// thicken the sound without being heard as themselves.
+/// Enough that the result is a texture rather than a chord anyone counts, few
+/// enough that each is separately audible. Now a default rather than a rule —
+/// see [`Params`].
 pub const VOICES: usize = 5;
-
-/// Scale degrees between one voice and the next.
-///
-/// Two, so the voices stack in thirds of whatever the speaker's scale turns out
-/// to be rather than in seconds. In a scale with eight degrees that is a spread
-/// of roughly two octaves across five voices.
-const VOICE_SPACING: usize = 2;
-
-/// Octaves the root moves across as the vowel travels front to back.
-const ROOT_OCTAVES: f32 = 1.0;
-
-/// How far the field transposes for the speaker's full pitch range, in octaves.
-///
-/// Deliberately small. His prosody spans an octave and a half over a phrase, and
-/// following it directly would make the field lurch about — the point is drift
-/// that a listener feels as the piece having a shape, not a melody traced in
-/// parallel.
-const DRIFT_OCTAVES: f32 = 0.25;
 
 /// Frames the pitch drift is averaged over.
 ///
@@ -85,7 +68,14 @@ const FLOOR: f32 = 0.02;
 ///
 /// Returns `None` when the take has no usable scale to place voices in.
 pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
-    let degrees = &voice.tuning.degrees;
+    compose_with(vp, voice, Params::default())
+}
+
+/// Build the field with the knobs set explicitly.
+pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Field> {
+    let params = params.sane();
+    let tuning = params::bind_toward_equal(&voice.tuning, params.bind);
+    let degrees = &tuning.degrees;
     // The octave duplicates the tonic, so it is not a separate choice.
     let choices = degrees.len().saturating_sub(1);
     if choices == 0 || vp.frame.count == 0 {
@@ -102,8 +92,8 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
     let front = smooth(&front_raw, ROOT_FRAMES);
     let level = smooth(&linear_level(vp), LEVEL_FRAMES);
 
-    let mut voices = vec![vec![0.0f32; frames]; VOICES];
-    let mut gains = vec![vec![0.0f32; frames]; VOICES];
+    let mut voices = vec![vec![0.0f32; frames]; params.voices];
+    let mut gains = vec![vec![0.0f32; frames]; params.voices];
     let mut colour = vec![0.0f32; frames];
     let mut breath = vec![0.0f32; frames];
 
@@ -117,22 +107,22 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
         // reading different from another would be normalised away. Against the
         // person, speaking above your usual pitch lifts the piece, which is the
         // utterance being the piece.
-        let drift_octaves = (drift[i] / voice.tonic_hz).max(0.01).log2() * DRIFT_OCTAVES;
-        let root_octaves = front[i].clamp(0.0, 1.0) * ROOT_OCTAVES;
+        let drift_octaves = (drift[i] / voice.tonic_hz).max(0.01).log2() * params.drift;
+        let root_octaves = front[i].clamp(0.0, 1.0) * params.reach;
         let base = voice.tonic_hz * 2f32.powf(drift_octaves + root_octaves);
 
         // An open vowel spreads the voices apart, a closed one gathers them.
         let spread = 1.0 + open[i].clamp(0.0, 1.0);
 
-        for v in 0..VOICES {
-            let step = ((v as f32 * VOICE_SPACING as f32 * spread) as usize).min(choices * 2);
+        for v in 0..params.voices {
+            let step = ((v as f32 * params.spacing as f32 * spread) as usize).min(choices * 2);
             let degree = degrees[step % choices];
             let octave = (step / choices) as f32;
             voices[v][i] = base * 2f32.powf(octave) * degree.ratio;
 
             // Upper voices fade in as the speaker gets louder, so a quiet
             // passage is a thinner texture and not merely a softer one.
-            let reach = (level[i] * VOICES as f32) - v as f32;
+            let reach = (level[i] * params.voices as f32) - v as f32;
             gains[v][i] = (level[i] * reach.clamp(0.0, 1.0)).max(if v == 0 { FLOOR } else { 0.0 });
         }
 
@@ -231,13 +221,19 @@ fn smooth(values: &[f32], window: usize) -> Vec<f32> {
 /// events by nature — a consonant is a thing that happens at a moment — so they
 /// stay a list whether the pitched material is a field or a stream of notes.
 pub fn score(vp: &Voiceprint, voice: &Voice) -> Score {
+    score_with(vp, voice, Params::default())
+}
+
+/// The same, with the knobs set explicitly.
+pub fn score_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
+    let params = params.sane();
     let loudest = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     Score {
         duration_s: vp.source.duration_s,
         palette: voice.palette.clone(),
         detune_cents: voice.detune_cents,
-        noise: compose_noise(vp, loudest),
-        field: compose(vp, voice),
+        noise: compose_noise(vp, loudest, params.consonants),
+        field: compose_with(vp, voice, params),
         events: Vec::new(),
     }
 }
