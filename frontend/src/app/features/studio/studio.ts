@@ -97,7 +97,8 @@ export class Studio implements OnInit {
   }
 
   onFileChosen(event: Event): void {
-    const input = event.target as HTMLInputElement;
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
     const file = input.files?.[0];
     if (file) this.store.upload(file, file.name);
     // Clear it, so choosing the same file twice in a row still fires a change.

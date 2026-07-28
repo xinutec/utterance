@@ -6,7 +6,6 @@ import { catchError } from "rxjs/operators";
 import type {
   Controls,
   Deleted,
-  ErrorBody,
   RecordingDetail,
   RecordingMeta,
   VoiceSummary,
@@ -40,6 +39,23 @@ export class ApiError extends Error {
   }
 }
 
+/** The named field of an unknown value, only if it really is a string.
+ *
+ *  `error.error` is typed `any` and holds whatever came back on the wire. When
+ *  the backend answered it is the generated `ErrorBody`, but an ingress 502 sends
+ *  HTML and a proxy can send a differently-shaped JSON — so asserting
+ *  `Partial<ErrorBody>` onto it manufactured a `string` the compiler then trusted
+ *  all the way to the screen, where a non-string paints as "[object Object]".
+ *  A predicate, not an assertion, so the belief is earned rather than declared. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+function stringField(value: unknown, key: string): string | null {
+  if (!isRecord(value)) return null;
+  const field = value[key];
+  return typeof field === "string" && field !== "" ? field : null;
+}
+
 /**
  * Turn anything thrown by HttpClient into an {@link ApiFailure}.
  *
@@ -48,7 +64,10 @@ export class ApiError extends Error {
  */
 export function classifyApiError(error: unknown): ApiFailure {
   if (!(error instanceof HttpErrorResponse)) {
-    return { kind: "unknown", message: error instanceof Error ? error.message : String(error) };
+    // NOT String(error): a thrown plain object stringifies to "[object Object]",
+    // which is what the user would then be shown as the explanation.
+    const message = error instanceof Error ? error.message : "something went wrong";
+    return { kind: "unknown", message };
   }
 
   // Status 0 means the request never got an answer: the backend is not running,
@@ -57,11 +76,10 @@ export function classifyApiError(error: unknown): ApiFailure {
     return { kind: "offline", message: "the backend is not responding" };
   }
 
-  const body = error.error as Partial<ErrorBody> | null;
-  const code = body?.code;
-  const message = body?.message ?? error.message;
+  const code = stringField(error.error, "code");
+  const message = stringField(error.error, "message") ?? error.message;
 
-  if (code === undefined) {
+  if (code === null) {
     return { kind: "unknown", message };
   }
   return error.status >= 500 ? { kind: "server", code, message } : { kind: "rejected", code, message };
