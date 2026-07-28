@@ -46,6 +46,17 @@ mirror of the rule keeping analysis from knowing what a scale is. By the time a
 score exists every musical decision is already made, which is what lets a
 synthesiser be rewritten without touching a mapping.
 
+**What a score carries is the ceiling on how the music can sound**, and it has
+been widened twice for exactly that reason. It began as four numbers per note
+plus one fixed spectrum, and no synthesiser craft could get past that — a
+spectrum that cannot change produces a tone that does not move. It now carries a
+palette of spectra to travel between, a colour per note, breath, the speaker's
+own detune, a stream of noise events for the consonants, and a `Field`: per-frame
+parameter streams for music that is not made of events at all.
+
+Widening this interface is how the output gets richer. Tinkering downstream of it
+is not.
+
 ```
 audio ──▶ [ analysis ] ──▶ voiceprint ──▶ [ mapping ] ──▶ score ──▶ [ realisation ] ──▶ audio
           objective                       aesthetic                  mechanical
@@ -70,6 +81,15 @@ checked against results the literature already establishes, and the derivation
 can be checked to be reading its input rather than restating its own assumptions
 — a stretched spectrum must *not* make the octave consonant. Whether the output
 sounds good is not a thing any test here decides.
+
+**Mappings coexist rather than replace each other.** Two exist: `compose` reads
+onsets and emits notes, `field` reads every frame and emits a continuously
+sounding texture. They are alternatives over one voiceprint, renderable
+separately or together, because the only way to judge either is against the
+other. Anything a mapping chooses that could reasonably be chosen differently
+belongs in `params::Params` and is reachable from the render URL — a constant can
+only be changed by editing and rebuilding, and these are meant to be swept by
+whoever is listening.
 
 **realisation** (`music-realisation`) turns a score into sound. Mechanical, and
 additive rather than sampled — forced rather than chosen, because a derived
@@ -113,9 +133,20 @@ The intent for each:
   continuity tracking, so a formant that drops out is reported as absent rather
   than filled in from the one above it.
 
-Planned, in rough order of how much they unlock (see `docs/roadmap.md`):
-measured partial ratios (→ tuning), stress hierarchy (→ meter), phone-class
-segmentation (→ symbol stream).
+- **partials** — the take's measured harmonic series, where it held a pitch long
+  enough to have one. Not a per-frame series: it describes the recording as a
+  whole. The amplitudes are the payload rather than the frequencies, because a
+  voice is very nearly harmonic and what differs between people is which
+  partials their tract emphasises. This is what a tuning is derived from.
+- **texture** — spectral centroid and flatness per frame, measured above 300 Hz.
+  Defined everywhere, interesting mostly where the voice is *unvoiced*: nearly
+  three quarters of ordinary speech carries no fundamental, and every other field
+  here gates that away. It characterises noise rather than classifying phones —
+  knowing a frame is an /s/ is a linguistic label, knowing its energy sits at
+  7 kHz across a wide band is what a synthesiser can act on.
+
+Planned, in rough order of how much they unlock (see `docs/roadmap.md`): stress
+hierarchy (→ meter), phone-class segmentation (→ symbol stream).
 
 ## The speaker profile
 

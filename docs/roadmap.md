@@ -15,13 +15,15 @@ the voiceprint as the interface between its layers.
 | formants F1/F2/F3 | done | LPC + Durand-Kerner. Range-constrained assignment. |
 | speaker profile | done | Per-person vowel-space corners and f0 range. |
 | measured partial ratios | done | Per take, over frames steady enough to use. |
-| stress hierarchy | **not started** | Needed for meter, and to fix onsets. |
+| noise shape (texture) | done | Centroid and flatness above 300 Hz. The consonants. |
+| stress hierarchy | **not started** | Was needed to fix onsets; the field mapping sidesteps it. |
 | phone-class segmentation | **not started** | Needed for the symbol stream. |
 
-All three layers exist. The chain runs end to end for the first time: a
-calibration take yields a scale and a timbre, an utterance yields a score, the
-score renders to audio. What that first render sounds like is the open question
-below.
+All three layers exist and the chain runs end to end from a browser: a
+calibration take yields a scale, a timbre palette and a detune; an utterance
+yields a score; the score renders to audio on demand at
+`/api/recordings/{id}/render`, with every mapping choice reachable as a query
+parameter.
 
 ## The four mappings
 
@@ -43,16 +45,20 @@ In rough order of how much each unlocks.
    - **Audibly not 12-TET.** Four of those six degrees sit 13–18 cents off
      equal temperament, and 7:5 at 582 cents has no equal-tempered equivalent.
 
-2. **Harmony from vowel space.** F1/F2 is a 2D manifold; the Tonnetz is a 2D
-   lattice. Map one onto the other and a sentence becomes a chord progression.
-   Not started as harmony. `compose.rs` currently spends the same measurement on
-   something far cruder — frontness picks a scale degree, openness picks an
-   octave — which is one note where this wants a progression. That crudeness is
-   deliberate: it was the shortest path to hearing anything.
+2. **Harmony from vowel space.** *Partly built* — `music-mapping/src/field.rs`.
+   Five voices stacked at a fixed degree spacing, with the root walked by vowel
+   frontness and the spread set by openness. That is polyphony from articulation,
+   which is most of the idea; what it is not yet is the Tonnetz mapping, where
+   the two dimensions of vowel space become the two dimensions of a harmonic
+   lattice and voice-leading falls out of the geometry.
 3. **Meter from stress hierarchy.** Nested strong/weak grouping from syllable
-   prominence. Blocked on stress measurement, which is also what onsets need.
+   prominence. Still blocked on stress measurement — but no longer on the
+   critical path, because the field mapping needs no rhythm at all. It went from
+   the thing everything waited on to an enrichment.
 4. **Development from the symbol stream.** Phone classes as an alphabet for a
-   deterministic rewrite system. The furthest out and the least specified.
+   deterministic rewrite system. The furthest out and the least specified, and
+   the place the project's oldest idea still lives: structure at every timescale
+   at once.
 
 ## Known gaps, with their cost
 
@@ -74,15 +80,19 @@ In rough order of how much each unlocks.
   milliseconds. Acceptable because it runs once per recording and the result is
   cached, but it is the reason a re-analysis sweep after a schema bump is now
   something you wait for.
-- **Nothing derived is visible or audible in the UI.** Partials, the derived
-  scale, the score and the rendered audio all exist only in the crates. The
-  studio still shows pitch, energy, events and vowel space, and there is no way
-  to hear a render from a browser — which is the thing the person supplying the
-  voice most needs.
-- **The first mapping is a placeholder.** `compose.rs` reads rhythm from onsets,
-  which mean *the spectrum changed*, not *a syllable began*. Until the stress
-  hierarchy exists the rhythm is wrong in a way no amount of taste in the mapping
-  will fix.
+- **The knobs are reachable only as query parameters.** Every mapping choice can
+  be swept from the render URL, and none of it is in the UI. Sliders that
+  re-render on release would turn exploring from an exercise in editing URLs into
+  something anyone can do.
+- **The field reads six streams; the voice emits about ten.** F3, spectral tilt
+  and the flux curve are measured and unread. They are the likeliest source of
+  internal movement if the field turns out to drone.
+- **Nothing operates above the phrase.** The field moves at three timescales —
+  level, articulation, prosodic drift — and the longest is two seconds. A piece
+  has a shape across its whole length and nothing here produces one.
+- **The note mapping's rhythm is still wrong.** `compose.rs` reads onsets, which
+  mean *the spectrum changed* rather than *a syllable began*. It is kept because
+  comparing mappings is how any of them get judged, not because it is right.
 
 ## Decisions taken
 
@@ -141,7 +151,34 @@ source, plus the one that most shapes daily work.
   remains reachable later. The speaker profile is not a violation: it is measured
   once per person and then fixed, not recomputed per take.
 
+- **Mappings are alternatives, not a pipeline** (2026-07-28). `compose` emits
+  notes and no field; `field` emits a field and no notes; both carry the
+  consonants, because a consonant is a thing that happens at a moment whichever
+  way the pitched material is made. A render may ask for either or both. The
+  reason to keep the weaker one is that comparison is the only way either gets
+  judged.
+
+- **Anything arguable is a parameter, not a constant** (2026-07-28). If a value
+  could reasonably be chosen differently it belongs in `params::Params` and is
+  reachable from the render URL. A constant can only be changed by editing,
+  rebuilding and re-rendering, which is the wrong loop for decisions that are
+  settled by ear. Defaults reproduce the unparameterised behaviour, so old
+  renders stay comparable with new ones.
+
+- **Prosody is measured against the speaker, not the take** (2026-07-28). The
+  field's pitch drift is relative to the profile's tonic rather than to the
+  utterance's own median. Against the take's median, an utterance spoken entirely
+  higher produces identical music — the thing that makes one reading different
+  from another is normalised away. Caught by a test, not by reasoning.
+
 ## Open questions
+
+- **Where on the convention-to-speaker axis is the music?** No longer a question
+  anyone has to answer from an armchair: `?bind=` sweeps it, from the speaker's
+  own scale at 1 to equal temperament at 0. What nobody has yet done is listen to
+  the sweep and decide. The pair worth comparing first is `bind=0` against
+  `bind=1` on the same take — the same derivation, once in this voice's tuning
+  and once in everyone's.
 
 - **Should a listener be able to perceive the connection back to the voice?**
   Not yet answered. It is the largest single constraint on the mapping layer: a
