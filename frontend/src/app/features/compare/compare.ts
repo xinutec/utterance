@@ -4,10 +4,12 @@ import {
   ElementRef,
   type OnInit,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
 } from "@angular/core";
+import { forkJoin } from "rxjs";
 import { DecimalPipe } from "@angular/common";
 import { MatButtonModule } from "@angular/material/button";
 import { MatButtonToggleModule } from "@angular/material/button-toggle";
@@ -100,9 +102,16 @@ export class Compare implements OnInit {
   /** What actually differs between the two sides, named. */
   readonly differing = computed(() => differences(this.a(), this.b(), this.controls.knobs()));
 
-  /** True once the loaded renders no longer match the current settings. */
+  /**
+   * True once the *audio* no longer matches the settings.
+   *
+   * Keyed on the take actually on screen rather than on `recordingId`, which
+   * stays null until someone opens the take picker — so this used to be
+   * permanently false, and the one hint that a re-render was needed never
+   * appeared.
+   */
   readonly stale = computed(() => {
-    const id = this.recordingId();
+    const id = this.chosen();
     if (!id || !this.urlA()) return false;
     return (
       this.urlA() !== this.api.renderUrl(id, this.queryA()) ||
@@ -125,6 +134,10 @@ export class Compare implements OnInit {
     // exists to make.
     return mostDifferentAt(a, b);
   });
+
+  constructor() {
+    this.watchSettings();
+  }
 
   ngOnInit(): void {
     this.store.refresh();
@@ -160,6 +173,45 @@ export class Compare implements OnInit {
     this.b.set(a);
   }
 
+  /**
+   * Keep the charts on whatever the sliders currently say.
+   *
+   * **Scores follow the settings; audio waits to be asked for.** Deriving a
+   * score is about fifty milliseconds — it is the mapping and nothing else —
+   * where rendering it to audio is seconds of synthesis. Tying both to a button
+   * meant moving a slider changed nothing on screen, and since the staleness
+   * warning was also broken there was no sign that anything needed pressing:
+   * the page looked as though the knobs did nothing at all.
+   *
+   * Responses are matched against the request that asked for them, so a burst
+   * of changes during a drag cannot leave an older answer on screen.
+   */
+  private scoreRequest = 0;
+
+  private watchSettings(): void {
+    effect(() => {
+      const id = this.chosen();
+      const [qa, qb] = [this.queryA(), this.queryB()];
+      if (!id) return;
+
+      const token = ++this.scoreRequest;
+      forkJoin([this.api.score(id, qa), this.api.score(id, qb)]).subscribe({
+        next: ([a, b]) => {
+          if (token !== this.scoreRequest) return;
+          this.scoreA.set(a);
+          this.scoreB.set(b);
+          this.error.set(null);
+        },
+        error: (err: unknown) => {
+          if (token === this.scoreRequest) {
+            this.error.set(err instanceof ApiError ? err.message : String(err));
+          }
+        },
+      });
+    });
+  }
+
+  /** Point the players at renders of the current settings. */
   load(): void {
     const id = this.chosen();
     if (!id) return;
@@ -168,25 +220,12 @@ export class Compare implements OnInit {
     this.error.set(null);
     const [qa, qb] = [this.queryA(), this.queryB()];
 
-    // Both scores before either player moves, so the chart and the audio always
-    // describe the same pair. Loading them one at a time would leave a window
-    // where the chart compares one new render against one old one.
-    this.api.score(id, qa).subscribe({
-      next: (a) => {
-        this.api.score(id, qb).subscribe({
-          next: (b) => {
-            this.scoreA.set(a);
-            this.scoreB.set(b);
-            this.urlA.set(this.api.renderUrl(id, qa));
-            this.urlB.set(this.api.renderUrl(id, qb));
-            this.playhead.set(0);
-            this.loading.set(false);
-          },
-          error: (err: unknown) => this.fail(err),
-        });
-      },
-      error: (err: unknown) => this.fail(err),
-    });
+    // Both URLs set together, so the two players never describe different
+    // settings from each other for even a moment.
+    this.urlA.set(this.api.renderUrl(id, qa));
+    this.urlB.set(this.api.renderUrl(id, qb));
+    this.playhead.set(0);
+    this.loading.set(false);
   }
 
   private fail(err: unknown): void {

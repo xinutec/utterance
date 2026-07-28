@@ -38,11 +38,19 @@
     </p>
   }
 
+  <p class="queries">
+    <span class="a">A</span> <code>{{ queryA() }}</code>
+    <span class="b">B</span> <code>{{ queryB() }}</code>
+  </p>
+
   @if (loading()) {
     <mat-progress-bar mode="indeterminate" aria-label="Rendering both"></mat-progress-bar>
   }
   @if (stale()) {
-    <p class="note">The settings have moved since these were rendered.</p>
+    <p class="note stale-note">
+      The charts are current; the <strong>audio</strong> is still the previous settings — press
+      Render both again to hear these.
+    </p>
   }
 
   @if (urlA(); as srcA) {

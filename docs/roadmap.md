@@ -80,10 +80,17 @@ In rough order of how much each unlocks.
   milliseconds. Acceptable because it runs once per recording and the result is
   cached, but it is the reason a re-analysis sweep after a schema bump is now
   something you wait for.
-- **No one has listened to the sweep.** The knobs are in the UI now, so the
-  open questions below are a slider and a button away rather than an exercise in
-  editing URLs — but the questions themselves are still open, and they can only
-  be closed by someone listening.
+- **Nothing sustains, so the tuning cannot be heard.** See the first open
+  question below: the derived scale is real and currently inaudible, because a
+  chord has to ring for about a second before its tuning is perceptible and
+  nothing here holds still that long. This is the same gap as "nothing operates
+  above the phrase", reached from the other direction.
+
+- **Comparing is now a page rather than an exercise in URLs.** `/compare` plays
+  two settings at once with one muted, so switching is instant and at the same
+  moment of the piece, and draws each stream's difference scaled to its own
+  largest gap. Built after four separate attempts to answer the `bind` question
+  by ear failed for want of an instrument.
 - **The field reads eight streams; the voice emits about ten.** What is still
   unread is the *shape* of the spectrum beyond its centroid — a tilt measurement
   proper, and the harmonic-to-noise balance per band. Neither is measured yet, so
@@ -211,13 +218,34 @@ source, plus the one that most shapes daily work.
 
 ## Open questions
 
-- **Where on the convention-to-speaker axis is the music?** No longer a question
-  anyone has to answer from an armchair: the *Bind to the voice* slider sweeps
-  it, from the speaker's own scale at 1 to equal temperament at 0, and the scale
-  shown beneath the player is the one that will sound at the current setting.
-  What nobody has yet done is listen to the sweep and decide. The pair worth
-  comparing first is 0 against 1 on the same take — the same derivation, once in
-  this voice's tuning and once in everyone's.
+- **Where on the convention-to-speaker axis is the music?** Swept, listened to,
+  and **not answerable as posed** (2026-07-28). Against every take in the store,
+  `bind=0` and `bind=1` are almost indistinguishable by ear.
+
+  Why, measured rather than guessed. The whole effect of `bind` is whether
+  partials of different voices land on each other or near each other: at 1 the
+  five strongest coincidences in the chord beat at 0.01–0.26 Hz — locked — and
+  at 0 the same ones beat at 4.8–14.3 Hz. Total chord roughness differs by 4%.
+  That is a real physical difference and it is inaudible here, because a beat
+  of a few hertz needs roughly a second of stable chord before anyone hears it
+  and the field never holds still that long: across a take the voices travel
+  3–4 semitones on the steadiest sustained vowel and 12–25 on speech.
+
+  **So the project's central claim is currently unhearable rather than wrong.**
+  The scale is derived, measured, and reproducible; the mapping moves too fast
+  to expose it. Answering this question needs a mapping whose harmonic rhythm is
+  slow enough for a chord to ring — which is the same thing the "nothing
+  operates above the phrase" gap asks for, from the other end.
+
+  Deliberately not acted on yet: sustaining means ignoring the voice for seconds
+  at a time, and continuous tracking is the relationship we want for now
+  (2026-07-28). Recorded so the trade is visible when it is next reopened.
+
+- **Which knobs actually change what anyone hears?** Measured on `vowel-ah`, as
+  how far each moves the pitch of the field at its widest: `density` 1516 cents,
+  `spacing` 1200, `voicing` 632, `reach` 600, `drift` 53, `bind` 18. Worth
+  keeping in view when choosing what to build: the knobs that restructure the
+  chord dominate the ones that adjust it.
 
 - **Should a listener be able to perceive the connection back to the voice?**
   Not yet answered. It is the largest single constraint on the mapping layer: a

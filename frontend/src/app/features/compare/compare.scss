@@ -60,6 +60,38 @@
   }
 }
 
+// The exact query each side asks for. On screen because a knob that appears to
+// do nothing is the failure this page is most prone to, and seeing the request
+// change is the fastest way to tell "it did nothing" from "it never arrived".
+.queries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  margin: 0;
+  font: var(--mat-sys-body-small);
+
+  code {
+    font-family: ui-monospace, monospace;
+    color: var(--mat-sys-on-surface-variant);
+    overflow-wrap: anywhere;
+  }
+
+  .a {
+    color: var(--mat-sys-primary);
+    font-weight: 600;
+  }
+
+  .b {
+    color: var(--mat-sys-tertiary);
+    font-weight: 600;
+  }
+}
+
+.stale-note {
+  color: var(--mat-sys-tertiary);
+}
+
 .legend {
   display: flex;
   align-items: center;
