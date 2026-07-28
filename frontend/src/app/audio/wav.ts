@@ -2,7 +2,7 @@
  * Minimal WAV writing, so captured audio reaches the backend losslessly.
  *
  * The backend's analyser takes WAV and nothing else — a deliberately narrow door
- * (see `music-analysis/src/wav.rs`). This is the other side of it.
+ * (see `utterance-analysis/src/wav.rs`). This is the other side of it.
  */
 
 /** Bytes in the canonical WAV header this writer emits. */

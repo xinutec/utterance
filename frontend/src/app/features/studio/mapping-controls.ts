@@ -22,7 +22,7 @@ import { knobValue, withKnob, type MappingSettings } from "./mapping-settings";
  *
  * **Nothing here is written down twice.** The sliders, their ranges and their
  * explanations come from `GET /api/controls`, which the mapping crate publishes.
- * Adding a knob to `music_mapping::params::KNOBS` makes it appear here; changing
+ * Adding a knob to `utterance_mapping::params::KNOBS` makes it appear here; changing
  * a range changes the slider. A UI keeping its own copy would eventually offer a
  * value the mapping clamps away, and the person turning it would hear nothing
  * and conclude the knob was broken.

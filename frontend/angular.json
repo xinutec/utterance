@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "music-web": {
+    "utterance-web": {
       "projectType": "application",
       "root": "",
       "sourceRoot": "src",
@@ -12,7 +12,7 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
-            "outputPath": "dist/music-web",
+            "outputPath": "dist/utterance-web",
             "browser": "src/main.ts",
             "index": "src/index.html",
             "tsConfig": "tsconfig.app.json",
@@ -47,15 +47,15 @@
           "builder": "@angular/build:dev-server",
           "options": { "proxyConfig": "proxy.conf.json" },
           "configurations": {
-            "production": { "buildTarget": "music-web:build:production" },
-            "development": { "buildTarget": "music-web:build:development" }
+            "production": { "buildTarget": "utterance-web:build:production" },
+            "development": { "buildTarget": "utterance-web:build:development" }
           },
           "defaultConfiguration": "development"
         },
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "buildTarget": "music-web:build:development",
+            "buildTarget": "utterance-web:build:development",
             "runner": "vitest",
             "tsConfig": "tsconfig.spec.json"
           }

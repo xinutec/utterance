@@ -1,14 +1,14 @@
-//! music — derive music from the structure of a voice.
+//! utterance — derive music from the structure of a voice.
 //! Entry point: open the store, build the router, serve.
 
 use anyhow::{Context, Result};
-use music::{
+use tracing_subscriber::EnvFilter;
+use utterance::{
     config::{Config, Invocation, invocation},
     routes,
     state::AppState,
     store::Store,
 };
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
         .with_context(|| format!("binding {bind_addr}"))?;
-    tracing::info!("music listening on http://{bind_addr}");
+    tracing::info!("utterance listening on http://{bind_addr}");
     axum::serve(listener, app).await?;
     Ok(())
 }

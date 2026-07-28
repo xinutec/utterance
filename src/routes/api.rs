@@ -5,14 +5,14 @@ use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use axum::{Json, response::Response};
-use music_analysis::voiceprint::Voiceprint;
 use serde::{Deserialize, Serialize};
+use utterance_analysis::voiceprint::Voiceprint;
 
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::store::RecordingMeta;
 use crate::voice;
-use music_mapping::params::Params;
+use utterance_mapping::params::Params;
 
 /// Serve audio so a browser can seek in it.
 ///
@@ -144,7 +144,7 @@ pub struct VoiceParams {
     pub mapping: Option<String>,
 
     /// How far the speaker's own scale is used, 0..1. See
-    /// `music_mapping::params::Params::bind`.
+    /// `utterance_mapping::params::Params::bind`.
     #[serde(default)]
     pub bind: Option<f32>,
     /// How deep a dip must be to count as a note.
@@ -228,7 +228,7 @@ pub async fn upload(
         return Err(AppError::BadRequest("request body was empty".into()));
     }
 
-    let voiceprint = music_analysis::analyse_wav(&body)?;
+    let voiceprint = utterance_analysis::analyse_wav(&body)?;
     let meta = app.store.put(
         &body,
         params.label.as_deref().unwrap_or_default(),
@@ -292,7 +292,7 @@ pub struct Deleted {
 
 /// One note of the speaker's derived scale, as the browser sees it.
 ///
-/// A wire type rather than `music_mapping::tuning::Degree` re-exported: the
+/// A wire type rather than `utterance_mapping::tuning::Degree` re-exported: the
 /// mapping crate has no business carrying serialisation for a UI, and a scale
 /// shown to a person wants the cents rounded and the roughness left out.
 #[derive(Debug, Serialize)]
@@ -303,7 +303,7 @@ pub struct ScaleDegree {
     pub cents: f32,
     pub ratio: f32,
     /// How firmly this is a note rather than a technicality. See
-    /// `music_mapping::tuning::Degree::depth`.
+    /// `utterance_mapping::tuning::Degree::depth`.
     pub depth: f32,
 }
 
@@ -342,7 +342,7 @@ pub struct VoiceSummary {
 
 /// One control the UI should offer, as the browser sees it.
 ///
-/// A wire type rather than `music_mapping::params::Knob` re-exported, for the
+/// A wire type rather than `utterance_mapping::params::Knob` re-exported, for the
 /// same reason `ScaleDegree` is one: the mapping crate carries no serialisation
 /// for a UI. The numbers are copied straight from the knob table, so the two
 /// cannot disagree about what a slider may offer.
@@ -397,12 +397,12 @@ pub struct Controls {
 /// `GET /api/controls` — the knobs, their ranges and what each one does.
 ///
 /// The UI builds its controls from this rather than from its own list, so a knob
-/// added to `music_mapping::params::KNOBS` appears in the browser without anyone
+/// added to `utterance_mapping::params::KNOBS` appears in the browser without anyone
 /// editing the browser, and a range changed in the mapping cannot leave a slider
 /// offering values the mapping clamps away.
 pub async fn controls() -> Json<Controls> {
     Json(Controls {
-        knobs: music_mapping::params::KNOBS
+        knobs: utterance_mapping::params::KNOBS
             .iter()
             .map(|k| Knob {
                 name: k.name.to_string(),
@@ -440,7 +440,7 @@ pub async fn voice_summary(
     // is shown while deciding whether they like it. Showing the derived degrees
     // beside a render that snapped them to equal temperament would make the one
     // number this project is trying to demonstrate a lie.
-    let tuning = music_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
+    let tuning = utterance_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
 
     Ok(Json(VoiceSummary {
         tonic_hz: calibrated.voice.tonic_hz,
@@ -625,7 +625,7 @@ pub async fn render(
         tuning.degrees.len(),
     );
 
-    let bytes = music_realisation::wav::encode(&music_realisation::synth::render(&score));
+    let bytes = utterance_realisation::wav::encode(&utterance_realisation::synth::render(&score));
     Ok(audio_response(
         bytes,
         headers.get(header::RANGE).and_then(|v| v.to_str().ok()),
@@ -643,7 +643,13 @@ fn build_score(
     app: &AppState,
     id: &str,
     params: &VoiceParams,
-) -> Result<(music_mapping::score::Score, music_mapping::tuning::Tuning), AppError> {
+) -> Result<
+    (
+        utterance_mapping::score::Score,
+        utterance_mapping::tuning::Tuning,
+    ),
+    AppError,
+> {
     let knobs = params.params();
     let calibrated =
         voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
@@ -682,7 +688,7 @@ fn build_score(
         }
     }
 
-    let tuning = music_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
+    let tuning = utterance_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
     // Refused before anything is rendered. A mapping that cannot be applied
     // still produces a score — one with no field in it — and that renders to
     // consonants over silence, which is indistinguishable from a broken build.
@@ -695,15 +701,15 @@ fn build_score(
     // the second's behind is what stops the noise layer being played twice.
     let continuous = names.contains(&"field") || names.contains(&"tonnetz");
     let mut score = if names.contains(&"tonnetz") {
-        music_mapping::tonnetz::score_with(&voiceprint, &calibrated.voice, knobs)
+        utterance_mapping::tonnetz::score_with(&voiceprint, &calibrated.voice, knobs)
     } else if names.contains(&"field") {
-        music_mapping::field::score_with(&voiceprint, &calibrated.voice, knobs)
+        utterance_mapping::field::score_with(&voiceprint, &calibrated.voice, knobs)
     } else {
-        music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs)
+        utterance_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs)
     };
     if continuous && names.contains(&"notes") {
         score.events =
-            music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs).events;
+            utterance_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs).events;
     }
 
     Ok((score, tuning))
@@ -731,7 +737,7 @@ fn mapping_names(params: &VoiceParams) -> Vec<&str> {
 /// *shape* from the scale rather than a list of degrees: two intervals that
 /// point different ways. Everything else works with whatever degrees it is
 /// given, down to a scale of the tonic and the octave.
-fn refusal(tuning: &music_mapping::tuning::Tuning, names: &[&str]) -> Option<String> {
+fn refusal(tuning: &utterance_mapping::tuning::Tuning, names: &[&str]) -> Option<String> {
     if !names.contains(&"tonnetz") {
         return None;
     }
@@ -739,7 +745,7 @@ fn refusal(tuning: &music_mapping::tuning::Tuning, names: &[&str]) -> Option<Str
         .iter()
         .find(|(name, ..)| *name == "tonnetz")
         .map_or("tonnetz", |(_, label, ..)| *label);
-    music_mapping::lattice::Lattice::from_tuning(tuning)
+    utterance_mapping::lattice::Lattice::from_tuning(tuning)
         .err()
         .map(|no_plane| format!("{label} cannot be played in this scale: {no_plane}"))
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# music verify — rust workspace (fmt + clippy + tests) + generated-type drift +
+# utterance verify — rust workspace (fmt + clippy + tests) + generated-type drift +
 # angular frontend (lint + unit tests + layout harness) + shared dev-lint rules.
 # This is the whole health gate; scripts/githooks/pre-commit runs it.
 set -euo pipefail
@@ -21,7 +21,7 @@ cd "$(dirname "$0")/.."
 # `mkdir` rather than `flock`, which macOS does not ship. Creating a directory
 # is atomic everywhere, and the pid inside it is what lets a lock left behind by
 # a killed run be told from a live one.
-lock="${TMPDIR:-/tmp}/music-verify.lock"
+lock="${TMPDIR:-/tmp}/utterance-verify.lock"
 if ! mkdir "$lock" 2>/dev/null; then
   owner="$(cat "$lock/pid" 2>/dev/null || true)"
   if [ -n "$owner" ] && kill -0 "$owner" 2>/dev/null; then

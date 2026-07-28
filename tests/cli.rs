@@ -1,11 +1,11 @@
 //! The command line, such as it is.
 //!
 //! Small, and worth a test for one reason: the failure it replaces was silent.
-//! The program ignored every argument, so `music --help` started a server, sat
+//! The program ignored every argument, so `utterance --help` started a server, sat
 //! there looking hung, and then failed to bind because one was already running.
 //! Nothing about that says "this program has no options".
 
-use music::config::{Invocation, invocation};
+use utterance::config::{Invocation, invocation};
 
 fn args(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| (*s).to_string()).collect()
@@ -42,7 +42,7 @@ fn the_help_quotes_the_defaults_the_code_actually_uses() {
         std::env::remove_var("BIND_ADDR");
         std::env::remove_var("DATA_DIR");
     }
-    let defaults = music::config::Config::from_env();
+    let defaults = utterance::config::Config::from_env();
     assert!(
         text.contains(&defaults.bind_addr),
         "help does not quote the real default address {}",

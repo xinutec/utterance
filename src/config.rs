@@ -44,7 +44,7 @@ pub enum Invocation {
 ///
 /// **Why a binary that took no arguments needed this.** It never did while it
 /// was launched from a script that already knew how to configure it. Installed
-/// as a package and run by name, `music --help` is the only way anyone finds out
+/// as a package and run by name, `utterance --help` is the only way anyone finds out
 /// that it is configured by three environment variables at all — and what it did
 /// instead was start a server, which looks like a hang, and then fail to bind
 /// because one was already running.
@@ -56,7 +56,7 @@ pub enum Invocation {
 ///
 /// **Every argument is read, not just the first.** The obvious shape — a loop
 /// that matches and returns — inspects one and silently drops the rest, which is
-/// the same failure again a step further along: `music --version --sereve` would
+/// the same failure again a step further along: `utterance --version --sereve` would
 /// print a version and never mention the typo. Clippy caught that one; it is
 /// written down here because the shape is easy to reach for again.
 pub fn invocation<I: IntoIterator<Item = String>>(args: I) -> Result<Invocation, String> {

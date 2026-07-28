@@ -384,57 +384,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "music"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "hound",
- "http-body-util",
- "music-analysis",
- "music-mapping",
- "music-realisation",
- "serde",
- "serde_json",
- "sha2",
- "thiserror",
- "tokio",
- "tower",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "ts-rs",
-]
-
-[[package]]
-name = "music-analysis"
-version = "0.1.0"
-dependencies = [
- "hound",
- "rustfft",
- "serde",
- "serde_json",
- "thiserror",
- "ts-rs",
-]
-
-[[package]]
-name = "music-mapping"
-version = "0.1.0"
-dependencies = [
- "music-analysis",
- "serde",
-]
-
-[[package]]
-name = "music-realisation"
-version = "0.1.0"
-dependencies = [
- "hound",
- "music-mapping",
-]
-
-[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -985,6 +934,57 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+
+[[package]]
+name = "utterance"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "hound",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "ts-rs",
+ "utterance-analysis",
+ "utterance-mapping",
+ "utterance-realisation",
+]
+
+[[package]]
+name = "utterance-analysis"
+version = "0.1.0"
+dependencies = [
+ "hound",
+ "rustfft",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "ts-rs",
+]
+
+[[package]]
+name = "utterance-mapping"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "utterance-analysis",
+]
+
+[[package]]
+name = "utterance-realisation"
+version = "0.1.0"
+dependencies = [
+ "hound",
+ "utterance-mapping",
+]
 
 [[package]]
 name = "valuable"

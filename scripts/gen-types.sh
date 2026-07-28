@@ -25,7 +25,7 @@ trap 'rm -rf "$TMP"' EXIT
 # export_bindings_*, so this filter runs generation only. TS_RS_EXPORT_DIR is
 # pinned in .cargo/config.toml and overridden here so a failed run cannot touch
 # the committed types. --features ts turns ts-rs on (off in normal builds);
-# --workspace so music-analysis's voiceprint types export alongside the
+# --workspace so utterance-analysis's voiceprint types export alongside the
 # server's wire types.
 if ! TS_RS_EXPORT_DIR="$TMP" cargo test --workspace --features ts export_bindings >"$TMP/cargo.log" 2>&1; then
   echo "gen-types: generation failed — committed types left untouched." >&2

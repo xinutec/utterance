@@ -1,4 +1,4 @@
-# music
+# utterance
 
 Derive music from the structure of a voice.
 
@@ -22,9 +22,9 @@ settled.
 
 | Path             | What it is                                                  |
 | ---------------- | ----------------------------------------------------------- |
-| `music-analysis` | Pure DSP core: audio in, voiceprint out. No IO, no opinions. |
-| `music-mapping`  | Musical decisions over a voiceprint. Where the opinions live.  |
-| `music-realisation` | Score to audio. Additive synthesis, no decisions.          |
+| `utterance-analysis` | Pure DSP core: audio in, voiceprint out. No IO, no opinions. |
+| `utterance-mapping`  | Musical decisions over a voiceprint. Where the opinions live.  |
+| `utterance-realisation` | Score to audio. Additive synthesis, no decisions.          |
 | `src`            | axum server: recordings, analysis runs, static bundle.        |
 | `frontend`       | Angular 22 app: capture, inspect, visualise.                  |
 | `docs`           | Design intent. Start with `architecture.md`, then `roadmap.md`.|
@@ -46,7 +46,7 @@ nix develop -c bash -c 'cd frontend && npm run build'
 nix develop -c cargo build --release
 BIND_ADDR=0.0.0.0:8181 \
   DATA_DIR="$PWD/data" \
-  STATIC_DIR="$PWD/frontend/dist/music-web/browser" \
+  STATIC_DIR="$PWD/frontend/dist/utterance-web/browser" \
   nix develop -c cargo run --release
 ```
 

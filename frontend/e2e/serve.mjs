@@ -1,5 +1,5 @@
 // Minimal static server for the production bundle, used by the Playwright layout
-// harness. Serves dist/music-web/browser with SPA fallback to index.html. The
+// harness. Serves dist/utterance-web/browser with SPA fallback to index.html. The
 // API is mocked per-test via page.route; this only serves the static app. No
 // deps; Node stdlib only.
 import { createServer } from "node:http";
@@ -7,7 +7,7 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "dist", "music-web", "browser");
+const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..", "dist", "utterance-web", "browser");
 const PORT = Number(process.argv[2] ?? 4293);
 
 const TYPES = {

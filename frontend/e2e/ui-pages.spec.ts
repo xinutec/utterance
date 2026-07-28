@@ -107,7 +107,7 @@ const REFUSAL =
 /**
  * The mapping's knobs, as the backend publishes them.
  *
- * Copied from `music_mapping::params::KNOBS` rather than fetched, because this
+ * Copied from `utterance_mapping::params::KNOBS` rather than fetched, because this
  * suite is about layout: what matters is that a column of sliders, a toggle
  * group and a select fit on a phone, not that these are the current ranges.
  * Drift in the numbers costs nothing — they are checked against the mapping in

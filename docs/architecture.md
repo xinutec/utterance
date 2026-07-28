@@ -64,12 +64,12 @@ audio ──▶ [ analysis ] ──▶ voiceprint ──▶ [ mapping ] ──�
           unit-testable                   of them coexisting
 ```
 
-**analysis** (`music-analysis`) answers questions with right answers. Is this
+**analysis** (`utterance-analysis`) answers questions with right answers. Is this
 frame voiced? What is f0 here? Where are the syllable onsets? It is testable
 against fixtures because it can be wrong in a way you can demonstrate. It holds
 no musical opinions whatsoever — it does not know what a scale is.
 
-**mapping** (`music-mapping`) answers questions with no right answers. Should
+**mapping** (`utterance-mapping`) answers questions with no right answers. Should
 this vowel be a minor chord? It is where the art lives, and where we expect to
 write many competing implementations over one stable voiceprint and keep the ones
 that sound good. Because the voiceprint is a stable serialised document, a
@@ -95,7 +95,7 @@ does — and the server publishes that table at `GET /api/controls`, so the
 sliders in the browser are generated from the crate that obeys them rather than
 maintained alongside it.
 
-**realisation** (`music-realisation`) turns a score into sound. Mechanical, and
+**realisation** (`utterance-realisation`) turns a score into sound. Mechanical, and
 additive rather than sampled — forced rather than chosen, because a derived
 tuning puts notes wherever the speaker's spectrum says they belong and no sampled
 instrument can play 582 cents.
@@ -115,7 +115,7 @@ The interface between analysis and everything downstream, and the only artefact
 that needs to stay stable. Serialised as JSON so it can be diffed, checked into
 fixtures, and inspected in the browser without running the analyser.
 
-Current fields are documented by the types in `music-analysis/src/voiceprint.rs`.
+Current fields are documented by the types in `utterance-analysis/src/voiceprint.rs`.
 The intent for each:
 
 - **f0 track** — prosodic contour. Gestural melody: rises, falls, declination.
@@ -155,7 +155,7 @@ hierarchy (→ meter), phone-class segmentation (→ symbol stream).
 ## The speaker profile
 
 A second analysis artefact, and a deliberately different object from a
-voiceprint: `music-analysis/src/speaker.rs` measures the **person**, where a
+voiceprint: `utterance-analysis/src/speaker.rs` measures the **person**, where a
 voiceprint measures one **utterance**.
 
 The speaker is the world; the utterance is the piece. Pitch range and the corners

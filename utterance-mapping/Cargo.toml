@@ -1,0 +1,13 @@
+[package]
+name = "utterance-mapping"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# One direction only. Mapping reads what analysis measured; analysis must never
+# learn that this crate exists, or the split stops being enforceable.
+utterance-analysis = { path = "../utterance-analysis" }
+# Scores and tunings serialise so a rendering can be reproduced from the artefact
+# that produced it. No ts-rs: these are not wire types until the API serves them,
+# and the generated TypeScript should mirror what the API actually returns.
+serde = { version = "1.0.229", features = ["derive"] }

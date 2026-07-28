@@ -13,9 +13,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use music_analysis::voiceprint::{self, Voiceprint};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use utterance_analysis::voiceprint::{self, Voiceprint};
 
 /// What we know about a recording without opening its voiceprint.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -147,10 +147,11 @@ impl Store {
         }
 
         let audio = self.audio(id)?;
-        let voiceprint = music_analysis::analyse_wav(&audio).map_err(|e| StoreError::Corrupt {
-            id: id.to_string(),
-            detail: e.to_string(),
-        })?;
+        let voiceprint =
+            utterance_analysis::analyse_wav(&audio).map_err(|e| StoreError::Corrupt {
+                id: id.to_string(),
+                detail: e.to_string(),
+            })?;
 
         // The label is the one thing not recoverable from the audio, so keep it
         // across the rebuild. Read loosely: the old metadata may be exactly what

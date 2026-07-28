@@ -3,7 +3,7 @@
 /**
  * One control the UI should offer, as the browser sees it.
  *
- * A wire type rather than `music_mapping::params::Knob` re-exported, for the
+ * A wire type rather than `utterance_mapping::params::Knob` re-exported, for the
  * same reason `ScaleDegree` is one: the mapping crate carries no serialisation
  * for a UI. The numbers are copied straight from the knob table, so the two
  * cannot disagree about what a slider may offer.

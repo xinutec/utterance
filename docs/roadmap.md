@@ -29,7 +29,7 @@ parameter.
 
 In rough order of how much each unlocks.
 
-1. **Tuning from measured partials.** *Built* — `music-mapping/src/tuning.rs`.
+1. **Tuning from measured partials.** *Built* — `utterance-mapping/src/tuning.rs`.
    A Plomp–Levelt roughness curve over the speaker's own measured spectrum,
    swept from unison to the octave, with its deep minima read as scale degrees.
    What came out of the first real calibration set:
@@ -193,7 +193,7 @@ source, plus the one that most shapes daily work.
   variable rather than the anatomy, which is what lets a body of work by one
   person be one sound world with a different piece in each take. The cost is a
   calibration recording per speaker, which is cheap and which
-  `music-analysis/src/speaker.rs` now consumes.
+  `utterance-analysis/src/speaker.rs` now consumes.
 
 - **Control is exercised by learning the mapping, not by playing it live**
   (2026-07-27). Real-time would force the analysis to become causal and
@@ -285,7 +285,7 @@ source, plus the one that most shapes daily work.
   as a case.
 
 - **The mapping publishes its own controls** (2026-07-28). `GET /api/controls`
-  serves `music_mapping::params::KNOBS` — each knob's range, step, starting
+  serves `utterance_mapping::params::KNOBS` — each knob's range, step, starting
   value and one line saying what it does — and the UI builds its sliders from
   that rather than from a list of its own. A knob added to the table appears in
   the browser with no frontend change, and a range that moves cannot leave a

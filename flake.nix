@@ -1,11 +1,11 @@
-# Dev shell and package for the music backend (Rust) + Angular frontend.
+# Dev shell and package for the utterance backend (Rust) + Angular frontend.
 # Enter the shell with: nix develop
 # Build and run the server with: nix run
 #
 # Pure-Rust deps throughout — the DSP core is hand-written and the WAV codec is
 # `hound`, so there is no native audio library to link against.
 {
-  description = "music — derive music from the structure of a voice";
+  description = "utterance — derive music from the structure of a voice";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -30,15 +30,15 @@
           ./Cargo.lock
           ./src
           ./tests
-          ./music-analysis
-          ./music-mapping
-          ./music-realisation
+          ./utterance-analysis
+          ./utterance-mapping
+          ./utterance-realisation
         ];
       };
     in {
       packages = forAll (pkgs: {
         default = pkgs.rustPlatform.buildRustPackage {
-          pname = "music";
+          pname = "utterance";
           version = "0.1.0";
           inherit src;
 
@@ -57,7 +57,7 @@
 
           meta = {
             description = "Derive music from the structure of a voice";
-            mainProgram = "music";
+            mainProgram = "utterance";
           };
         };
       });

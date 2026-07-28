@@ -8,13 +8,13 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use music::config::Config;
-use music::routes;
-use music::state::AppState;
-use music::store::Store;
-use music_analysis::voiceprint::SCHEMA_VERSION;
 use serde_json::Value;
 use tower::ServiceExt;
+use utterance::config::Config;
+use utterance::routes;
+use utterance::state::AppState;
+use utterance::store::Store;
+use utterance_analysis::voiceprint::SCHEMA_VERSION;
 
 /// A router over a fresh store in a throwaway directory that cleans itself up.
 struct TestApp {
@@ -27,7 +27,7 @@ impl TestApp {
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "music-api-test-{}-{}",
+            "utterance-api-test-{}-{}",
             std::process::id(),
             N.fetch_add(1, Ordering::SeqCst)
         ));

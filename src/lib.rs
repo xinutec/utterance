@@ -1,9 +1,9 @@
-//! music backend library. The binary (`src/main.rs`) is a thin wrapper;
+//! utterance backend library. The binary (`src/main.rs`) is a thin wrapper;
 //! integration tests in `tests/` exercise this public surface.
 //!
 //! This crate is the shell: HTTP, storage, wiring. The reasoning lives in
-//! `music-analysis` (objective), `music-mapping` (aesthetic) and
-//! `music-realisation` (mechanical) — see `docs/architecture.md`. It is the
+//! `utterance-analysis` (objective), `utterance-mapping` (aesthetic) and
+//! `utterance-realisation` (mechanical) — see `docs/architecture.md`. It is the
 //! composition root, and the only crate that may depend on all three.
 
 pub mod config;

@@ -5,11 +5,11 @@
 //! serves as calibration, how the speaker profile is pooled, what gets rendered.
 //! No measurement, no aesthetics.
 
-use music_analysis::partials::Partials;
-use music_analysis::speaker::{self, SpeakerProfile};
-use music_analysis::voiceprint::Voiceprint;
-use music_mapping::tuning;
-use music_mapping::voice::{self, Voice};
+use utterance_analysis::partials::Partials;
+use utterance_analysis::speaker::{self, SpeakerProfile};
+use utterance_analysis::voiceprint::Voiceprint;
+use utterance_mapping::tuning;
+use utterance_mapping::voice::{self, Voice};
 
 use crate::error::AppError;
 use crate::store::{RecordingMeta, Store};
@@ -43,14 +43,14 @@ pub struct Calibrated {
 /// well it was measured.
 ///
 /// This is a choice, not a measurement, which is why it lives in the composition
-/// root rather than in `music-analysis`. It also stands in for a decision nobody
+/// root rather than in `utterance-analysis`. It also stands in for a decision nobody
 /// has made: which vowel a speaker's tuning *should* come from is an open
 /// question in `docs/roadmap.md`, and `override_id` is how a caller disagrees.
 ///
 /// Everything else pools across every take, because vowel-space corners and
 /// pitch range improve with material where a harmonic series does not.
 pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated, AppError> {
-    calibrate_with(store, override_id, music_mapping::tuning::MIN_DEPTH)
+    calibrate_with(store, override_id, utterance_mapping::tuning::MIN_DEPTH)
 }
 
 /// The same, choosing how dense the derived scale is.

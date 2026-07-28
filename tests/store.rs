@@ -4,9 +4,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use music::store::{Store, StoreError};
-use music_analysis::resample::ANALYSIS_RATE;
-use music_analysis::voiceprint::{Source, Voiceprint};
+use utterance::store::{Store, StoreError};
+use utterance_analysis::resample::ANALYSIS_RATE;
+use utterance_analysis::voiceprint::{Source, Voiceprint};
 
 /// A store in a throwaway directory that removes itself when the test ends.
 struct TempStore {
@@ -19,7 +19,7 @@ impl TempStore {
         // Unique per process and per call, so parallel test threads never share.
         static N: AtomicU32 = AtomicU32::new(0);
         let root = std::env::temp_dir().join(format!(
-            "music-store-test-{}-{}",
+            "utterance-store-test-{}-{}",
             std::process::id(),
             N.fetch_add(1, Ordering::SeqCst)
         ));
@@ -53,7 +53,7 @@ fn a_voiceprint() -> Voiceprint {
     let samples: Vec<f32> = (0..ANALYSIS_RATE as usize)
         .map(|i| (2.0 * std::f32::consts::PI * 140.0 * i as f32 / ANALYSIS_RATE as f32).sin())
         .collect();
-    music_analysis::analyse(
+    utterance_analysis::analyse(
         &samples,
         Source {
             sample_rate_hz: ANALYSIS_RATE,
