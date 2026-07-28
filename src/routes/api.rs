@@ -23,6 +23,13 @@ pub struct VoiceParams {
     /// vowel a tuning should come from is not settled.
     #[serde(default)]
     pub calibration: Option<String>,
+    /// Which mapping to hear.
+    ///
+    /// `field` (the default) sounds every frame as a continuous texture;
+    /// `notes` sounds discrete events at onsets. They are alternatives over the
+    /// same voiceprint and the only way to judge either is against the other.
+    #[serde(default)]
+    pub mapping: Option<String>,
 }
 
 /// Query string of `POST /api/recordings`.
@@ -197,11 +204,21 @@ pub async fn render(
     let calibrated = voice::calibrate(&app.store, params.calibration.as_deref())?;
     let voiceprint = app.store.voiceprint(&id)?;
 
-    let score = music_mapping::compose::compose(&voiceprint, &calibrated.voice);
+    let score = match params.mapping.as_deref() {
+        Some("notes") => music_mapping::compose::compose(&voiceprint, &calibrated.voice),
+        Some(other) if other != "field" => {
+            return Err(AppError::BadRequest(format!(
+                "no mapping called {other} — try 'field' or 'notes'"
+            )));
+        }
+        _ => music_mapping::field::score(&voiceprint, &calibrated.voice),
+    };
     tracing::info!(
-        "rendered {} as {} notes in a {}-degree scale from {}",
+        "rendered {} as {} notes, {} consonants and {} field voices in a {}-degree scale from {}",
         id,
         score.events.len(),
+        score.noise.len(),
+        score.field.as_ref().map(|f| f.voice_count()).unwrap_or(0),
         calibrated.voice.tuning.degrees.len(),
         calibrated.source.label
     );

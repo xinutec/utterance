@@ -18,7 +18,7 @@
 //!   filtered to sit where the tone's own energy sits — unfiltered white noise
 //!   is heard as tape hiss laid over the music rather than as part of it.
 
-use music_mapping::score::{Event, NoiseEvent, Score};
+use music_mapping::score::{Event, Field, NoiseEvent, Score};
 
 /// Rate everything is rendered at.
 ///
@@ -82,6 +82,10 @@ pub fn render(score: &Score) -> Vec<f32> {
     let mut out = vec![0.0f32; length];
     if length == 0 {
         return out;
+    }
+
+    if let Some(field) = &score.field {
+        sum_field(&mut out, field, score);
     }
 
     for (index, event) in score.events.iter().enumerate() {
@@ -185,6 +189,96 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
         let noisy = breath_filter.step(noise.next_bipolar(), &mut breath_state);
         *sample += (value * gain * pitched + noisy * breath) * envelope * event.amplitude;
     }
+}
+
+/// Partials each field voice is rendered with.
+///
+/// Fewer than a note gets. Five voices at the full twenty-four would be a
+/// hundred and twenty oscillators per sample, and the partials past this
+/// contribute less to the sound than the fifth voice does.
+const FIELD_PARTIALS: usize = 12;
+
+/// Render the continuously sounding field.
+///
+/// **Phase is accumulated, never recomputed from the elapsed time.** A voice
+/// here changes frequency every frame, and `sin(2πft)` with a moving `f` jumps
+/// discontinuously at each change — a click a hundred times a second, which is
+/// itself a tone at the frame rate. Advancing a phase by the current frequency
+/// each sample is the only way a glide sounds like a glide.
+fn sum_field(out: &mut [f32], field: &Field, score: &Score) {
+    let frames = field.frames();
+    let voice_count = field.voice_count();
+    if frames == 0 || voice_count == 0 {
+        return;
+    }
+
+    let nyquist = RENDER_RATE as f32 / 2.0;
+    let samples_per_frame = field.hop_s * RENDER_RATE as f32;
+
+    // One accumulator per partial per voice, carried for the whole piece.
+    let mut phase = vec![vec![0.0f32; FIELD_PARTIALS]; voice_count];
+    let mut breath_phase = (0.0f32, 0.0f32);
+    let mut noise = Noise::seeded(0x5EED);
+
+    let mut spectrum = Vec::new();
+    let mut spectrum_gain = 0.0f32;
+    let mut breath_filter = Resonator::silent();
+
+    for (i, sample) in out.iter_mut().enumerate() {
+        // Where this sample sits on the frame grid, and how far between frames.
+        let position = i as f32 / samples_per_frame;
+        let frame = (position as usize).min(frames - 1);
+        let next = (frame + 1).min(frames - 1);
+        let blend = position - frame as f32;
+
+        if i % SPECTRUM_HOP == 0 {
+            spectrum = score.spectrum_at(field.colour[frame]);
+            spectrum.truncate(FIELD_PARTIALS);
+            spectrum_gain = 1.0 / spectrum.iter().sum::<f32>().max(f32::EPSILON);
+        }
+
+        let breath = field.breath[frame].clamp(0.0, 1.0);
+        let mut value = 0.0f32;
+
+        for (v, phases) in phase.iter_mut().enumerate() {
+            // Interpolated across the frame boundary, so a voice moving between
+            // degrees glides rather than stepping.
+            let hz = lerp(field.voices[v][frame], field.voices[v][next], blend);
+            let gain = lerp(field.gains[v][frame], field.gains[v][next], blend);
+            if gain <= 0.0 || hz <= 0.0 {
+                continue;
+            }
+
+            let mut voiced = 0.0f32;
+            for (k, &amplitude) in spectrum.iter().enumerate() {
+                let partial_hz = hz * (k + 1) as f32;
+                if partial_hz >= nyquist {
+                    break;
+                }
+                phases[k] += std::f32::consts::TAU * partial_hz / RENDER_RATE as f32;
+                if amplitude > 0.0 {
+                    voiced += amplitude * phases[k].sin();
+                }
+            }
+            value += voiced * spectrum_gain * gain;
+        }
+
+        if breath > 0.0 {
+            if i % SPECTRUM_HOP == 0 {
+                let centre = field.voices[0][frame] * spectral_centroid(&spectrum);
+                breath_filter = Resonator::at(centre, centre * BREATH_BANDWIDTH_RATIO);
+            }
+            let air = breath_filter.step(noise.next_bipolar(), &mut breath_phase);
+            value = value * (1.0 - breath) + air * breath * field.gains[0][frame];
+        }
+
+        *sample += value;
+    }
+}
+
+/// Linear interpolation between two values.
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
 }
 
 /// Add one consonant to the buffer.

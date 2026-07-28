@@ -598,3 +598,44 @@ async fn a_short_lively_take_does_not_block_a_usable_one() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["calibrationLabel"], "usable");
 }
+
+#[tokio::test]
+async fn the_two_mappings_render_differently() {
+    // They are alternatives over one voiceprint, and the only way to judge
+    // either is against the other. If they rendered the same bytes, the choice
+    // would be doing nothing.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    let (status, _, field) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _, notes) =
+        fetch(&app, &format!("/api/recordings/{id}/render?mapping=notes")).await;
+    assert_eq!(status, StatusCode::OK);
+
+    assert_eq!(&field[0..4], b"RIFF");
+    assert_eq!(&notes[0..4], b"RIFF");
+    assert_ne!(field, notes, "both mappings rendered identical audio");
+}
+
+#[tokio::test]
+async fn an_unknown_mapping_is_refused_rather_than_ignored() {
+    // Silently falling back to the default would render something the caller
+    // did not ask for and report success.
+    let app = TestApp::new();
+    upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
+    let (_, body) = send(
+        &app,
+        Request::get("/api/recordings").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let id = body[0]["id"].as_str().unwrap().to_string();
+
+    let (status, _, _) = fetch(
+        &app,
+        &format!("/api/recordings/{id}/render?mapping=orchestral"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

@@ -71,6 +71,55 @@ pub struct NoiseEvent {
     pub amplitude: f32,
 }
 
+/// A continuously sounding field: the music as parameter streams rather than
+/// as a list of things that happen.
+///
+/// **Why this exists.** A note is a quantiser. It takes a continuously varying
+/// measurement and declares one value for its whole span, so every note is a
+/// decision to discard whatever happened during it. The first mapping turned
+/// 46 seconds of voice — 4,600 frames across seven measured streams — into 76
+/// notes of seven fields each, which is under two per cent of what was measured.
+/// No amount of taste in choosing those notes recovers the rest.
+///
+/// Here every frame contributes. The field never stops; silence in the speech is
+/// a quiet field rather than an absent one. That also makes the weakest
+/// measurement in the project stop mattering: onsets mean *the spectrum changed*
+/// rather than *a syllable began*, and nothing below asks.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Field {
+    /// Seconds between frames of every series below.
+    pub hop_s: f32,
+    /// Frequency per voice per frame, in Hz. Outer index is the voice.
+    ///
+    /// Absolute, like everything else here: the scale is already resolved.
+    pub voices: Vec<Vec<f32>>,
+    /// Amplitude per voice per frame, 0..1, indexed the same way.
+    ///
+    /// Separate from the frequencies so a voice can fade without moving, and
+    /// move without changing level. Tying them together is what makes generated
+    /// polyphony sound like one instrument playing chords rather than several
+    /// things sounding at once.
+    pub gains: Vec<Vec<f32>>,
+    /// Position on the palette's dark-to-bright axis per frame, shared by every
+    /// voice.
+    pub colour: Vec<f32>,
+    /// Noise fraction per frame, shared by every voice.
+    pub breath: Vec<f32>,
+}
+
+impl Field {
+    /// How many frames every series here holds.
+    pub fn frames(&self) -> usize {
+        self.colour.len()
+    }
+
+    /// How many voices sound at once.
+    pub fn voice_count(&self) -> usize {
+        self.voices.len()
+    }
+}
+
 /// Everything needed to render a piece.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -96,7 +145,13 @@ pub struct Score {
     /// does. A voice's own cycle-to-cycle instability is where this comes from,
     /// so the liveliness is the speaker's rather than a synthesiser preset's.
     pub detune_cents: f32,
-    /// Ascending by start time.
+    /// The continuously sounding part, where there is one.
+    ///
+    /// `None` falls back to [`Score::events`]. Both exist so a field mapping and
+    /// a note mapping can be compared by ear against the same recording, which
+    /// is the only way any of this gets judged.
+    pub field: Option<Field>,
+    /// Discrete notes, for mappings that produce them. Ascending by start time.
     pub events: Vec<Event>,
     /// The consonants, ascending by start time.
     ///

@@ -151,6 +151,10 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
         palette: voice.palette.clone(),
         detune_cents: voice.detune_cents,
         noise: compose_noise(vp, loudest),
+        // This mapping produces notes, not a field. Emitting both would sound
+        // both at once; they are alternatives to be judged against each other,
+        // which is what the mapping layer is for.
+        field: None,
         events,
     }
 }
@@ -163,6 +167,7 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
         detune_cents: voice.detune_cents,
         events: Vec::new(),
         noise: Vec::new(),
+        field: None,
     }
 }
 

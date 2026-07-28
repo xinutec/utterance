@@ -5,7 +5,7 @@
 //! for the right length, at the right moment, without clicks and without
 //! aliasing.
 
-use music_mapping::score::{Event, NoiseEvent, Score};
+use music_mapping::score::{Event, Field, NoiseEvent, Score};
 use music_realisation::synth::{self, RENDER_RATE};
 use music_realisation::wav;
 
@@ -18,6 +18,7 @@ fn score(events: Vec<Event>, duration_s: f32, spectrum: Vec<f32>) -> Score {
         detune_cents: 0.0,
         events,
         noise: Vec::new(),
+        field: None,
     }
 }
 
@@ -233,6 +234,7 @@ fn a_note_changes_colour_across_its_length() {
         palette: vec![dark(), bright()],
         detune_cents: 0.0,
         noise: Vec::new(),
+        field: None,
         events: vec![Event {
             colour_from: 0.0,
             colour_to: 1.0,
@@ -381,6 +383,7 @@ fn an_empty_palette_renders_silence_rather_than_guessing() {
         detune_cents: 0.0,
         events: vec![note(0.0, 0.5, 300.0)],
         noise: Vec::new(),
+        field: None,
     };
     assert!(synth::render(&s).iter().all(|&v| v == 0.0));
 }
@@ -476,5 +479,99 @@ fn notes_and_consonants_sound_together() {
 #[test]
 fn a_consonant_is_deterministic() {
     let s = noise_score(vec![noise_event(0.0, 0.3, 4000.0, 2000.0)], 0.5);
+    assert_eq!(synth::render(&s), synth::render(&s));
+}
+
+/// A field with `frames` frames of steady voices, for tests about rendering it.
+fn field(frames: usize, voices: Vec<Vec<f32>>) -> Field {
+    let count = voices.len();
+    Field {
+        hop_s: 0.01,
+        gains: vec![vec![0.6; frames]; count],
+        voices,
+        colour: vec![0.0; frames],
+        breath: vec![0.0; frames],
+    }
+}
+
+fn field_score(f: Field, duration_s: f32) -> Score {
+    Score {
+        field: Some(f),
+        ..score(Vec::new(), duration_s, vec![1.0, 0.5, 0.25])
+    }
+}
+
+#[test]
+fn a_field_sounds_for_its_whole_length() {
+    // Where a note stream leaves silence between events, a field does not stop.
+    let s = field_score(field(100, vec![vec![220.0; 100]]), 1.0);
+    let rendered = synth::render(&s);
+    let loud_at = |t: f32| {
+        let i = (t * RENDER_RATE as f32) as usize;
+        rendered[i..i + 1000]
+            .iter()
+            .fold(0.0f32, |m, v| m.max(v.abs()))
+    };
+    for t in [0.05f32, 0.3, 0.6, 0.9] {
+        assert!(loud_at(t) > 0.05, "the field was silent at {t}s");
+    }
+}
+
+#[test]
+fn a_voice_that_moves_glides_without_clicking() {
+    // Phase has to be accumulated rather than recomputed from elapsed time. With
+    // `sin(2*pi*f*t)` and a moving f, the waveform jumps at every frame boundary
+    // — a click a hundred times a second, which is itself a tone at the frame
+    // rate and the single most audible way to get this wrong.
+    let sweep: Vec<f32> = (0..200).map(|i| 200.0 + i as f32).collect();
+    let s = field_score(field(200, vec![sweep]), 2.0);
+    let rendered = synth::render(&s);
+
+    let biggest_step = rendered
+        .windows(2)
+        .map(|w| (w[1] - w[0]).abs())
+        .fold(0.0f32, f32::max);
+    // One sample of a full-scale 400 Hz tone steps by at most this much; a
+    // phase discontinuity would be a large fraction of full scale.
+    let smooth = std::f32::consts::TAU * 400.0 / RENDER_RATE as f32 * 3.0;
+    assert!(
+        biggest_step < smooth,
+        "largest jump {biggest_step:.4} against {smooth:.4} for a clean glide"
+    );
+}
+
+#[test]
+fn every_voice_of_a_field_reaches_the_output() {
+    // Five voices must be five voices, not the first one played louder.
+    let one = field_score(field(100, vec![vec![220.0; 100]]), 1.0);
+    let three = field_score(
+        field(
+            100,
+            vec![vec![220.0; 100], vec![330.0; 100], vec![440.0; 100]],
+        ),
+        1.0,
+    );
+    assert!(
+        periodicity(&synth::render(&three), 220.0) < periodicity(&synth::render(&one), 220.0),
+        "adding voices did not change the waveform"
+    );
+}
+
+#[test]
+fn a_silent_voice_contributes_nothing() {
+    let mut f = field(100, vec![vec![220.0; 100], vec![330.0; 100]]);
+    f.gains[1] = vec![0.0; 100];
+    let muted = synth::render(&field_score(f, 1.0));
+    let alone = synth::render(&field_score(field(100, vec![vec![220.0; 100]]), 1.0));
+    assert_eq!(muted.len(), alone.len());
+    assert!(
+        periodicity(&muted, 220.0) > 0.9,
+        "a muted voice was still audible"
+    );
+}
+
+#[test]
+fn a_field_is_deterministic() {
+    let s = field_score(field(100, vec![vec![220.0; 100], vec![330.0; 100]]), 1.0);
     assert_eq!(synth::render(&s), synth::render(&s));
 }

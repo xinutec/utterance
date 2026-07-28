@@ -20,6 +20,7 @@
 
 pub mod compose;
 pub mod dissonance;
+pub mod field;
 pub mod score;
 pub mod tuning;
 pub mod voice;
