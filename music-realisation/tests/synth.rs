@@ -267,10 +267,26 @@ fn a_note_darkens_as_it_decays() {
     );
 }
 
+/// How periodic a slice is: correlation with itself shifted by one period.
+///
+/// A tone repeats exactly and scores near 1; noise does not repeat and scores
+/// near 0. Brightness was the measure here first and is the wrong one — it
+/// answered "is there white noise in this", and once breath was shaped to sit
+/// where the tone's own energy sits, adding it stopped changing the brightness
+/// at all. That is the improvement, not a regression, so the test had to start
+/// measuring the thing it was actually about.
+fn periodicity(samples: &[f32], hz: f32) -> f32 {
+    let lag = (RENDER_RATE as f32 / hz).round() as usize;
+    let n = samples.len() - lag;
+    let dot: f32 = (0..n).map(|i| samples[i] * samples[i + lag]).sum();
+    let energy: f32 = (0..n).map(|i| samples[i] * samples[i]).sum();
+    if energy <= 0.0 { 0.0 } else { dot / energy }
+}
+
 #[test]
 fn breath_puts_noise_in_the_tone() {
     // Silence between the harmonics is what makes pure additive synthesis sound
-    // sterile. A breathy note must carry energy where no partial is.
+    // sterile. A breathy note must be measurably less periodic than a clean one.
     let pitched = score(vec![note(0.0, 1.0, 200.0)], 1.0, dark());
     let breathy = Score {
         events: vec![Event {
@@ -280,12 +296,38 @@ fn breath_puts_noise_in_the_tone() {
         ..score(Vec::new(), 1.0, dark())
     };
 
-    // Noise crosses zero far more often than a tone of the same pitch does.
-    let clean = brightness(&synth::render(&pitched));
-    let noisy = brightness(&synth::render(&breathy));
+    let clean = periodicity(&synth::render(&pitched), 200.0);
+    let noisy = periodicity(&synth::render(&breathy), 200.0);
     assert!(
-        noisy > clean * 2.0,
-        "breath added no noise: brightness {clean:.4} clean vs {noisy:.4} breathy"
+        clean > 0.9,
+        "a clean tone should repeat almost exactly: {clean:.3}"
+    );
+    assert!(
+        noisy < clean - 0.1,
+        "breath added no noise: periodicity {clean:.3} clean vs {noisy:.3} breathy"
+    );
+}
+
+#[test]
+fn breath_is_shaped_rather_than_white() {
+    // The defect a listener heard first: unfiltered noise reads as tape hiss
+    // laid over the music rather than as a quality of the tone. Shaped breath
+    // sits where the note's own energy sits, so it barely moves the brightness.
+    let clean = score(vec![note(0.0, 1.0, 200.0)], 1.0, dark());
+    let breathy = Score {
+        events: vec![Event {
+            breath: 0.6,
+            ..note(0.0, 1.0, 200.0)
+        }],
+        ..score(Vec::new(), 1.0, dark())
+    };
+
+    let before = brightness(&synth::render(&clean));
+    let after = brightness(&synth::render(&breathy));
+    assert!(
+        after < before * 2.0,
+        "breath dragged the brightness from {before:.4} to {after:.4} — it is not \
+         following the note's spectrum"
     );
 }
 

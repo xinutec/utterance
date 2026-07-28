@@ -14,7 +14,9 @@
 //! - **Partials are not exactly locked.** A trace of detune, from the speaker's
 //!   own pitch instability, is the difference between alive and machine-made.
 //! - **There is noise in it.** Breath, bow, wind: no acoustic sound is purely
-//!   periodic, and the absence of noise is heard as sterility.
+//!   periodic, and the absence of noise is heard as sterility. The noise is
+//!   filtered to sit where the tone's own energy sits — unfiltered white noise
+//!   is heard as tape hiss laid over the music rather than as part of it.
 
 use music_mapping::score::{Event, NoiseEvent, Score};
 
@@ -60,6 +62,15 @@ const SPECTRUM_HOP: usize = 64;
 /// fill the interval about as evenly as anything can, so no two partials start
 /// near the same phase and none of them line up periodically.
 const GOLDEN_FRACTION: f32 = 0.618_034;
+
+/// Width of the band a note's breath is shaped into, as a fraction of its
+/// centre.
+///
+/// Breath in a voice is noise driven through the same resonances that shape the
+/// tone, so it carries the vowel's colour rather than being white. Wide enough
+/// to still read as air, narrow enough that it belongs to the note instead of
+/// sitting on top of it.
+const BREATH_BANDWIDTH_RATIO: f32 = 0.9;
 
 /// Render a score to mono samples at [`RENDER_RATE`].
 ///
@@ -128,6 +139,13 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
     let mut spectrum = vec![0.0f32; width];
     let mut gain = 0.0f32;
 
+    // Breath is shaped by a resonator centred on where the note's own energy
+    // sits, recomputed as the spectrum moves. White noise here was the first
+    // thing a listener noticed: it reads as hiss over the piece rather than as
+    // a quality of the tone.
+    let mut breath_state = (0.0f32, 0.0f32);
+    let mut breath_filter = Resonator::silent();
+
     for (i, sample) in out[start..end].iter_mut().enumerate() {
         let t = i as f32 / RENDER_RATE as f32;
         let progress = (t / event.duration_s).clamp(0.0, 1.0);
@@ -141,6 +159,11 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
             // Constant power however many partials survived, so a low note
             // keeping twenty-four is not louder than a high one keeping six.
             gain = 1.0 / spectrum.iter().sum::<f32>().max(f32::EPSILON);
+
+            if breath > 0.0 {
+                let centre = event.hz * spectral_centroid(&spectrum);
+                breath_filter = Resonator::at(centre, centre * BREATH_BANDWIDTH_RATIO);
+            }
         }
 
         let envelope = envelope(t, event.duration_s);
@@ -159,7 +182,7 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
             value += amplitude * (std::f32::consts::TAU * hz * t + phase[k]).sin();
         }
 
-        let noisy = noise.next_bipolar();
+        let noisy = breath_filter.step(noise.next_bipolar(), &mut breath_state);
         *sample += (value * gain * pitched + noisy * breath) * envelope * event.amplitude;
     }
 }
@@ -177,32 +200,70 @@ fn sum_noise(out: &mut [f32], event: &NoiseEvent, seed: usize) {
     }
     let end = (start + (event.duration_s * RENDER_RATE as f32) as usize).min(out.len());
 
-    // Above Nyquist the resonator is not a band-pass any more; it rings at a
-    // frequency that was never in the recording.
-    let nyquist = RENDER_RATE as f32 / 2.0;
-    let centre = event.centre_hz.clamp(20.0, nyquist * 0.95);
-    let bandwidth = event.bandwidth_hz.max(1.0);
-
-    let theta = std::f32::consts::TAU * centre / RENDER_RATE as f32;
-    let radius = (-std::f32::consts::PI * bandwidth / RENDER_RATE as f32).exp();
-    let (a1, a2) = (2.0 * radius * theta.cos(), -radius * radius);
-
-    // A resonator's gain rises sharply as its band narrows, so without this a
-    // narrow consonant would arrive many times louder than a wide one carrying
-    // the same measured energy.
-    let compensation = (1.0 - radius).max(1e-4);
-
+    let filter = Resonator::at(event.centre_hz, event.bandwidth_hz);
     let mut noise = Noise::seeded(seed as u32);
-    let (mut y1, mut y2) = (0.0f32, 0.0f32);
+    let mut state = (0.0f32, 0.0f32);
 
     for (i, sample) in out[start..end].iter_mut().enumerate() {
-        let y = noise.next_bipolar() + a1 * y1 + a2 * y2;
-        y2 = y1;
-        y1 = y;
-
+        let y = filter.step(noise.next_bipolar(), &mut state);
         let t = i as f32 / RENDER_RATE as f32;
-        *sample += y * compensation * envelope(t, event.duration_s) * event.amplitude;
+        *sample += y * envelope(t, event.duration_s) * event.amplitude;
     }
+}
+
+/// A two-pole resonator, as both the vocal tract and a fricative are.
+#[derive(Clone, Copy)]
+struct Resonator {
+    a1: f32,
+    a2: f32,
+    /// Compensation for the gain a resonator picks up as its band narrows.
+    gain: f32,
+}
+
+impl Resonator {
+    fn at(centre_hz: f32, bandwidth_hz: f32) -> Self {
+        let nyquist = RENDER_RATE as f32 / 2.0;
+        let centre = centre_hz.clamp(20.0, nyquist * 0.95);
+        let bandwidth = bandwidth_hz.max(1.0);
+
+        let theta = std::f32::consts::TAU * centre / RENDER_RATE as f32;
+        let radius = (-std::f32::consts::PI * bandwidth / RENDER_RATE as f32).exp();
+        Resonator {
+            a1: 2.0 * radius * theta.cos(),
+            a2: -radius * radius,
+            gain: (1.0 - radius).max(1e-4),
+        }
+    }
+
+    /// Passes its input through unchanged, for a note with no breath in it.
+    fn silent() -> Self {
+        Resonator {
+            a1: 0.0,
+            a2: 0.0,
+            gain: 1.0,
+        }
+    }
+
+    fn step(&self, input: f32, state: &mut (f32, f32)) -> f32 {
+        let y = input + self.a1 * state.0 + self.a2 * state.1;
+        state.1 = state.0;
+        state.0 = y;
+        y * self.gain
+    }
+}
+
+/// Where a spectrum's energy sits, as a multiple of the fundamental.
+fn spectral_centroid(spectrum: &[f32]) -> f32 {
+    let total: f32 = spectrum.iter().sum();
+    if total <= 0.0 {
+        return 1.0;
+    }
+    spectrum
+        .iter()
+        .enumerate()
+        .map(|(k, a)| (k + 1) as f32 * a)
+        .sum::<f32>()
+        / total
 }
 
 /// Longest spectrum the palette holds.

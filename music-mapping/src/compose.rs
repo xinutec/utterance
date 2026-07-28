@@ -66,20 +66,19 @@ const VOWEL_SEARCH_FRAMES: usize = 12;
 /// the detector rather than anything the speaker did.
 const SILENCE_FLOOR: f32 = 0.02;
 
-/// Aperiodicity at which a note is treated as entirely breath.
+/// Aperiodicity at which a note is treated as fully breathy.
 ///
 /// YIN's normalised difference runs from 0 for a perfectly periodic frame to
 /// about 1 for noise. Voicing is decided far below this, so a frame reaching it
-/// is one where the tracker found a pitch it barely believes — which is exactly
-/// the breathy phonation worth hearing as noise rather than discarding.
+/// is one where the tracker found a pitch it barely believes.
 const FULL_BREATH_APERIODICITY: f32 = 0.6;
 
 /// Most of a note that may be noise.
 ///
-/// A note that is all breath carries no pitch, and a piece made of them carries
-/// no tuning. Reading breathiness is for texture, not for removing the thing the
-/// texture is made of.
-const MAX_BREATH: f32 = 0.7;
+/// Lowered from 0.7 after listening. Breath is meant to keep a tone from
+/// sounding sterile, and at a third of the energy it stops being a quality of
+/// the tone and becomes a hiss laid over it.
+const MAX_BREATH: f32 = 0.3;
 
 /// Turn a voiceprint into a score, in the world a [`Voice`] describes.
 ///
@@ -143,7 +142,7 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
             amplitude,
             colour_from,
             colour_to,
-            breath: breath_at(vp, frame),
+            breath: breath_at(vp, frame, end_frame),
         });
     }
 
@@ -167,15 +166,32 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
     }
 }
 
-/// How much of a note should be breath, from how periodic the voice was.
-fn breath_at(vp: &Voiceprint, frame: usize) -> f32 {
-    let aperiodicity = vp
-        .pitch
-        .aperiodicity
-        .get(frame)
-        .copied()
-        .unwrap_or_default();
-    (aperiodicity / FULL_BREATH_APERIODICITY).clamp(0.0, 1.0) * MAX_BREATH
+/// How much of a note should be breath, from how periodic the phonation was.
+///
+/// **Median over the voiced frames the note spans**, and every part of that
+/// matters. Reading a single frame at the onset measured the transition into the
+/// note rather than the note: on the first real speech take, frames at and just
+/// after an onset averaged 0.33 aperiodicity while the voiced frames of the same
+/// take averaged 0.066 — five times less. Every note was therefore built with a
+/// third of its energy as noise, which is audible as a hiss over the whole
+/// piece and was the first thing anyone remarked on.
+///
+/// Restricting to voiced frames is what fixes it. Unvoiced frames inside a
+/// note's span are its consonants, and those are already sounded by the noise
+/// stream; counting them here plays them twice, once as themselves and once as
+/// a wash across the note beside them.
+fn breath_at(vp: &Voiceprint, from: usize, to: usize) -> f32 {
+    let mut voiced: Vec<f32> = (from..to.min(vp.pitch.hz.len()))
+        .filter(|&i| vp.pitch.hz[i].is_some())
+        .map(|i| vp.pitch.aperiodicity[i])
+        .collect();
+
+    if voiced.is_empty() {
+        return 0.0;
+    }
+    voiced.sort_by(f32::total_cmp);
+    let median = voiced[voiced.len() / 2];
+    (median / FULL_BREATH_APERIODICITY).clamp(0.0, 1.0) * MAX_BREATH
 }
 
 /// Which degree a normalised position picks.
