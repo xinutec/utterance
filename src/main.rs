@@ -2,11 +2,31 @@
 //! Entry point: open the store, build the router, serve.
 
 use anyhow::{Context, Result};
-use music::{config::Config, routes, state::AppState, store::Store};
+use music::{
+    config::{Config, Invocation, invocation},
+    routes,
+    state::AppState,
+    store::Store,
+};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Read before anything is opened or bound, and before the logger is set up.
+    // Someone asking what the flags are should get an answer rather than a
+    // startup log, and a bad argument should cost nothing.
+    match invocation(std::env::args().skip(1)) {
+        Ok(Invocation::Print(text)) => {
+            println!("{text}");
+            return Ok(());
+        }
+        Err(complaint) => {
+            eprintln!("{complaint}");
+            std::process::exit(2);
+        }
+        Ok(Invocation::Serve) => {}
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
