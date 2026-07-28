@@ -12,4 +12,13 @@ export type Knob = {
 /**
  * Query-parameter name. Sent back on a render exactly as it arrives here.
  */
-name: string, label: string, min: number, max: number, step: number, default: number, about: string, };
+name: string, label: string, min: number, max: number, step: number, default: number, about: string, 
+/**
+ * Mappings this knob reaches. Empty means every one of them.
+ *
+ * Sent so the UI can put away a control the mapping being played does not
+ * read. A slider that moves and changes nothing is the failure this whole
+ * table exists to prevent, and one belonging to another mapping is that
+ * failure with a longer explanation.
+ */
+mappings: Array<string>, };

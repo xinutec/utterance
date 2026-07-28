@@ -60,6 +60,22 @@ export class MappingControls {
   /** Which mapping names are on, as the toggle group wants them. */
   readonly chosenMappings = computed(() => [...this.settings().mapping]);
 
+  /**
+   * The knobs the mappings being played actually read.
+   *
+   * A knob declares which mappings it reaches and an empty list means all of
+   * them, so this filter needs no list of its own — the same arrangement as the
+   * ranges. Showing one that the playing mapping ignores produces exactly the
+   * failure the whole table exists to prevent: a slider that moves, and changes
+   * nothing, and leaves the person turning it to conclude the thing is broken.
+   */
+  readonly relevant = computed(() => {
+    const playing = this.settings().mapping;
+    return this.knobs().filter(
+      (knob) => knob.mappings.length === 0 || knob.mappings.some((m) => playing.includes(m)),
+    );
+  });
+
   /** True once anything has been moved, so the offer to reset means something. */
   readonly touched = computed(() => {
     const settings = this.settings();
@@ -80,10 +96,30 @@ export class MappingControls {
    * An empty choice is refused rather than sent: the backend has nothing to
    * render from it, and a toggle group with nothing on is a person mid-thought
    * rather than a person asking for silence.
+   *
+   * **Two mappings making the same material cannot both sound**, so turning one
+   * on turns its rival off. The render route refuses the pair, and letting
+   * someone assemble a refused combination and press play would teach them that
+   * the page is broken rather than that the combination is meaningless. Which
+   * mappings are rivals comes from `makes` in what the backend published, so a
+   * fourth mapping needs no change here.
    */
   setMappings(names: string[]): void {
     if (names.length === 0) return;
-    this.settings.set({ ...this.settings(), mapping: names });
+    const before = this.settings().mapping;
+    const added = names.filter((n) => !before.includes(n));
+    const kept = names.filter(
+      (name) => added.includes(name) || !added.some((a) => this.rivals(a, name)),
+    );
+    this.settings.set({ ...this.settings(), mapping: kept.length > 0 ? kept : names });
+  }
+
+  /** Whether two mappings compete to be the same part of the score. */
+  private rivals(a: string, b: string): boolean {
+    if (a === b) return false;
+    const makes = (name: string) => this.mappings().find((m) => m.name === name)?.makes;
+    const theirs = makes(a);
+    return theirs !== undefined && theirs === makes(b);
   }
 
   setCalibration(id: string | null): void {

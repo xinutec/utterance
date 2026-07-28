@@ -12,6 +12,7 @@ const knob = (name: string, label: string, def: number): Knob => ({
   step: 0.05,
   default: def,
   about: "",
+  mappings: [],
 });
 
 const BIND = knob("bind", "Bind to the voice", 1);
@@ -26,7 +27,7 @@ describe("differences", () => {
   it("names the knob and both values", () => {
     const b = withKnob(INITIAL_SETTINGS, BIND, 0);
     expect(differences(INITIAL_SETTINGS, b, KNOBS)).toEqual([
-      { label: "Bind to the voice", name: "bind", a: 1, b: 0 },
+      { label: "Bind to the voice", name: "bind", a: "1", b: "0" },
     ]);
   });
 
@@ -36,6 +37,15 @@ describe("differences", () => {
     const b = withKnob(INITIAL_SETTINGS, DRIFT, 1.5);
     const found = differences(INITIAL_SETTINGS, b, KNOBS);
     expect(found).toHaveLength(1);
-    expect(found[0]).toMatchObject({ name: "drift", a: 0.25, b: 1.5 });
+    expect(found[0]).toMatchObject({ name: "drift", a: "0.25", b: "1.5" });
+  });
+
+  it("names the mapping when the two sides hear different ones", () => {
+    // The largest difference the page can express, and the one it used to
+    // report as "nothing differs".
+    const b = { ...INITIAL_SETTINGS, mapping: ["tonnetz"] };
+    expect(differences(INITIAL_SETTINGS, b, KNOBS)).toEqual([
+      { label: "Mapping", name: "mapping", a: "field", b: "tonnetz" },
+    ]);
   });
 });

@@ -84,25 +84,45 @@ fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
 
 /// The mappings a render may ask for.
 ///
-/// Name, label, and what it does — in one table because the render route
-/// validates against it and the UI offers it, and a UI listing a mapping the
-/// route rejects is worse than no UI at all. Adding a mapping means adding a row
-/// and a branch in `render`, and the compiler will not remind you about the
-/// second, which is why the branch is a `match` on these names.
-const MAPPINGS: [(&str, &str, &str); 2] = [
+/// Name, label, the material it makes, and what it does — in one table because
+/// the render route validates against it and the UI offers it, and a UI listing
+/// a mapping the route rejects is worse than no UI at all. Adding a mapping
+/// means adding a row and a branch in `build_score`, and the compiler will not
+/// remind you about the second.
+///
+/// **The third column is what a mapping competes for.** A score carries one
+/// continuous field and one list of events, so two mappings making the same
+/// material cannot both be heard — asking for both is refused rather than
+/// silently resolved, since whichever lost would be a mapping someone asked for
+/// and did not hear. Naming the material here rather than writing the clash out
+/// as a rule means a fourth mapping inherits the answer.
+const MAPPINGS: [(&str, &str, &str, &str); 3] = [
     (
         "field",
         "Field",
+        TEXTURE,
         "Every frame sounds. A continuous texture that moves with the voice \
          rather than a sequence of notes.",
     ),
     (
+        "tonnetz",
+        "Lattice",
+        TEXTURE,
+        "The same texture, with the vowel walking a harmonic lattice built from \
+         the speaker's own consonances. Chords hold while the mouth holds, and \
+         change by keeping two voices and stepping one.",
+    ),
+    (
         "notes",
         "Notes",
+        "events",
         "Discrete events at onsets. Closer to a melody, and the weaker of the \
          two — kept because comparing them is how either gets judged.",
     ),
 ];
+
+/// The continuously sounding material. Named because two mappings make it.
+const TEXTURE: &str = "texture";
 
 /// Query string of the endpoints that need a speaker's musical world.
 #[derive(Debug, Deserialize)]
@@ -139,9 +159,12 @@ pub struct VoiceParams {
     /// Octaves the field transposes across the speaker's pitch range.
     #[serde(default)]
     pub drift: Option<f32>,
-    /// Octaves the root travels as the vowel moves front to back.
+    /// How far the vowel moves the harmony.
     #[serde(default)]
     pub reach: Option<f32>,
+    /// How far past a boundary the mouth must go before the harmony follows.
+    #[serde(default)]
+    pub hold: Option<f32>,
     /// How far the third formant opens or clusters the chord.
     #[serde(default)]
     pub voicing: Option<f32>,
@@ -164,6 +187,7 @@ impl VoiceParams {
             spacing: self.spacing.unwrap_or(base.spacing),
             drift: self.drift.unwrap_or(base.drift),
             reach: self.reach.unwrap_or(base.reach),
+            hold: self.hold.unwrap_or(base.hold),
             voicing: self.voicing.unwrap_or(base.voicing),
             articulation: self.articulation.unwrap_or(base.articulation),
             consonants: self.consonants.unwrap_or(base.consonants),
@@ -326,6 +350,13 @@ pub struct Knob {
     pub step: f32,
     pub default: f32,
     pub about: String,
+    /// Mappings this knob reaches. Empty means every one of them.
+    ///
+    /// Sent so the UI can put away a control the mapping being played does not
+    /// read. A slider that moves and changes nothing is the failure this whole
+    /// table exists to prevent, and one belonging to another mapping is that
+    /// failure with a longer explanation.
+    pub mappings: Vec<String>,
 }
 
 /// One mapping a render may ask for.
@@ -336,6 +367,11 @@ pub struct Knob {
 pub struct MappingChoice {
     pub name: String,
     pub label: String,
+    /// The material this mapping makes. Two of a kind cannot sound together.
+    ///
+    /// Sent so the UI can turn one off when the other is chosen, rather than
+    /// letting someone select a combination the render route refuses.
+    pub makes: String,
     pub about: String,
 }
 
@@ -367,13 +403,15 @@ pub async fn controls() -> Json<Controls> {
                 step: k.step,
                 default: k.default,
                 about: k.about.to_string(),
+                mappings: k.mappings.iter().map(|m| (*m).to_string()).collect(),
             })
             .collect(),
         mappings: MAPPINGS
             .iter()
-            .map(|(name, label, about)| MappingChoice {
+            .map(|(name, label, makes, about)| MappingChoice {
                 name: (*name).to_string(),
                 label: (*label).to_string(),
+                makes: (*makes).to_string(),
                 about: (*about).to_string(),
             })
             .collect(),
@@ -618,16 +656,37 @@ fn build_score(
     if names.is_empty() {
         return Err(AppError::BadRequest("no mapping asked for".into()));
     }
+    // Two mappings making the same material cannot both be heard. Refused
+    // rather than silently resolved: whichever one lost would be a mapping
+    // someone asked for and did not hear, and the whole reason to keep more
+    // than one is that they are compared.
+    for (name, _, makes, _) in MAPPINGS {
+        let rivals: Vec<&str> = MAPPINGS
+            .iter()
+            .filter(|(other, _, theirs, _)| *theirs == makes && *other != name)
+            .map(|(other, ..)| *other)
+            .collect();
+        if names.contains(&name)
+            && let Some(rival) = rivals.iter().find(|r| names.contains(r))
+        {
+            return Err(AppError::BadRequest(format!(
+                "{name} and {rival} are two ways of making the same {makes} — ask for one"
+            )));
+        }
+    }
 
     // Built by starting from one mapping and lifting the other's material into
     // it. Both carry the consonants, so taking them from the first and leaving
     // the second's behind is what stops the noise layer being played twice.
-    let mut score = if names.contains(&"field") {
+    let continuous = names.contains(&"field") || names.contains(&"tonnetz");
+    let mut score = if names.contains(&"tonnetz") {
+        music_mapping::tonnetz::score_with(&voiceprint, &calibrated.voice, knobs)
+    } else if names.contains(&"field") {
         music_mapping::field::score_with(&voiceprint, &calibrated.voice, knobs)
     } else {
         music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs)
     };
-    if names.contains(&"field") && names.contains(&"notes") {
+    if continuous && names.contains(&"notes") {
         score.events =
             music_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs).events;
     }

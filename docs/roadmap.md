@@ -45,12 +45,29 @@ In rough order of how much each unlocks.
    - **Audibly not 12-TET.** Four of those six degrees sit 13–18 cents off
      equal temperament, and 7:5 at 582 cents has no equal-tempered equivalent.
 
-2. **Harmony from vowel space.** *Partly built* — `music-mapping/src/field.rs`.
-   Five voices stacked at a fixed degree spacing, with the root walked by vowel
-   frontness and the spread set by openness. That is polyphony from articulation,
-   which is most of the idea; what it is not yet is the Tonnetz mapping, where
-   the two dimensions of vowel space become the two dimensions of a harmonic
-   lattice and voice-leading falls out of the geometry.
+2. **Harmony from vowel space.** *Built, twice* — `field.rs` and `tonnetz.rs`.
+   The first stacks five voices at a fixed degree spacing and walks the whole
+   stack with the vowel: polyphony from articulation, and every moment the same
+   chord at a different pitch.
+
+   The second is the Tonnetz. The two dimensions of vowel space become the two
+   dimensions of a harmonic lattice, spanned by the two deepest independent
+   minima of the speaker's own roughness curve — for a voice, near the fifth and
+   a third, which is a result rather than an assumption. Position on it is
+   quantised to a triangle, and that is the part that matters:
+
+   - **Chords hold.** While the mouth stays in one triangle the pitches do not
+     move, so a sustained vowel is a sustained chord and there is finally
+     something for the derived tuning to be audible *in*. Everything else the
+     voice does goes on moving underneath it.
+   - **Voice leading falls out of the geometry.** Triangles sharing an edge
+     share two of their three pitches, and a pitch the lattice keeps keeps its
+     frequency, so a chord change holds two voices and steps one. Nobody wrote
+     that rule.
+   - `hold` is the knob that decides how far past a boundary the mouth must go
+     before the harmony follows — the one that decides whether a chord rings.
+
+   **Unheard as of 2026-07-28.** Built, tested, and not yet listened to.
 3. **Meter from stress hierarchy.** Nested strong/weak grouping from syllable
    prominence. Still blocked on stress measurement — but no longer on the
    critical path, because the field mapping needs no rhythm at all. It went from
@@ -80,24 +97,45 @@ In rough order of how much each unlocks.
   milliseconds. Acceptable because it runs once per recording and the result is
   cached, but it is the reason a re-analysis sweep after a schema bump is now
   something you wait for.
-- **Nothing sustains, so the tuning cannot be heard.** See the first open
-  question below: the derived scale is real and currently inaudible, because a
-  chord has to ring for about a second before its tuning is perceptible and
-  nothing here holds still that long. This is the same gap as "nothing operates
-  above the phrase", reached from the other direction.
+- **Nothing sustained, so the tuning could not be heard.** The derived scale is
+  real and was inaudible, because a chord has to ring for about a second before
+  its tuning is perceptible and the field mapping never held still that long.
+  The Tonnetz mapping is the answer built for it — quantising the harmony while
+  leaving the time continuous — and whether it is *enough* is a listening
+  question nobody has answered yet.
+- **The Tonnetz says nothing about register.** Each voice takes whichever octave
+  of its pitch class falls nearest a target, which keeps common tones at common
+  frequencies and is why voice leading survives. What it does not do is anything
+  a voice-leading rule would recognise: no contrary motion, no avoidance of
+  parallels, no bass line. Whether any of that is wanted is a taste question and
+  should be settled by ear.
+- **A scale of the fourth and the fifth spans no lattice**, and the honest
+  response is that the Tonnetz mapping produces nothing at all for that speaker.
+  Real takes have not hit it — one *ah* gives six interior degrees — but a thin
+  calibration would, and what a listener would hear is consonants and silence
+  with no explanation. It should say so instead.
 
 - **Comparing is now a page rather than an exercise in URLs.** `/compare` plays
   two settings at once with one muted, so switching is instant and at the same
   moment of the piece, and draws each stream's difference scaled to its own
   largest gap. Built after four separate attempts to answer the `bind` question
   by ear failed for want of an instrument.
+- **The API's voice fixture was less of a voice than any voice** (2026-07-28,
+  fixed). Two formants and a textbook source slope gave a four-degree scale
+  whose two deepest intervals were the fourth and the fifth — the one pair that
+  spans no harmonic lattice — where a real take through the same code gives
+  eight. Every mapping that reads the *shape* of a scale was being tested
+  against something shaped like nothing. Now three formants and a shallower
+  source, tuned until the measured partials resemble a measured voice's.
 - **The field reads eight streams; the voice emits about ten.** What is still
   unread is the *shape* of the spectrum beyond its centroid — a tilt measurement
   proper, and the harmonic-to-noise balance per band. Neither is measured yet, so
   this is analysis work rather than mapping work.
 - **Nothing operates above the phrase.** The field moves at three timescales —
   level, articulation, prosodic drift — and the longest is two seconds. A piece
-  has a shape across its whole length and nothing here produces one.
+  has a shape across its whole length and nothing here produces one. The Tonnetz
+  buys time at the chord's timescale and no more; it is a held harmony, not a
+  harmonic plan.
 - **The note mapping's rhythm is still wrong.** `compose.rs` reads onsets, which
   mean *the spectrum changed* rather than *a syllable began*. It is kept because
   comparing mappings is how any of them get judged, not because it is right.
@@ -160,11 +198,24 @@ source, plus the one that most shapes daily work.
   once per person and then fixed, not recomputed per take.
 
 - **Mappings are alternatives, not a pipeline** (2026-07-28). `compose` emits
-  notes and no field; `field` emits a field and no notes; both carry the
-  consonants, because a consonant is a thing that happens at a moment whichever
-  way the pitched material is made. A render may ask for either or both. The
-  reason to keep the weaker one is that comparison is the only way either gets
-  judged.
+  notes and no field; `field` and `tonnetz` each emit a field and no notes; all
+  of them carry the consonants, because a consonant is a thing that happens at a
+  moment whichever way the pitched material is made. The reason to keep the
+  weaker ones is that comparison is the only way any of them gets judged.
+
+  **A score carries one field and one list of events**, so two mappings making
+  the same material are refused together rather than one of them silently
+  winning — whichever lost would be a mapping someone asked for and did not
+  hear. Which mappings compete is a column of the table in `routes/api.rs` and
+  is published to the UI, so the browser turns one off rather than letting
+  someone assemble a combination the route rejects.
+
+- **A knob says which mappings it reaches** (2026-07-28). `hold` belongs to the
+  Tonnetz and `voices` to neither of the note mappings, and a slider shown while
+  a mapping that ignores it is playing is the same failure the knob table exists
+  to prevent — it moves, and nothing changes, and the person concludes the thing
+  is broken. Declared on the knob, published, and checked: `tests/api.rs` renders
+  every knob against every mapping it claims and fails if the audio is unchanged.
 
 - **Anything arguable is a parameter, not a constant** (2026-07-28). If a value
   could reasonably be chosen differently it belongs in `params::Params` and is
@@ -237,15 +288,22 @@ source, plus the one that most shapes daily work.
   slow enough for a chord to ring — which is the same thing the "nothing
   operates above the phrase" gap asks for, from the other end.
 
-  Deliberately not acted on yet: sustaining means ignoring the voice for seconds
-  at a time, and continuous tracking is the relationship we want for now
-  (2026-07-28). Recorded so the trade is visible when it is next reopened.
+  **Acted on, 2026-07-28.** The trade looked like sustain *or* continuous
+  tracking, and it is not one: what has to hold still is the harmony, not the
+  music. The Tonnetz mapping quantises where the vowel sits on a harmonic
+  lattice and leaves every other stream — loudness, colour, breath, drift —
+  moving at its own rate, so a held vowel gives a held chord without a frame
+  going unread. Whether the chords now ring long enough for `bind` to be
+  audible is the listening test this whole page has been waiting for, and it has
+  not been done.
 
-- **Which knobs actually change what anyone hears?** Measured on `vowel-ah`, as
-  how far each moves the pitch of the field at its widest: `density` 1516 cents,
-  `spacing` 1200, `voicing` 632, `reach` 600, `drift` 53, `bind` 18. Worth
-  keeping in view when choosing what to build: the knobs that restructure the
-  chord dominate the ones that adjust it.
+- **Which knobs actually change what anyone hears?** Measured on `vowel-ah` in
+  the field mapping, as how far each moves the pitch at its widest: `density`
+  1516 cents, `spacing` 1200, `voicing` 632, `reach` 600, `drift` 53, `bind` 18.
+  Worth keeping in view when choosing what to build: the knobs that restructure
+  the chord dominate the ones that adjust it. Not re-measured for the Tonnetz,
+  where the same knobs act on a different geometry and `bind` has a chord that
+  holds still to be heard in.
 
 - **Should a listener be able to perceive the connection back to the voice?**
   Not yet answered. It is the largest single constraint on the mapping layer: a

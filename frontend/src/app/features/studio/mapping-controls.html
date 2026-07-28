@@ -32,7 +32,7 @@
     </mat-form-field>
   </div>
 
-  @for (knob of knobs(); track knob.name) {
+  @for (knob of relevant(); track knob.name) {
     <div class="knob">
       <div class="knob-head">
         <span class="knob-label">{{ knob.label }}</span>

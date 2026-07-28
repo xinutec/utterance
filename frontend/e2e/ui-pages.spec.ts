@@ -99,27 +99,32 @@ const VOICE = {
  * The mapping's knobs, as the backend publishes them.
  *
  * Copied from `music_mapping::params::KNOBS` rather than fetched, because this
- * suite is about layout: what matters is that seven sliders, a toggle group and
- * a select fit on a phone, not that these are the current ranges. Drift here
- * costs nothing — the ranges are checked against the mapping in `tests/api.rs`,
- * where getting them wrong actually matters.
+ * suite is about layout: what matters is that a column of sliders, a toggle
+ * group and a select fit on a phone, not that these are the current ranges.
+ * Drift in the numbers costs nothing — they are checked against the mapping in
+ * `tests/api.rs`, where getting them wrong actually matters.
+ *
+ * The `mappings` on each knob is not decoration here: the controls hide a knob
+ * the playing mapping does not read, so a mock without it renders no sliders at
+ * all and every layout assertion below passes over an empty page.
  */
 const CONTROLS = {
   knobs: [
-    { name: "bind", label: "Bind to the voice", min: 0, max: 1, step: 0.05, default: 1, about: "At 1 the notes are exactly where this voice's spectrum puts them. At 0 they snap to the twelve everyone else uses." },
-    { name: "density", label: "Scale density", min: 0.0005, max: 0.5, step: 0.002, default: 0.02, about: "How firm a note has to be to count. Low gives a crowded microtonal set, high gives a handful of very stable intervals." },
-    { name: "voices", label: "Voices", min: 1, max: 12, step: 1, default: 5, about: "How many tones sound at once." },
-    { name: "spacing", label: "Spacing", min: 1, max: 6, step: 1, default: 2, about: "Scale degrees between one voice and the next. 1 is a cluster, higher is an open chord." },
-    { name: "drift", label: "Follow the pitch", min: 0, max: 2, step: 0.05, default: 0.25, about: "How far the music transposes with the speaker's pitch. At 0 it sits still; near 1 it reads as a parallel melody." },
-    { name: "reach", label: "Follow the vowel", min: 0, max: 3, step: 0.05, default: 1, about: "Octaves the root travels as the vowel moves front to back. This is the articulation showing up as harmony." },
-    { name: "consonants", label: "Consonants", min: 0, max: 2, step: 0.05, default: 1, about: "How loud the unpitched material is against the tones. At 0 they are silent." },
+    { name: "bind", label: "Bind to the voice", min: 0, max: 1, step: 0.05, default: 1, mappings: [], about: "At 1 the notes are exactly where this voice's spectrum puts them. At 0 they snap to the twelve everyone else uses." },
+    { name: "density", label: "Scale density", min: 0.0005, max: 0.5, step: 0.002, default: 0.02, mappings: [], about: "How firm a note has to be to count. Low gives a crowded microtonal set, high gives a handful of very stable intervals." },
+    { name: "voices", label: "Voices", min: 1, max: 12, step: 1, default: 5, mappings: ["field", "tonnetz"], about: "How many tones sound at once." },
+    { name: "spacing", label: "Spacing", min: 1, max: 6, step: 1, default: 2, mappings: ["field", "tonnetz"], about: "How far apart the voices sit. 1 is a cluster, higher is an open chord." },
+    { name: "drift", label: "Follow the pitch", min: 0, max: 2, step: 0.05, default: 0.25, mappings: ["field", "tonnetz"], about: "How far the music transposes with the speaker's pitch. At 0 it sits still; near 1 it reads as a parallel melody." },
+    { name: "reach", label: "Follow the vowel", min: 0, max: 3, step: 0.05, default: 1, mappings: ["field", "tonnetz"], about: "How far the vowel moves the harmony. This is the articulation showing up as harmony." },
+    { name: "hold", label: "Hold the harmony", min: 0, max: 1, step: 0.05, default: 0.35, mappings: ["tonnetz"], about: "How far the mouth must move past a boundary before the chord changes. At 0 the harmony follows every wobble." },
+    { name: "consonants", label: "Consonants", min: 0, max: 2, step: 0.05, default: 1, mappings: [], about: "How loud the unpitched material is against the tones. At 0 they are silent." },
   ],
   mappings: [
-    { name: "field", label: "Field", about: "Every frame sounds." },
-    { name: "notes", label: "Notes", about: "Discrete events at onsets." },
+    { name: "field", label: "Field", makes: "texture", about: "Every frame sounds." },
+    { name: "tonnetz", label: "Lattice", makes: "texture", about: "The vowel walks a harmonic lattice." },
+    { name: "notes", label: "Notes", makes: "events", about: "Discrete events at onsets." },
   ],
 };
-
 /**
  * A score, as the compare page charts it.
  *
@@ -182,8 +187,8 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
   // both, so the layout assertions run against the fully painted page.
   await page.locator("app-voiceprint-chart canvas").waitFor();
   await page.locator("app-vowel-space canvas").waitFor();
-  // The knobs are the densest thing on the page — seven sliders, a toggle group
-  // and a select — and a phone is where they are likeliest to collide.
+  // The knobs are the densest thing on the page — a column of sliders, a toggle
+  // group and a select — and a phone is where they are likeliest to collide.
   await page.locator("app-mapping-controls mat-slider").last().waitFor();
 
   await expectNoTextOverlaps(page, testInfo);

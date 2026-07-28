@@ -21,7 +21,10 @@
 pub mod compose;
 pub mod dissonance;
 pub mod field;
+pub mod lattice;
 pub mod params;
 pub mod score;
+pub mod streams;
+pub mod tonnetz;
 pub mod tuning;
 pub mod voice;

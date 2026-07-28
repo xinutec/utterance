@@ -390,16 +390,35 @@ fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
 
             // Alternate vowels every half second, so both ends of the space are
             // visited often enough to survive the profile's percentile trim.
-            let (f1, f2) = if ((t / 0.5) as u32).is_multiple_of(2) {
-                (730.0, 1090.0)
+            //
+            // **Three formants, and a source shallower than the textbook.** A
+            // real *ah* measured through this same code gives eight scale
+            // degrees; this fixture with two formants and a 1/k source gave
+            // four, of which the two deepest were the fourth and the fifth —
+            // the one pair of intervals that spans no harmonic lattice, so the
+            // mapping built on that geometry had nothing to stand on. The
+            // fixture was quietly less of a voice than any voice.
+            //
+            // A glottal source really does fall at about 6 dB per octave once
+            // radiation is counted, so the slope here is not physics: it stands
+            // in for everything else that puts energy in a real voice's upper
+            // partials and that a sum of pure sines has none of — jitter,
+            // shimmer, glottal noise, source-tract coupling. Tuned until the
+            // measured partials look like a measured voice's, which is the only
+            // thing this fixture is for.
+            let (f1, f2, f3) = if ((t / 0.5) as u32).is_multiple_of(2) {
+                (730.0, 1090.0, 2440.0)
             } else {
-                (300.0, 2300.0)
+                (300.0, 2300.0, 3000.0)
             };
             (1..)
                 .map(|k| k as f32 * F0)
                 .take_while(|&hz| hz < 8_000.0)
                 .map(|hz| {
-                    let gain = (F0 / hz) * (formant(hz, f1, 90.0) + 0.5 * formant(hz, f2, 110.0));
+                    let gain = (F0 / hz).sqrt()
+                        * (formant(hz, f1, 90.0)
+                            + 0.8 * formant(hz, f2, 110.0)
+                            + 0.6 * formant(hz, f3, 150.0));
                     gain * (2.0 * std::f32::consts::PI * hz * t).sin()
                 })
                 .sum::<f32>()
@@ -705,14 +724,39 @@ async fn every_published_knob_changes_what_is_rendered() {
     let knobs = controls["knobs"].as_array().unwrap();
     assert!(!knobs.is_empty(), "no knobs published at all");
 
-    let (_, _, plain) = fetch(&app, &format!("/api/recordings/{id}/render")).await;
+    // Each knob is swept against the mappings it says it reaches, so a knob
+    // belonging to one mapping is not asked to change another. A claim made in
+    // the table is a claim checked here — and one made falsely fails, which is
+    // the point of letting a knob make it.
+    let every: Vec<String> = controls["mappings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["name"].as_str().unwrap().to_string())
+        .collect();
+
     for knob in knobs {
         let name = knob["name"].as_str().unwrap();
         let value = a_quarter_from_default(knob);
-        let (status, _, altered) =
-            fetch(&app, &format!("/api/recordings/{id}/render?{name}={value}")).await;
-        assert_eq!(status, StatusCode::OK, "{name}={value} was refused");
-        assert_ne!(altered, plain, "{name}={value} changed nothing");
+        let claimed: Vec<String> = knob["mappings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m.as_str().unwrap().to_string())
+            .collect();
+        let against = if claimed.is_empty() { &every } else { &claimed };
+
+        for mapping in against {
+            assert!(every.contains(mapping), "{name} claims unknown {mapping}");
+            let base = format!("/api/recordings/{id}/render?mapping={mapping}");
+            let (_, _, plain) = fetch(&app, &base).await;
+            let (status, _, altered) = fetch(&app, &format!("{base}&{name}={value}")).await;
+            assert_eq!(status, StatusCode::OK, "{name}={value} was refused");
+            assert_ne!(
+                altered, plain,
+                "{name}={value} changed nothing in {mapping}"
+            );
+        }
     }
 }
 
@@ -787,6 +831,20 @@ async fn every_published_mapping_can_be_rendered() {
             fetch(&app, &format!("/api/recordings/{id}/render?mapping={name}")).await;
         assert_eq!(status, StatusCode::OK, "{name} was refused");
         assert!(!audio.is_empty(), "{name} rendered nothing");
+
+        // ...and rendered the pitched material, not only the consonants. A
+        // mapping that quietly produces no tones still answers 200 with a file
+        // of the right length, which is a way for one to be broken and listed.
+        let (_, score) = send(
+            &app,
+            Request::get(format!("/api/recordings/{id}/score?mapping={name}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        let sounded = score["voices"].as_array().map(|v| v.len()).unwrap_or(0)
+            + score["events"].as_array().map(|n| n.len()).unwrap_or(0);
+        assert!(sounded > 0, "{name} sounded no pitched material: {score}");
     }
 }
 

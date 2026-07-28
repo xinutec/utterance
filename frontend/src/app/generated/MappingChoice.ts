@@ -3,4 +3,11 @@
 /**
  * One mapping a render may ask for.
  */
-export type MappingChoice = { name: string, label: string, about: string, };
+export type MappingChoice = { name: string, label: string, 
+/**
+ * The material this mapping makes. Two of a kind cannot sound together.
+ *
+ * Sent so the UI can turn one off when the other is chosen, rather than
+ * letting someone select a combination the render route refuses.
+ */
+makes: string, about: string, };

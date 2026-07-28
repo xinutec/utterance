@@ -17,6 +17,7 @@ const knob = (name: string, value: number): Knob => ({
   step: 0.05,
   default: value,
   about: "",
+  mappings: [],
 });
 
 const BIND = knob("bind", 1);

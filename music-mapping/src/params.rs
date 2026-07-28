@@ -17,6 +17,14 @@
 
 use crate::tuning::{Degree, Tuning};
 
+/// Mappings that sound a continuous field, and so read the field knobs.
+///
+/// Named here rather than in the route because the knob table is what has to
+/// agree with them: a knob claiming a mapping that does not exist, or a mapping
+/// gaining a knob nobody told the UI about, are both caught by `tests/api.rs`
+/// only because the claim is written down somewhere.
+const CONTINUOUS: &[&str] = &["field", "tonnetz"];
+
 /// One knob, described well enough that a UI can offer it without being told.
 ///
 /// **Why the range lives here and not in the UI.** A slider needs a minimum, a
@@ -40,6 +48,16 @@ pub struct Knob {
     pub default: f32,
     /// What moving it does, and what each end sounds like.
     pub about: &'static str,
+    /// Mappings this knob reaches, by name. Empty means every one of them.
+    ///
+    /// **Why a knob has to say.** The table exists so that a control cannot be
+    /// offered at a value the mapping clamps away — a slider that moves and
+    /// changes nothing. A knob belonging to one mapping and shown while another
+    /// is playing is the same failure by another route, and the only thing that
+    /// can be trusted to know which is the knob itself. `tests/api.rs` renders
+    /// every knob against every mapping it claims and fails if the audio is
+    /// unchanged, so a claim made here is a claim that is checked.
+    pub mappings: &'static [&'static str],
 }
 
 impl Knob {
@@ -58,6 +76,7 @@ pub const BIND: Knob = Knob {
     default: 1.0,
     about: "At 1 the notes are exactly where this voice's spectrum puts them. \
             At 0 they snap to the twelve everyone else uses.",
+    mappings: &[],
 };
 
 pub const DENSITY: Knob = Knob {
@@ -69,6 +88,7 @@ pub const DENSITY: Knob = Knob {
     default: crate::tuning::MIN_DEPTH,
     about: "How firm a note has to be to count. Low gives a crowded microtonal \
             set, high gives a handful of very stable intervals.",
+    mappings: &[],
 };
 
 pub const VOICES: Knob = Knob {
@@ -79,6 +99,7 @@ pub const VOICES: Knob = Knob {
     step: 1.0,
     default: 5.0,
     about: "How many tones sound at once.",
+    mappings: CONTINUOUS,
 };
 
 pub const SPACING: Knob = Knob {
@@ -88,8 +109,10 @@ pub const SPACING: Knob = Knob {
     max: 6.0,
     step: 1.0,
     default: 2.0,
-    about: "Scale degrees between one voice and the next. 1 is a cluster, \
-            higher is an open chord.",
+    about: "How far apart the voices sit. Scale degrees between one and the \
+            next in the field mapping, least air between them in the Tonnetz. \
+            1 is a cluster, higher is an open chord.",
+    mappings: CONTINUOUS,
 };
 
 pub const DRIFT: Knob = Knob {
@@ -101,6 +124,7 @@ pub const DRIFT: Knob = Knob {
     default: 0.25,
     about: "How far the music transposes with the speaker's pitch. At 0 it sits \
             still; near 1 it reads as a parallel melody.",
+    mappings: CONTINUOUS,
 };
 
 pub const REACH: Knob = Knob {
@@ -110,8 +134,10 @@ pub const REACH: Knob = Knob {
     max: 3.0,
     step: 0.05,
     default: 1.0,
-    about: "Octaves the root travels as the vowel moves front to back. This is \
+    about: "How far the vowel moves the harmony: octaves the root travels in \
+            the field mapping, cells of lattice crossed in the Tonnetz. This is \
             the articulation showing up as harmony.",
+    mappings: CONTINUOUS,
 };
 
 pub const VOICING: Knob = Knob {
@@ -121,9 +147,12 @@ pub const VOICING: Knob = Knob {
     max: 1.0,
     step: 0.05,
     default: 0.5,
-    about: "How much the shape of the mouth opens or clusters the chord. Lip \
-            rounding and tongue position move the third formant while leaving \
-            the vowel where it is; this is that showing up as harmony.",
+    about: "How much the shape of the mouth shows up in the chord. Lip rounding \
+            and tongue position move the third formant while leaving the vowel \
+            where it is: that opens or clusters the stack in the field mapping, \
+            and tips the weight between the chord's top and bottom in the \
+            Tonnetz.",
+    mappings: CONTINUOUS,
 };
 
 pub const ARTICULATION: Knob = Knob {
@@ -136,6 +165,7 @@ pub const ARTICULATION: Knob = Knob {
     about: "How much a moving mouth stirs the texture. A held vowel settles, a \
             busy passage opens the upper voices — rhythm from how fast the \
             spectrum is changing, without cutting anything into notes.",
+    mappings: CONTINUOUS,
 };
 
 pub const CONSONANTS: Knob = Knob {
@@ -147,19 +177,34 @@ pub const CONSONANTS: Knob = Knob {
     default: 1.0,
     about: "How loud the unpitched material is against the tones. At 0 they are \
             silent.",
+    mappings: &[],
+};
+
+pub const HOLD: Knob = Knob {
+    name: "hold",
+    label: "Hold the harmony",
+    min: 0.0,
+    max: 1.0,
+    step: 0.05,
+    default: 0.35,
+    about: "How far the mouth must move past a boundary before the chord \
+            changes. At 0 the harmony follows every wobble; higher makes it \
+            commit, so a chord rings long enough to hear what it is tuned to.",
+    mappings: &["tonnetz"],
 };
 
 /// Every knob, in the order a person should meet them.
 ///
 /// Ordered by how much each one changes what you hear, so someone exploring
 /// from the top down hears something different at each step.
-pub const KNOBS: [Knob; 9] = [
+pub const KNOBS: [Knob; 10] = [
     BIND,
     DENSITY,
     VOICES,
     SPACING,
     DRIFT,
     REACH,
+    HOLD,
     VOICING,
     ARTICULATION,
     CONSONANTS,
@@ -196,8 +241,19 @@ pub struct Params {
     /// the naive mapping this project exists to avoid. The default is deliberately
     /// nearer the first.
     pub drift: f32,
-    /// Octaves the root travels as the vowel moves front to back.
+    /// How far the vowel moves the harmony.
+    ///
+    /// Octaves the root travels front to back in the field mapping; cells of
+    /// lattice crossed in the Tonnetz one. The same quantity read onto two
+    /// geometries, which is why it is one knob rather than two.
     pub reach: f32,
+    /// How far past a boundary the mouth must go before the harmony follows.
+    ///
+    /// Read only by the mappings that quantise their harmony, which today means
+    /// the Tonnetz. It is the knob that decides whether a chord rings — and so
+    /// the one that decides whether the derived tuning can be heard at all, the
+    /// oldest open question in `docs/roadmap.md`.
+    pub hold: f32,
     /// How far the third formant opens or clusters the chord.
     ///
     /// The dimension of articulation the vowel chart cannot see. F1 and F2 place
@@ -228,6 +284,7 @@ impl Default for Params {
             spacing: SPACING.default as usize,
             drift: DRIFT.default,
             reach: REACH.default,
+            hold: HOLD.default,
             voicing: VOICING.default,
             articulation: ARTICULATION.default,
             consonants: CONSONANTS.default,
@@ -249,6 +306,7 @@ impl Params {
             spacing: SPACING.clamped(self.spacing as f32) as usize,
             drift: DRIFT.clamped(self.drift),
             reach: REACH.clamped(self.reach),
+            hold: HOLD.clamped(self.hold),
             voicing: VOICING.clamped(self.voicing),
             articulation: ARTICULATION.clamped(self.articulation),
             consonants: CONSONANTS.clamped(self.consonants),

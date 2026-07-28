@@ -9,26 +9,42 @@
 import type { Knob } from "../../models";
 import { knobValue, type MappingSettings } from "../studio/mapping-settings";
 
-/** One knob that differs, with the value each side gave it. */
+/** One setting that differs, with what each side made of it. */
 export interface Difference {
   readonly label: string;
   readonly name: string;
-  readonly a: number;
-  readonly b: number;
+  readonly a: string;
+  readonly b: string;
 }
 
-/** Every knob the two sides disagree about, in the order they are published. */
+/**
+ * Everything the two sides disagree about, in the order it is published.
+ *
+ * **The mapping counts as a setting**, and it is now the largest one there is:
+ * the field and the lattice are two different pieces of music from one voice,
+ * where a knob is a shade of one. Left out, the page would answer "nothing
+ * differs" to the most interesting comparison it can make — and since that
+ * sentence is the only thing telling a listener what they are listening for,
+ * being silent about it is worse than being wrong about a knob.
+ */
 export function differences(
   a: MappingSettings,
   b: MappingSettings,
   knobs: readonly Knob[],
 ): Difference[] {
-  return knobs
-    .map((knob) => ({
+  const mapping = {
+    label: "Mapping",
+    name: "mapping",
+    a: a.mapping.join(" + "),
+    b: b.mapping.join(" + "),
+  };
+  return [
+    mapping,
+    ...knobs.map((knob) => ({
       label: knob.label,
       name: knob.name,
-      a: knobValue(a, knob),
-      b: knobValue(b, knob),
-    }))
-    .filter((d) => d.a !== d.b);
+      a: String(knobValue(a, knob)),
+      b: String(knobValue(b, knob)),
+    })),
+  ].filter((d) => d.a !== d.b);
 }

@@ -117,6 +117,7 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
         spacing: 0,
         drift: -3.0,
         reach: 50.0,
+        hold: 7.0,
         voicing: 9.0,
         articulation: -4.0,
         consonants: -2.0,
@@ -129,6 +130,7 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
     assert!(wild.spacing >= 1);
     assert!(wild.drift >= 0.0);
     assert!(wild.reach <= 3.0);
+    assert!(wild.hold <= 1.0);
     assert!(wild.voicing <= 1.0);
     assert!(wild.articulation >= 0.0);
     assert!(wild.consonants >= 0.0);
