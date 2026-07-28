@@ -101,8 +101,45 @@ In rough order of how much each unlocks.
   real and was inaudible, because a chord has to ring for about a second before
   its tuning is perceptible and the field mapping never held still that long.
   The Tonnetz mapping is the answer built for it — quantising the harmony while
-  leaving the time continuous — and whether it is *enough* is a listening
-  question nobody has answered yet.
+  leaving the time continuous.
+
+  **Measured 2026-07-28 by `src/bin/dwell.rs`, and the answer depends on the
+  material rather than on the mapping.** The figure previously reported for the
+  Tonnetz — 55% of a take spent holding one chord — is the wrong statistic: a
+  fraction cannot tell eight seconds of held harmony from eighty chords of a
+  hundred milliseconds, and only the first is audible as a tuning. Measuring the
+  duration of each individual ring instead, at the default `hold = 0.35` and
+  pooled over every take in the store, the *median* chord lasts **0.15 s** while
+  **56%** of sounding time sits inside chords of a second or more. Both are
+  true: the distribution is bimodal, and the median describes a crowd of
+  flickers that occupy almost no time.
+
+  Split by take, it separates cleanly and the boundary is not where a knob is:
+
+  | material | median ring | share of time in rings ≥ 1 s |
+  | --- | --- | --- |
+  | `vowel-ee`, `steady-ah` (sustained) | 3.4–11.3 s | 95–98% |
+  | `what I need vocal 3` (sung) | 0.27 s | 90% |
+  | `Fiona Improv Vocal 1` (sung) | 0.18 s | 56% |
+  | `speech` | 0.16 s | **2%** |
+
+  So the prediction is that `bind` is now audible on sung and sustained
+  material and still inaudible on speech — where the longest chord in a
+  46-second take is 1.00 s even at the default, and 1.90 s with `hold` at its
+  maximum. Speech does not hold a vowel long enough for any amount of spatial
+  hysteresis to make a chord ring.
+
+- **`hold` suppresses flickers rather than lengthening chords, and never
+  removes them.** Across its whole range the pooled median ring moves only
+  0.07 s → 0.22 s while the share of time in rings ≥ 1 s moves 43% → 75%. What
+  the knob does is delete short chords, not extend typical ones. It never
+  finishes the job: at `hold = 1.0` the take `what I need vocal 4` spends 99% of
+  its time in long rings and still has a *median* ring of **0.04 s** — a chord
+  sitting still for ten seconds, flicking to a neighbour for two frames and
+  back. That is an artifact rather than music, and the shape of the fix is a
+  minimum dwell in *time* alongside the existing hysteresis in space. Not built:
+  it should be heard before it is designed, in case the flickers turn out to be
+  inaudible under the consonants.
 - **The Tonnetz says nothing about register.** Each voice takes whichever octave
   of its pitch class falls nearest a target, which keeps common tones at common
   frequencies and is why voice leading survives. What it does not do is anything
@@ -134,6 +171,17 @@ In rough order of how much each unlocks.
   moment of the piece, and draws each stream's difference scaled to its own
   largest gap. Built after four separate attempts to answer the `bind` question
   by ear failed for want of an instrument.
+
+  **And a comparison is now a link** (2026-07-28). The page reads `take`, `a`
+  and `b` from its own URL and writes its state back as the settings move, where
+  before it could only be handed on as a description of which controls to press.
+  A comparison is this project's unit of evidence and there are two listeners in
+  two places: passing one on as instructions means they hear two slightly
+  different things and then disagree about a result neither of them heard. `a`
+  and `b` each carry a whole settings query encoded inside the outer one, so
+  there is no second format to keep in step with the knob table. A URL is input
+  from outside, so an unpublished knob is dropped and an out-of-range value is
+  clamped rather than left on a slider that cannot show it.
 - **The API's voice fixture was less of a voice than any voice** (2026-07-28,
   fixed). Two formants and a textbook source slope gave a four-degree scale
   whose two deepest intervals were the fourth and the fifth — the one pair that
@@ -326,9 +374,16 @@ source, plus the one that most shapes daily work.
   music. The Tonnetz mapping quantises where the vowel sits on a harmonic
   lattice and leaves every other stream — loudness, colour, breath, drift —
   moving at its own rate, so a held vowel gives a held chord without a frame
-  going unread. Whether the chords now ring long enough for `bind` to be
-  audible is the listening test this whole page has been waiting for, and it has
-  not been done.
+  going unread.
+
+  **Now measurable, and asked as a narrower question.** `src/bin/dwell.rs`
+  reports how long each chord actually rings (see the gap above): on sustained
+  and sung takes the Tonnetz spends 56–98% of its time in chords past the
+  perceptual threshold, and on speech 2%. So the question is no longer "is the
+  derived tuning audible" but "**is it audible on sung material**" — and the
+  honest form of the listening test is a pair: one sung take where the numbers
+  say yes and one spoken take where they say no. Hearing a difference on both
+  would mean the difference is not the tuning.
 
 - **Which knobs actually change what anyone hears?** Measured on `vowel-ah` in
   the field mapping, as how far each moves the pitch at its widest: `density`

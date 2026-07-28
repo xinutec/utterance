@@ -100,38 +100,29 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
     compose_with(vp, voice, Params::default())
 }
 
-/// Build the lattice field with the knobs set explicitly.
+/// Which triangle the harmony is in, frame by frame.
 ///
-/// Returns `None` when the speaker's scale spans no plane — see
-/// [`Lattice::from_tuning`]. That is a real answer rather than a failure: a
-/// scale of the fifth and nothing else has one axis, and laying a lattice over
-/// it anyway would mean one of the two vowel dimensions silently reaching
-/// nothing.
-pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Field> {
+/// The walk itself, separated from the chord it is turned into. Public because
+/// it is the thing worth measuring: *how long a chord rings* is the question
+/// this whole mapping exists to answer, and a tool that reimplemented the walk
+/// to find out could drift from it and report on a mapping nobody is listening
+/// to. `src/bin/dwell.rs` reads this.
+///
+/// Returns `None` in exactly the cases [`compose_with`] does.
+pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Vec<Triangle>> {
     let params = params.sane();
     let tuning = params::bind_toward_equal(&voice.tuning, params.bind);
     // The reason it spans no plane is not thrown away here so much as asked for
     // somewhere else: `routes::api` calls `Lattice::from_tuning` itself, so a
     // refusal reaches the browser as a sentence rather than as silence.
-    let lattice = Lattice::from_tuning(&tuning).ok()?;
+    Lattice::from_tuning(&tuning).ok()?;
     if vp.frame.count == 0 {
         return None;
     }
 
-    let frames = vp.frame.count;
-    let drift = streams::smooth(&streams::filled(&vp.pitch.hz), DRIFT_FRAMES);
     let (open_raw, front_raw) = streams::vowel(vp, voice);
     let open = streams::smooth(&open_raw, ROOT_FRAMES);
     let front = streams::smooth(&front_raw, ROOT_FRAMES);
-    let level = streams::smooth(&streams::level(vp), LEVEL_FRAMES);
-    let bright = streams::smooth(&streams::brightness(vp, voice), ROOT_FRAMES);
-    let depth = streams::smooth(&streams::depth(vp, voice), ROOT_FRAMES);
-    let stir = streams::smooth(&vp.events.flux, LEVEL_FRAMES);
-
-    let mut voices = vec![vec![0.0f32; frames]; params.voices];
-    let mut gains = vec![vec![0.0f32; frames]; params.voices];
-    let mut colour = vec![0.0f32; frames];
-    let mut breath = vec![0.0f32; frames];
 
     // The walk is stateful, because holding a chord means remembering which one
     // is being held. Deterministic all the same: the state is a pure function of
@@ -146,9 +137,44 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
     let (x0, y0) = position(0);
     let mut here: Triangle = triangle_at(x0, y0);
 
+    Some(
+        (0..vp.frame.count)
+            .map(|i| {
+                let (x, y) = position(i);
+                here = settle(here, x, y, params.hold);
+                here
+            })
+            .collect(),
+    )
+}
+
+/// Build the lattice field with the knobs set explicitly.
+///
+/// Returns `None` when the speaker's scale spans no plane — see
+/// [`Lattice::from_tuning`]. That is a real answer rather than a failure: a
+/// scale of the fifth and nothing else has one axis, and laying a lattice over
+/// it anyway would mean one of the two vowel dimensions silently reaching
+/// nothing.
+pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Field> {
+    let params = params.sane();
+    let tuning = params::bind_toward_equal(&voice.tuning, params.bind);
+    let lattice = Lattice::from_tuning(&tuning).ok()?;
+    let path = harmonic_path(vp, voice, params)?;
+
+    let frames = vp.frame.count;
+    let drift = streams::smooth(&streams::filled(&vp.pitch.hz), DRIFT_FRAMES);
+    let level = streams::smooth(&streams::level(vp), LEVEL_FRAMES);
+    let bright = streams::smooth(&streams::brightness(vp, voice), ROOT_FRAMES);
+    let depth = streams::smooth(&streams::depth(vp, voice), ROOT_FRAMES);
+    let stir = streams::smooth(&vp.events.flux, LEVEL_FRAMES);
+
+    let mut voices = vec![vec![0.0f32; frames]; params.voices];
+    let mut gains = vec![vec![0.0f32; frames]; params.voices];
+    let mut colour = vec![0.0f32; frames];
+    let mut breath = vec![0.0f32; frames];
+
     for i in 0..frames {
-        let (x, y) = position(i);
-        here = settle(here, x, y, params.hold);
+        let here = path[i];
 
         // His prosody, as a slow transposition of everything — measured against
         // the speaker's habitual pitch rather than this take's own median, for
