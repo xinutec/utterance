@@ -207,11 +207,47 @@ In rough order of how much each unlocks.
   the knob does is delete short chords, not extend typical ones. It never
   finishes the job: at `hold = 1.0` the take `what I need vocal 4` spends 99% of
   its time in long rings and still has a *median* ring of **0.04 s** — a chord
-  sitting still for ten seconds, flicking to a neighbour for two frames and
-  back. That is an artifact rather than music, and the shape of the fix is a
-  minimum dwell in *time* alongside the existing hysteresis in space. Not built:
-  it should be heard before it is designed, in case the flickers turn out to be
-  inaudible under the consonants.
+  sitting still for twenty-two seconds, flicking to a neighbour for two frames
+  and back. That is an artifact rather than music.
+
+  **Fixed 2026-07-29 by `settle`, a minimum dwell in time.** `hold` is
+  hysteresis in *space* and structurally cannot see this case: the mouth really
+  did cross the boundary, so the spatial rule is right to let the chord go — and
+  then it came straight back. `settle` counts consecutive frames the position
+  has wanted to leave, and the harmony follows only once the wanting has lasted.
+  The two rules compose: `hold` decides whether a position counts as having
+  left, `settle` decides whether it stayed gone.
+
+  Measured across the whole store at the default `hold = 0.35`, sweeping
+  `settle` from 0 to its maximum of 0.5 s:
+
+  | settle | chords | pooled median ring | share ≥ 1 s | longest |
+  | --- | --- | --- | --- | --- |
+  | 0.00 s | 704 | 0.14 s | 57% | 15.60 s |
+  | 0.10 s | 540 | 0.23 s | 60% | 15.60 s |
+  | 0.30 s | 401 | 0.37 s | 69% | 15.60 s |
+  | 0.50 s | 367 | 0.42 s | 73% | 15.61 s |
+
+  **It reaches what `hold` could not.** At a fixed `hold` it moves the pooled
+  median 0.14 → 0.42 s, where `hold` across its entire travel moves it 0.07 →
+  0.22. The longest ring does not move at all, which is the property worth
+  having: it deletes flickers without freezing anything. On the take the
+  artifact was found in, the median goes 0.04 s → 0.40 s at `settle = 0.10`.
+
+  **Two honest limits.** `take 16:54:26` has a median of 0.08 s at every setting
+  — whatever is short there is not a flicker, and this knob does not touch it.
+  And on `speech` the median rises to 0.29 s at `settle = 0.3` and falls back to
+  0.17 s at 0.5: past some point the walk lags far enough that it commits to
+  wherever the mouth has got to, chasing rather than following, and makes new
+  short rings of its own. So the range's top end is not simply "more of the good
+  thing", which is exactly why it is a published range rather than a constant.
+
+  **Default 0, deliberately** — the rule that defaults reproduce the
+  unparameterised behaviour, so every render made before today is still
+  comparable with one made after it. Where it should sit is a question for the
+  ear, and `/compare` is the instrument: the flickers may turn out to be
+  inaudible under the consonants, in which case the right default is the one it
+  has.
 - **The Tonnetz says nothing about register.** Each voice takes whichever octave
   of its pitch class falls nearest a target, which keeps common tones at common
   frequencies and is why voice leading survives. What it does not do is anything

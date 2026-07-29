@@ -31,12 +31,13 @@
 //! `reach` is how much of the lattice a vowel crosses, `spacing` how open the
 //! chord is voiced, `voicing` how far the mouth shape tips the chord's weight,
 //! and `hold` how far past a boundary the mouth must go before the harmony
-//! follows.
+//! follows — with `settle` saying how long it must stay gone, which is the part
+//! `hold` cannot express.
 
 use utterance_analysis::voiceprint::Voiceprint;
 
 use crate::compose::compose_noise;
-use crate::lattice::{Lattice, Triangle, settle, triangle_at};
+use crate::lattice::{Lattice, Triangle, Walk};
 use crate::params::{self, Params};
 use crate::score::{Field, Score};
 use crate::streams::{self, DRIFT_FRAMES, LEVEL_FRAMES, ROOT_FRAMES};
@@ -139,14 +140,20 @@ pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<V
         )
     };
     let (x0, y0) = position(0);
-    let mut here: Triangle = triangle_at(x0, y0);
+    let mut walk = Walk::start(x0, y0);
+
+    // The settle time is a knob in seconds and the walk counts frames, so the
+    // conversion happens once, here, against this take's own hop. Rounded rather
+    // than truncated so a setting just under one frame's worth still means one
+    // frame — the alternative is a slider whose bottom step silently does
+    // nothing on a recording with a long hop.
+    let dwell_frames = (params.settle / vp.frame.hop_s.max(f32::EPSILON)).round() as usize;
 
     Some(
         (0..vp.frame.count)
             .map(|i| {
                 let (x, y) = position(i);
-                here = settle(here, x, y, params.hold);
-                here
+                walk.step(x, y, params.hold, dwell_frames)
             })
             .collect(),
     )

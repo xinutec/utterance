@@ -165,6 +165,9 @@ pub struct VoiceParams {
     /// How far past a boundary the mouth must go before the harmony follows.
     #[serde(default)]
     pub hold: Option<f32>,
+    /// Seconds the mouth must stay away before the harmony follows.
+    #[serde(default)]
+    pub settle: Option<f32>,
     /// How far the third formant opens or clusters the chord.
     #[serde(default)]
     pub voicing: Option<f32>,
@@ -188,6 +191,7 @@ impl VoiceParams {
             drift: self.drift.unwrap_or(base.drift),
             reach: self.reach.unwrap_or(base.reach),
             hold: self.hold.unwrap_or(base.hold),
+            settle: self.settle.unwrap_or(base.settle),
             voicing: self.voicing.unwrap_or(base.voicing),
             articulation: self.articulation.unwrap_or(base.articulation),
             consonants: self.consonants.unwrap_or(base.consonants),

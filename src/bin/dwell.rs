@@ -21,8 +21,9 @@
 //! would be scored as the longest chord in the piece.
 //!
 //! ```text
-//! cargo run --bin dwell            # the default hold, plus a sweep
-//! cargo run --bin dwell -- 0.9     # one specific hold value
+//! cargo run --bin dwell             # the default hold, plus a sweep
+//! cargo run --bin dwell -- 0.9      # one specific hold value
+//! cargo run --bin dwell -- 0.9 0.2  # …and a settle time, in seconds
 //! ```
 
 use std::collections::BTreeSet;
@@ -136,13 +137,23 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
+    // The second knob that decides how long a chord rings, and the one the
+    // sweep above cannot reach: `hold` is hysteresis in space and `settle` is
+    // hysteresis in time, so a mouth that crosses a boundary and comes straight
+    // back is invisible to the first and caught by the second.
+    let settle: f32 = match std::env::args().nth(2) {
+        Some(s) => s.parse()?,
+        None => Params::default().settle,
+    };
+
     let takes = store.list()?;
     for hold in holds {
         let params = Params {
             hold,
+            settle,
             ..Params::default()
         };
-        println!("hold = {hold:.2}");
+        println!("hold = {hold:.2}, settle = {settle:.2}s");
         println!(
             "  {:<18} {:>7} {:>9} {:>9} {:>9} {:>10}",
             "take", "chords", "median", "p90", "longest", "ring>=1s"

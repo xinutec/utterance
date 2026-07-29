@@ -7,7 +7,9 @@
 //! be, since every musical consequence here rests on that geometry.
 
 use utterance_mapping::dissonance::Component;
-use utterance_mapping::lattice::{Lattice, NoPlane, Triangle, generators, settle, triangle_at};
+use utterance_mapping::lattice::{
+    Lattice, NoPlane, Triangle, Walk, generators, settle, triangle_at,
+};
 use utterance_mapping::tuning::{self, Degree, Tuning};
 
 /// A harmonic spectrum, as a voice makes.
@@ -283,6 +285,126 @@ fn holding_keeps_a_chord_through_a_wobble_and_yields_to_a_move() {
 fn holding_at_zero_follows_every_boundary() {
     let start = triangle_at(0.2, 0.2);
     assert_eq!(settle(start, 0.45, 0.45, 0.0), triangle_at(0.45, 0.45));
+}
+
+/// Frames of settle used throughout the walk tests, and a plain number of frames
+/// rather than a duration, because [`Walk`] counts frames and the seconds are
+/// converted once by the caller.
+const DWELL: usize = 5;
+
+#[test]
+fn a_chord_survives_a_departure_that_comes_straight_back() {
+    // The artifact this exists for. `hold` is hysteresis in space and cannot see
+    // this case at all: the mouth really did cross the boundary, so the spatial
+    // rule is right to let it go — and then it came back two frames later. On a
+    // real take that produced a chord sitting still for twenty-two seconds with a
+    // median ring of 0.04 s around it.
+    let mut walk = Walk::start(0.2, 0.2);
+    let home = walk.step(0.2, 0.2, 0.0, DWELL);
+
+    // Well past the boundary, so `hold` at any setting would have yielded.
+    for _ in 0..DWELL - 1 {
+        assert_eq!(
+            walk.step(1.5, 0.2, 0.0, DWELL),
+            home,
+            "the chord followed a departure shorter than the settle time"
+        );
+    }
+    assert_eq!(
+        walk.step(0.2, 0.2, 0.0, DWELL),
+        home,
+        "coming back did not restore the chord"
+    );
+}
+
+#[test]
+fn a_departure_that_lasts_moves_the_chord() {
+    // The other half, and the reason this is a delay rather than a lockout: what
+    // is refused is a flicker, not a move.
+    let mut walk = Walk::start(0.2, 0.2);
+    let home = walk.step(0.2, 0.2, 0.0, DWELL);
+
+    let mut moved = home;
+    for _ in 0..DWELL {
+        moved = walk.step(1.5, 0.2, 0.0, DWELL);
+    }
+    assert_ne!(moved, home, "a sustained move never committed");
+    assert_eq!(moved, triangle_at(1.5, 0.2), "committed to the wrong cell");
+}
+
+#[test]
+fn the_count_restarts_when_the_mouth_comes_home() {
+    // Consecutive frames, not a total. Otherwise a mouth that dips out for one
+    // frame every second accumulates its way across the boundary eventually,
+    // which is the flicker being counted as a move by instalments.
+    let mut walk = Walk::start(0.2, 0.2);
+    let home = walk.step(0.2, 0.2, 0.0, DWELL);
+
+    for _ in 0..DWELL * 3 {
+        // Asserted *during* the departure as well as after it. Checking only the
+        // frame it comes home on passes trivially under a walk with no clock in
+        // it at all, which is a test that cannot fail.
+        assert_eq!(
+            walk.step(1.5, 0.2, 0.0, DWELL),
+            home,
+            "one frame away was enough to move the chord"
+        );
+        assert_eq!(
+            walk.step(0.2, 0.2, 0.0, DWELL),
+            home,
+            "single-frame departures added up to a chord change"
+        );
+    }
+}
+
+#[test]
+fn a_glide_keeps_moving_rather_than_freezing() {
+    // The failure mode of the obvious implementation. Waiting for *one candidate*
+    // to hold still means a mouth sweeping across the lattice never rests
+    // anywhere, so the harmony would freeze for the whole gesture — the opposite
+    // of what a deliberate move should do. Counting departures instead, the walk
+    // commits to wherever the mouth is now and goes on committing as it travels.
+    let mut walk = Walk::start(0.0, 0.2);
+    let start = walk.step(0.0, 0.2, 0.0, DWELL);
+
+    // Fast enough that no single triangle is occupied for `DWELL` frames — which
+    // is the whole point. A glide slow enough to rest in each cell would commit
+    // under either design and prove nothing.
+    let mut seen: Vec<Triangle> = Vec::new();
+    for frame in 0..40 {
+        let x = frame as f32 * 0.3;
+        let here = walk.step(x, 0.2, 0.0, DWELL);
+        if !seen.contains(&here) {
+            seen.push(here);
+        }
+    }
+    assert!(
+        seen.len() > 3,
+        "a glide across twelve cells settled on {} triangles",
+        seen.len()
+    );
+    assert!(seen.contains(&start), "the walk skipped where it began");
+}
+
+#[test]
+fn no_settle_time_is_the_walk_that_has_no_clock_in_it() {
+    // The default, and the promise that adding this knob changed nothing for
+    // anyone who does not touch it. Both 0 and 1 frame mean *commit as soon as
+    // the spatial rule allows*, which is what `settle` alone did.
+    for frames in [0, 1] {
+        let mut walk = Walk::start(0.2, 0.2);
+        walk.step(0.2, 0.2, 0.5, frames);
+        assert_eq!(
+            walk.step(0.45, 0.45, 0.5, frames),
+            settle(triangle_at(0.2, 0.2), 0.45, 0.45, 0.5),
+            "settle over {frames} frames disagreed with the spatial rule alone"
+        );
+        assert_eq!(
+            walk.step(1.6, 0.2, 0.5, frames),
+            triangle_at(1.6, 0.2),
+            "settle over {frames} frames refused a move the spatial rule allows"
+        );
+    }
 }
 
 #[test]

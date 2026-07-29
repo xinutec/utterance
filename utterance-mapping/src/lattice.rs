@@ -407,6 +407,68 @@ pub fn settle(previous: Triangle, x: f32, y: f32, hold: f32) -> Triangle {
     candidate
 }
 
+/// The harmony's walk across the lattice, holding in space *and* in time.
+///
+/// **Why [`settle`] alone is not enough, measured rather than supposed.**
+/// `hold` is hysteresis in space: how far past a boundary the mouth must travel.
+/// It deletes short chords well and never lengthens typical ones, and at the top
+/// of its range it still leaves an artifact that no amount of it can reach. On
+/// `what I need vocal 4` at `hold = 1.0` the mapping spends 99% of its time in
+/// rings of a second or more and has a *median* ring of 0.04 s — a chord sitting
+/// still for twenty-two seconds, flicking to a neighbour for two frames and back.
+/// The mouth genuinely crossed the boundary, so the spatial rule is right to let
+/// it; what is wrong is that it came straight back.
+///
+/// So this adds hysteresis in time. A frame that wants to leave starts a count,
+/// and the harmony follows only once the wanting has lasted `frames` in a row.
+/// The two rules compose rather than replace: `hold` decides whether a position
+/// counts as having left at all, and this decides whether it stayed gone.
+///
+/// **The count is of consecutive frames wanting to leave, not of frames in one
+/// new triangle**, and that distinction is what keeps a deliberate glide
+/// working. A mouth sweeping across several cells never rests in any of them, so
+/// a rule waiting for one candidate to hold still would freeze the harmony for
+/// the whole gesture. Counting departures instead, the walk commits to wherever
+/// the mouth is *now* and goes on committing as it travels — lagging by `frames`
+/// and no more.
+pub struct Walk {
+    here: Triangle,
+    /// Consecutive frames the position has wanted to leave `here`.
+    leaving: usize,
+}
+
+impl Walk {
+    /// Start wherever the first frame lands. No hysteresis has anything to hold.
+    pub fn start(x: f32, y: f32) -> Self {
+        Walk {
+            here: triangle_at(x, y),
+            leaving: 0,
+        }
+    }
+
+    /// Advance one frame and report the triangle the harmony is in.
+    ///
+    /// `frames` is the minimum dwell, counted in frames. Zero and one both mean
+    /// *commit as soon as the spatial rule allows*, which is what this did
+    /// before there was a clock in it.
+    pub fn step(&mut self, x: f32, y: f32, hold: f32, frames: usize) -> Triangle {
+        let candidate = settle(self.here, x, y, hold);
+        if candidate == self.here {
+            // Back inside, or never out. Whatever the count had reached, the
+            // departure it was counting did not happen.
+            self.leaving = 0;
+            return self.here;
+        }
+
+        self.leaving += 1;
+        if self.leaving >= frames.max(1) {
+            self.here = candidate;
+            self.leaving = 0;
+        }
+        self.here
+    }
+}
+
 /// How far outside a triangle a position has strayed, in cells.
 fn depth_inside(t: Triangle, x: f32, y: f32) -> f32 {
     let (fx, fy) = (x - t.x as f32, y - t.y as f32);

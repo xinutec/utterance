@@ -229,11 +229,26 @@ pub const HOLD: Knob = Knob {
     primary: true,
 };
 
+pub const SETTLE: Knob = Knob {
+    name: "settle",
+    label: "Settle",
+    min: 0.0,
+    max: 0.5,
+    step: 0.01,
+    default: 0.0,
+    about: "How long the mouth must stay in its new place before the chord \
+            follows, in seconds. At 0 it follows the moment it is allowed to; \
+            higher ignores a mouth that crosses a boundary and comes straight \
+            back.",
+    mappings: &["tonnetz"],
+    primary: false,
+};
+
 /// Every knob, in the order a person should meet them.
 ///
 /// Ordered by how much each one changes what you hear, so someone exploring
 /// from the top down hears something different at each step.
-pub const KNOBS: [Knob; 10] = [
+pub const KNOBS: [Knob; 11] = [
     BIND,
     DENSITY,
     VOICES,
@@ -241,6 +256,7 @@ pub const KNOBS: [Knob; 10] = [
     DRIFT,
     REACH,
     HOLD,
+    SETTLE,
     VOICING,
     ARTICULATION,
     CONSONANTS,
@@ -290,6 +306,19 @@ pub struct Params {
     /// the one that decides whether the derived tuning can be heard at all, the
     /// oldest open question in `docs/roadmap.md`.
     pub hold: f32,
+    /// How long the mouth must stay away before the harmony follows, in seconds.
+    ///
+    /// The other half of [`Self::hold`], and the half that reaches an artifact
+    /// hysteresis in space cannot. Spatial hold asks *how far* past the boundary;
+    /// this asks *for how long*, so a mouth that crosses a line and comes
+    /// straight back leaves the chord alone. Measured need: at `hold = 1.0` a
+    /// sung take spends 99% of its time in rings of a second or more and still
+    /// has a median ring of 0.04 s.
+    ///
+    /// In seconds rather than frames because the frame rate is an analysis
+    /// detail, and a knob whose meaning moved with the hop size would be a
+    /// different knob on a different recording.
+    pub settle: f32,
     /// How far the third formant opens or clusters the chord.
     ///
     /// The dimension of articulation the vowel chart cannot see. F1 and F2 place
@@ -321,6 +350,7 @@ impl Default for Params {
             drift: DRIFT.default,
             reach: REACH.default,
             hold: HOLD.default,
+            settle: SETTLE.default,
             voicing: VOICING.default,
             articulation: ARTICULATION.default,
             consonants: CONSONANTS.default,
@@ -343,6 +373,7 @@ impl Params {
             drift: DRIFT.clamped(self.drift),
             reach: REACH.clamped(self.reach),
             hold: HOLD.clamped(self.hold),
+            settle: SETTLE.clamped(self.settle),
             voicing: VOICING.clamped(self.voicing),
             articulation: ARTICULATION.clamped(self.articulation),
             consonants: CONSONANTS.clamped(self.consonants),
@@ -396,6 +427,10 @@ impl Params {
             },
             "hold" => Params {
                 hold: value,
+                ..self
+            },
+            "settle" => Params {
+                settle: value,
                 ..self
             },
             "voicing" => Params {
