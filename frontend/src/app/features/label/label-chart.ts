@@ -68,6 +68,9 @@ export class LabelChart {
   /** Index of the mark being dragged, or null. */
   private dragging: number | null = null;
 
+  /** The playhead position the view last scrolled to follow. */
+  private lastFollowed = -1;
+
   constructor() {
     // Nothing can be measured before the first render, and every input change
     // after it has to repaint.
@@ -246,10 +249,19 @@ export class LabelChart {
     ctx.lineTo(head, height);
     ctx.stroke();
 
-    // Keep the playhead in view while the take plays, so a long take does not
+    // Keep the playhead in view **while it is moving**, so a long take does not
     // scroll away from whoever is listening to it.
+    //
+    // Only when it moved, and never mid-drag. `draw` runs on every redraw —
+    // including each pointermove of a drag — so following unconditionally meant
+    // that pulling a mark while the playhead sat off-screen scrolled the whole
+    // chart out from under the hand, once per frame. Reported from the first
+    // real session: "when I pull a line, shortly after, the whole graph starts
+    // to move".
+    const moved = this.playhead() !== this.lastFollowed;
+    this.lastFollowed = this.playhead();
     const scroller = this.scrollRef().nativeElement;
-    if (head < 0 || head > width) {
+    if (moved && this.dragging === null && (head < 0 || head > width)) {
       scroller.scrollLeft = Math.max(
         0,
         this.playhead() * this.pixelsPerSecond - scroller.clientWidth / 2,

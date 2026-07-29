@@ -727,6 +727,41 @@ test("label — a mark can be placed, moved and removed on the chart", async ({ 
   await expect(page.locator(".tally")).toContainText("1 marked");
 });
 
+test("label — dragging a mark does not scroll the chart out from under you", async ({
+  page,
+}) => {
+  // `draw` runs on every redraw, including each pointermove of a drag, and the
+  // follow-the-playhead rule ran with it: with the playhead off-screen, pulling
+  // a mark scrolled the view once per frame. Reported from the first real
+  // session — "when I pull a line, shortly after, the whole graph starts to
+  // move" — and invisible to every other check here.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) =>
+    r.request().method() === "GET"
+      ? r.fulfill({ json: { syllables: [{ atS: 3.4 }] } })
+      : r.fulfill({ json: JSON.parse(r.request().postData() ?? "{}") }),
+  );
+  await page.goto("/label");
+  const canvas = page.locator("app-label-chart canvas");
+  await canvas.waitFor();
+
+  // Scroll away from the playhead, which sits at zero and unseen.
+  const scroller = page.locator("app-label-chart .scroller");
+  await scroller.evaluate((el) => (el.scrollLeft = 300));
+  const before = await scroller.evaluate((el) => el.scrollLeft);
+  expect(before).toBeGreaterThan(0);
+
+  const box = (await canvas.boundingBox())!;
+  const y = box.y + box.height / 2;
+  // The mark at 3.4s, with the view scrolled 300px at 100px/s, sits at x = 40.
+  await page.mouse.move(box.x + 40, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 90, y, { steps: 10 });
+  await page.mouse.up();
+
+  expect(await scroller.evaluate((el) => el.scrollLeft)).toBe(before);
+});
+
 test("label — the chart magnifies, because a syllable is two pixels otherwise", async ({
   page,
 }) => {
