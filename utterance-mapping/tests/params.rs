@@ -143,7 +143,10 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
 /// cannot be used, and one that says nothing becomes a control nobody can
 /// interpret.
 mod table {
-    use utterance_mapping::params::{KNOBS, Params};
+    use utterance_mapping::params::{
+        ARTICULATION, BIND, CONSONANTS, DENSITY, DRIFT, HOLD, KNOBS, Params, REACH, SPACING,
+        VOICES, VOICING,
+    };
 
     #[test]
     fn every_knob_starts_somewhere_it_is_allowed_to_be() {
@@ -186,6 +189,71 @@ mod table {
             for b in &KNOBS[i + 1..] {
                 assert_ne!(a.name, b.name);
             }
+        }
+    }
+
+    #[test]
+    fn every_knob_sets_the_field_its_name_promises() {
+        // Spelled out rather than derived, and that is the whole value: this is
+        // a second, independent statement of the same mapping, so a typo in
+        // `Params::with` — `reach` writing to `drift`, say — fails here instead
+        // of being reported later as a knob that does nothing. Each case also
+        // asserts that *nothing else* moved, which is the half a spot check of
+        // one field would miss.
+        let d = Params::default();
+        assert_eq!(d.with(&BIND, 0.0), Params { bind: 0.0, ..d });
+        assert_eq!(d.with(&DENSITY, 0.4), Params { density: 0.4, ..d });
+        assert_eq!(d.with(&VOICES, 7.0), Params { voices: 7, ..d });
+        assert_eq!(d.with(&SPACING, 4.0), Params { spacing: 4, ..d });
+        assert_eq!(d.with(&DRIFT, 1.5), Params { drift: 1.5, ..d });
+        assert_eq!(d.with(&REACH, 2.5), Params { reach: 2.5, ..d });
+        assert_eq!(d.with(&HOLD, 0.9), Params { hold: 0.9, ..d });
+        assert_eq!(d.with(&VOICING, 0.1), Params { voicing: 0.1, ..d });
+        assert_eq!(
+            d.with(&ARTICULATION, 1.2),
+            Params {
+                articulation: 1.2,
+                ..d
+            }
+        );
+        assert_eq!(
+            d.with(&CONSONANTS, 0.0),
+            Params {
+                consonants: 0.0,
+                ..d
+            }
+        );
+    }
+
+    #[test]
+    fn every_published_knob_is_reachable_by_name() {
+        // `with` panics on a name it does not know, so this is what catches a
+        // knob added to the table and nowhere else. Swept to the end furthest
+        // from the default, because `bind` starts life *at* its maximum and
+        // "move it to max" would be no move at all.
+        for knob in &KNOBS {
+            let far = if (knob.max - knob.default) >= (knob.default - knob.min) {
+                knob.max
+            } else {
+                knob.min
+            };
+            assert_ne!(
+                Params::default().with(knob, far),
+                Params::default(),
+                "{} does not move when set to {far}",
+                knob.name
+            );
+        }
+    }
+
+    #[test]
+    fn setting_a_knob_clamps_rather_than_escaping_its_range() {
+        // A caller sweeping the table has no reason to know each range, and a
+        // value past the end must land at the end rather than somewhere the
+        // mapping would clamp away later and differently.
+        for knob in &KNOBS {
+            let over = Params::default().with(knob, knob.max + 1000.0);
+            assert_eq!(over, over.sane(), "{}", knob.name);
         }
     }
 }

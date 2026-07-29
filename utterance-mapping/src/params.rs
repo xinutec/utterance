@@ -71,10 +71,18 @@ pub struct Knob {
     /// knob table that drifts the first time somebody adds a knob in Rust, and
     /// the way *that* failure shows up is a new control nobody can find.
     ///
-    /// Note this is not simply a ranking by audible authority. `bind` moves the
-    /// field by 18 cents where `spacing` moves it by 1200, and `bind` is still
-    /// primary: it is the axis the whole project is an argument about, and the
-    /// question a listener is being asked to answer.
+    /// Note this is not simply a ranking by audible authority. `bind` was kept
+    /// primary while the only figure for it said 18 cents — the smallest in the
+    /// table — because it is the axis the whole project argues about. Nor is it
+    /// the reverse: `spacing` earns its place on authority alone, having no
+    /// thesis behind it whatever. Both arguments are admissible and a knob needs
+    /// only one of them.
+    ///
+    /// That 18 cents turned out to be a measurement artefact — it was the field
+    /// mapping's pitch travel, and on the Tonnetz `bind` moves 1168 cents, since
+    /// the lattice's axes are derived from the scale being retuned. Left written
+    /// down because the decision was right *before* anyone knew that, and a rule
+    /// that only ever agrees with the latest measurement is not a rule.
     pub primary: bool,
 }
 
@@ -134,7 +142,7 @@ pub const SPACING: Knob = Knob {
             next in the field mapping, least air between them in the Tonnetz. \
             1 is a cluster, higher is an open chord.",
     mappings: CONTINUOUS,
-    primary: false,
+    primary: true,
 };
 
 pub const DRIFT: Knob = Knob {
@@ -161,7 +169,7 @@ pub const REACH: Knob = Knob {
             the field mapping, cells of lattice crossed in the Tonnetz. This is \
             the articulation showing up as harmony.",
     mappings: CONTINUOUS,
-    primary: true,
+    primary: false,
 };
 
 pub const VOICING: Knob = Knob {
@@ -338,6 +346,71 @@ impl Params {
             voicing: VOICING.clamped(self.voicing),
             articulation: ARTICULATION.clamped(self.articulation),
             consonants: CONSONANTS.clamped(self.consonants),
+        }
+    }
+
+    /// The same parameters with one knob moved, chosen by name.
+    ///
+    /// The table promises that a knob's `name` is the field it sets, and until
+    /// now nothing could act on that promise: the HTTP route spells out all ten
+    /// by hand, so anything else wanting to sweep the knobs generically — a
+    /// measurement, a test — had to keep its own copy of the mapping from name
+    /// to field. A second copy of the knob table is the thing this module
+    /// exists to prevent.
+    ///
+    /// **Panics on a name that is not in [`KNOBS`]**, deliberately. The
+    /// alternative is returning the parameters unchanged, which is a silent
+    /// no-op — a sweep that reports a knob as doing nothing when what actually
+    /// happened is that nobody set it. `every_knob_can_be_set_by_its_own_name`
+    /// walks the table so a knob added without a line here fails a test rather
+    /// than a listener.
+    pub fn with(self, knob: &Knob, value: f32) -> Self {
+        let value = knob.clamped(value);
+        match knob.name {
+            "bind" => Params {
+                bind: value,
+                ..self
+            },
+            "density" => Params {
+                density: value,
+                ..self
+            },
+            // Rounded rather than truncated: these count things, and a slider
+            // stopping just under an integer would otherwise silently mean the
+            // one below.
+            "voices" => Params {
+                voices: value.round() as usize,
+                ..self
+            },
+            "spacing" => Params {
+                spacing: value.round() as usize,
+                ..self
+            },
+            "drift" => Params {
+                drift: value,
+                ..self
+            },
+            "reach" => Params {
+                reach: value,
+                ..self
+            },
+            "hold" => Params {
+                hold: value,
+                ..self
+            },
+            "voicing" => Params {
+                voicing: value,
+                ..self
+            },
+            "articulation" => Params {
+                articulation: value,
+                ..self
+            },
+            "consonants" => Params {
+                consonants: value,
+                ..self
+            },
+            other => panic!("no such knob: {other}"),
         }
     }
 }

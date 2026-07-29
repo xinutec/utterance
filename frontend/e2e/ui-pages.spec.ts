@@ -122,9 +122,9 @@ const CONTROLS = {
     { name: "bind", label: "Bind to the voice", min: 0, max: 1, step: 0.05, default: 1, mappings: [], about: "At 1 the notes are exactly where this voice's spectrum puts them. At 0 they snap to the twelve everyone else uses.", primary: true },
     { name: "density", label: "Scale density", min: 0.0005, max: 0.5, step: 0.002, default: 0.02, mappings: [], about: "How firm a note has to be to count. Low gives a crowded microtonal set, high gives a handful of very stable intervals.", primary: true },
     { name: "voices", label: "Voices", min: 1, max: 12, step: 1, default: 5, mappings: ["field", "tonnetz"], about: "How many tones sound at once.", primary: true },
-    { name: "spacing", label: "Spacing", min: 1, max: 6, step: 1, default: 2, mappings: ["field", "tonnetz"], about: "How far apart the voices sit. 1 is a cluster, higher is an open chord.", primary: false },
+    { name: "spacing", label: "Spacing", min: 1, max: 6, step: 1, default: 2, mappings: ["field", "tonnetz"], about: "How far apart the voices sit. 1 is a cluster, higher is an open chord.", primary: true },
     { name: "drift", label: "Follow the pitch", min: 0, max: 2, step: 0.05, default: 0.25, mappings: ["field", "tonnetz"], about: "How far the music transposes with the speaker's pitch. At 0 it sits still; near 1 it reads as a parallel melody.", primary: false },
-    { name: "reach", label: "Follow the vowel", min: 0, max: 3, step: 0.05, default: 1, mappings: ["field", "tonnetz"], about: "How far the vowel moves the harmony. This is the articulation showing up as harmony.", primary: true },
+    { name: "reach", label: "Follow the vowel", min: 0, max: 3, step: 0.05, default: 1, mappings: ["field", "tonnetz"], about: "How far the vowel moves the harmony. This is the articulation showing up as harmony.", primary: false },
     { name: "hold", label: "Hold the harmony", min: 0, max: 1, step: 0.05, default: 0.35, mappings: ["tonnetz"], about: "How far the mouth must move past a boundary before the chord changes. At 0 the harmony follows every wobble.", primary: true },
     { name: "consonants", label: "Consonants", min: 0, max: 2, step: 0.05, default: 1, mappings: [], about: "How loud the unpitched material is against the tones. At 0 they are silent.", primary: false },
   ],
@@ -514,8 +514,10 @@ test("studio — a folded-away knob still says it was moved", async ({ page }) =
   await expect(panel).toContainText("more");
 
   await panel.click();
-  const spacing = page.locator("app-mapping-controls .knob", { hasText: "Spacing" });
-  await spacing.locator("input[matSliderThumb]").fill("4");
+  // Any knob inside the panel will do; this one is there because following
+  // the vowel adjusts a piece rather than deciding what kind it is.
+  const folded = page.locator("app-mapping-controls .knob", { hasText: "Follow the vowel" });
+  await folded.locator("input[matSliderThumb]").fill("2");
   await panel.click();
 
   await expect(panel).toContainText("1 moved");

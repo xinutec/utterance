@@ -364,7 +364,7 @@ source, plus the one that most shapes daily work.
 
 - **A knob says whether it is offered before anyone asks** (2026-07-29).
   `Knob::primary` splits the table into the controls that decide what kind of
-  piece this is — `bind`, `density`, `voices`, `reach`, `hold` — and the ones
+  piece this is — `bind`, `density`, `voices`, `spacing`, `hold` — and the ones
   that adjust a piece you already have. The UI shows the first group and folds
   the rest behind a disclosure that says how many of them have been moved.
 
@@ -374,10 +374,18 @@ source, plus the one that most shapes daily work.
   that they touch none of them. Since exploring is how the questions on this
   page get answered, a panel nobody dares touch costs evidence.
 
-  **Not a ranking by audible authority**, and the difference matters: `spacing`
-  moves the field 1200 cents and is folded away, `bind` moves it 18 and is
-  offered first, because `bind` is the axis this project is an argument about.
-  Sorting on authority would look more principled and would bury the question.
+  **Not a ranking by audible authority, and not the reverse either.** `bind`
+  moves the field 18 cents where `voicing` moves it 632, and `bind` is offered
+  first because it is the axis this project argues about — sorting on authority
+  alone would bury the question. But `spacing` is primary on its 1200 cents and
+  nothing else, having no thesis behind it whatever. Both arguments are
+  admissible and a knob needs only one of them.
+
+  **`reach` was primary on the thesis argument and was moved out by ear**
+  (Pippijn, 2026-07-29): "follow the vowel" is the articulation showing up as
+  harmony and so is close to the project's whole idea, but `spacing` is the one
+  a listener reaches for. A claim about what matters, made by the person
+  listening, beats a claim about what *ought* to matter.
 
   Declared on the knob for the same reason its range is. A list of important
   names kept in the frontend is a second opinion about the knob table, and it
@@ -438,13 +446,51 @@ source, plus the one that most shapes daily work.
   say yes and one spoken take where they say no. Hearing a difference on both
   would mean the difference is not the tuning.
 
-- **Which knobs actually change what anyone hears?** Measured on `vowel-ah` in
-  the field mapping, as how far each moves the pitch at its widest: `density`
-  1516 cents, `spacing` 1200, `voicing` 632, `reach` 600, `drift` 53, `bind` 18.
-  Worth keeping in view when choosing what to build: the knobs that restructure
-  the chord dominate the ones that adjust it. Not re-measured for the Tonnetz,
-  where the same knobs act on a different geometry and `bind` has a chord that
-  holds still to be heard in.
+- **Which knobs actually change what anyone hears?** Re-measured 2026-07-29 by
+  `src/bin/authority.rs`, on `vowel-ah`, across both continuous mappings and on
+  five axes rather than one.
+
+  **The headline is that `bind` was never a weak knob.** The old figure — 18
+  cents, the smallest in the table — was how far it moves the *pitch* of the
+  **field** mapping, and pitch travel is the wrong ruler for a knob whose whole
+  effect is whether partials lock or beat. On the **Tonnetz** it moves pitch by
+  **1168 cents**, because the lattice's axes are themselves derived from the
+  scale: retuning does not shift the degrees along a fixed geometry, it rebuilds
+  the geometry the vowel walks on.
+
+  | knob | field | tonnetz |
+  | --- | --- | --- |
+  | bind | 18¢ | **1168¢** |
+  | density | 1698¢ | *refused at its maximum* |
+  | spacing | 1818¢ | 3600¢ |
+  | reach | 1800¢ | 932¢, **−4.70s ring** |
+  | hold | — | 1088¢, **+4.01s ring** |
+  | drift | 1111¢ | 1111¢ |
+  | voicing | 814¢ | 0¢, 8% balance |
+  | voices | 0¢, 100% roughness | 316¢, 100% roughness |
+  | consonants | 100% noise | 100% noise |
+
+  `hold` and `reach` are the two knobs that decide how long a chord rings, and
+  they pull in opposite directions — more vowel reach means more cells crossed
+  and so more chord changes. `density` refuses at its maximum on the Tonnetz for
+  the reason recorded above, and the tool reports the refusal rather than
+  averaging it into a zero.
+
+  **Five axes, deliberately not summed.** Pitch, chord roughness, loudness
+  balance across the voices, timbre colour, and ring duration — plus the noise
+  level, which is not in the field at all. A weighted sum would need weights,
+  and the weights are a claim about what matters, which is exactly the thing the
+  listening is meant to settle.
+
+  **The tool found two of its own measurements to be lies before it found
+  anything about the knobs**, both the same error as the held-chord fraction:
+  `density` read zero everywhere because it acts on the *calibration* rather
+  than the composition, so a sweep holding one derived voice fixed reported the
+  loudest knob in the table as doing nothing; and `consonants` read zero because
+  the consonants are separate events on the score rather than part of the field.
+  It does nothing *to the field*, which is not the same sentence. That is three
+  occasions now where one number quietly stood in for a question it could not
+  answer, which is an argument for reporting several and refusing to rank them.
 
 - **Should a listener be able to perceive the connection back to the voice?**
   Not yet answered. It is the largest single constraint on the mapping layer: a
