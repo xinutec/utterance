@@ -429,6 +429,29 @@ const SEMITONE_CENTS: f32 = 100.0;
 /// it had, since two neighbours can snap to the same place. That is honest
 /// rather than a defect: it is what conventional tuning does to a spectrum that
 /// did not ask for it.
+/// Pull one pitch toward the nearest equal-tempered one by `1 - bind`.
+///
+/// The whole convention-to-speaker axis, on a single number. Separate from
+/// [`bind_toward_equal`] because the two callers apply it at different places
+/// and only one of them has a scale to hand: the field mapping binds the
+/// *degrees* and stacks voices on them, while the Tonnetz binds each **sounding
+/// pitch**, having built its chord from the speaker's own lattice first.
+///
+/// **Why the Tonnetz cannot bind its axes instead.** A lattice point's pitch is
+/// `x·a + y·b`, so an error in an axis multiplies by how far out the point sits.
+/// Binding the axes moves a chord near the tonic by a few cents and one three
+/// cells away by fifty or more — and since the pitch folds into an octave, far
+/// enough out it becomes a different note altogether. That is a structural
+/// change wearing a tuning knob's name, and it made `bind` untestable on the one
+/// mapping whose chords hold still long enough to test it.
+pub fn bind_cents_toward_equal(cents: f32, bind: f32) -> f32 {
+    if bind >= 1.0 {
+        return cents;
+    }
+    let tempered = (cents / SEMITONE_CENTS).round() * SEMITONE_CENTS;
+    tempered + (cents - tempered) * bind.clamp(0.0, 1.0)
+}
+
 pub fn bind_toward_equal(tuning: &Tuning, bind: f32) -> Tuning {
     if bind >= 1.0 {
         return tuning.clone();
@@ -438,8 +461,7 @@ pub fn bind_toward_equal(tuning: &Tuning, bind: f32) -> Tuning {
         .degrees
         .iter()
         .map(|d| {
-            let tempered = (d.cents / SEMITONE_CENTS).round() * SEMITONE_CENTS;
-            let cents = tempered + (d.cents - tempered) * bind;
+            let cents = bind_cents_toward_equal(d.cents, bind);
             Degree {
                 cents,
                 ratio: crate::tuning::cents_to_ratio(cents),

@@ -144,13 +144,50 @@ impl Lattice {
     }
 }
 
-/// The two intervals a scale is spanned by, deepest first.
+/// Whether an interval is one this speaker's spectrum rests on.
+///
+/// Folded into the octave and compared against the scale, within the same
+/// quarter-tone that decides whether two intervals are the same one.
+fn is_consonance(candidates: &[Degree], cents: f32) -> bool {
+    let wrapped = cents.rem_euclid(1200.0);
+    let interval = wrapped.min(1200.0 - wrapped);
+    candidates
+        .iter()
+        .any(|d| (d.cents.min(1200.0 - d.cents) - interval).abs() <= SAME_INTERVAL_CENTS)
+}
+
+/// The two intervals a scale is spanned by.
 ///
 /// Depth rather than shallowness of the minimum: `Degree::depth` is how far the
 /// roughness curve climbs either side before turning back down, which is the
-/// measure of how firmly a note is somewhere a listener rests. Ordering by that
-/// picks the intervals this speaker's spectrum makes most stable, which is
-/// exactly what an axis has to be if the chords built on it are to hold together.
+/// measure of how firmly a note is somewhere a listener rests.
+///
+/// **A triangle has three intervals and the third is `a - b`, which the scale
+/// never measured.** The roughness curve is swept as one spectrum against a
+/// shifted copy of itself, so every degree is a good interval *from the tonic*
+/// and nothing in it says how two degrees sound against each other. Picking the
+/// two deepest and stopping — which this did until 2026-07-29 — gave this
+/// speaker axes of 884 and 702 and so put **182 cents inside every chord the
+/// mapping has ever played**: not a degree, not near one, and close to where the
+/// roughness curve peaks. A tuning difference of sixteen cents was being looked
+/// for underneath a whole-tone clash.
+///
+/// So a pair is judged by its worst interval rather than its best, because a
+/// chord is as rough as the roughest thing in it. Pairs whose difference is also
+/// a consonance are preferred, and among those the one whose *shallowest* of the
+/// three minima is deepest.
+///
+/// On the voice this was found with, that changes the answer from a major sixth
+/// and a fifth to **a fifth and a major third** — the classical Tonnetz, arrived
+/// at from one speaker's spectrum rather than assumed. Its triangles are then
+/// just major and minor triads whose every internal interval is a degree of the
+/// speaker's own scale.
+///
+/// **Falls back to the deepest independent pair** when no pair has a consonant
+/// difference, rather than refusing: a lattice with a rough interval in every
+/// chord is worse than one without, and still better than no mapping at all.
+/// That case is worth knowing about, so it is what `NoPlane` would report if the
+/// fallback also fails.
 pub fn generators(tuning: &Tuning) -> Result<(Degree, Degree), NoPlane> {
     // Interior degrees only. The tonic and the octave are degrees by decision
     // rather than by measurement and carry a depth of zero, and neither spans
@@ -182,6 +219,35 @@ pub fn generators(tuning: &Tuning) -> Result<(Degree, Degree), NoPlane> {
             interior: interior(0),
         });
     }
+    // Every independent pair, judged by the shallowest of its three intervals —
+    // the two axes and the difference between them. Whole pairs are searched
+    // rather than the deepest axis being fixed first, because the best triangle
+    // is not always built on the best single interval.
+    let mut best: Option<(Degree, Degree, f32)> = None;
+    for (i, &p) in candidates.iter().enumerate() {
+        for &q in candidates.iter().skip(i + 1) {
+            if !independent(p, q) {
+                continue;
+            }
+            if !is_consonance(&candidates, p.cents - q.cents) {
+                continue;
+            }
+            // The difference's own depth is not read from the table — it may be
+            // a degree the sweep found at a slightly different place — so the
+            // pair is scored on the two axes and admitted on the third.
+            let worst = p.depth.min(q.depth);
+            if best.is_none_or(|(.., b)| worst > b) {
+                best = Some((p, q, worst));
+            }
+        }
+    }
+    if let Some((p, q, _)) = best {
+        return Ok((p, q));
+    }
+
+    // Nothing had a consonant difference. Every chord this lattice builds will
+    // carry an interval the speaker's spectrum finds rough; that is a real loss
+    // and it is still a mapping, so it is taken rather than refused.
     match candidates.iter().skip(1).find(|d| independent(a, **d)) {
         Some(&b) => Ok((a, b)),
         // Every one of them was the first axis wearing a different name. The

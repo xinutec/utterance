@@ -1878,6 +1878,7 @@ dependencies = [
  "hound",
  "http-body-util",
  "reqwest",
+ "rustfft",
  "serde",
  "serde_json",
  "sha2",

@@ -284,3 +284,72 @@ fn holding_at_zero_follows_every_boundary() {
     let start = triangle_at(0.2, 0.2);
     assert_eq!(settle(start, 0.45, 0.45, 0.0), triangle_at(0.45, 0.45));
 }
+
+#[test]
+fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
+    // The real scale this was found on, measured from a held *ah*, with its two
+    // deepest minima at their measured depths. Their difference is 182 cents,
+    // which is not a degree, is not near one, and sits close to where the
+    // roughness curve peaks — so spanning the lattice by the deepest pair put a
+    // whole-tone clash inside *every chord the mapping could play*, and a
+    // sixteen-cent tuning question was being asked underneath it.
+    let measured = scale(&[
+        (316.0, 0.09),
+        (386.0, 0.12),
+        (582.0, 0.05),
+        (702.0, 0.138),
+        (813.0, 0.06),
+        (884.0, 0.155),
+    ]);
+
+    let (a, b) = generators(&measured).expect("this scale spans a plane");
+
+    // Inversions count as the same interval, as they must: these are pitch
+    // classes and which octave each voice takes is decided later, so a fourth
+    // in the lattice can sound as a fifth in the chord.
+    let fold = |cents: f32| {
+        let wrapped: f32 = cents.rem_euclid(1200.0);
+        wrapped.min(1200.0 - wrapped)
+    };
+    let is_degree = |cents: f32| {
+        measured
+            .degrees
+            .iter()
+            .any(|d| (fold(d.cents) - fold(cents)).abs() <= 50.0)
+    };
+
+    // The property that matters: all three of the triangle's intervals are
+    // things this speaker's spectrum rests on, not just the two axes.
+    for interval in [a.cents, b.cents, a.cents - b.cents] {
+        assert!(
+            is_degree(interval),
+            "{:.0} cents is in no degree of the scale",
+            fold(interval)
+        );
+    }
+
+    // And the deepest pair is specifically *not* what comes out, which is the
+    // whole change: 884 and 702 are the two deepest minima here and their
+    // difference is 182, which is nothing.
+    let deepest_pair = (a.cents - 884.0).abs() < 1.0 && (b.cents - 702.0).abs() < 1.0;
+    assert!(
+        !deepest_pair,
+        "picked the deepest pair despite its 182-cent difference"
+    );
+    assert!(
+        !is_degree(182.0),
+        "the fixture no longer demonstrates the problem"
+    );
+}
+
+#[test]
+fn a_scale_whose_intervals_never_agree_still_gets_a_lattice() {
+    // No pair here has a consonant difference: 100 and 550 differ by 450, 100
+    // and 700 by 600, 550 and 700 by 150, and none of those is a degree. A
+    // lattice with a rough interval in every chord is worse than one without
+    // and better than no mapping at all, so it is taken rather than refused —
+    // the alternative is a speaker for whom the Tonnetz silently disappears.
+    let awkward = scale(&[(100.0, 0.10), (550.0, 0.08), (700.0, 0.12)]);
+    let (a, b) = generators(&awkward).expect("a lattice is still spanned");
+    assert_ne!(a.cents, b.cents);
+}

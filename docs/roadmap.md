@@ -51,10 +51,10 @@ In rough order of how much each unlocks.
    chord at a different pitch.
 
    The second is the Tonnetz. The two dimensions of vowel space become the two
-   dimensions of a harmonic lattice, spanned by the two deepest independent
-   minima of the speaker's own roughness curve — for a voice, near the fifth and
-   a third, which is a result rather than an assumption. Position on it is
-   quantised to a triangle, and that is the part that matters:
+   dimensions of a harmonic lattice, spanned by two independent minima of the
+   speaker's own roughness curve — for a voice, the fifth and a third, which is
+   a result rather than an assumption. Position on it is quantised to a
+   triangle, and that is the part that matters:
 
    - **Chords hold.** While the mouth stays in one triangle the pitches do not
      move, so a sustained vowel is a sustained chord and there is finally
@@ -361,6 +361,52 @@ source, plus the one that most shapes daily work.
   same person said. This is the third time that reasoning has decided a design
   question, which is why it is written here as a rule rather than a third time
   as a case.
+
+- **A lattice is judged by its worst interval, not its best** (2026-07-29).
+  `generators` picked the two deepest independent minima and stopped. A triangle
+  has *three* intervals, and the third is `a - b` — which the scale never
+  measured, because the roughness curve is swept as one spectrum against a
+  shifted copy of itself and so says only how each degree sounds **against the
+  tonic**. Nothing in it says how two degrees sound against each other.
+
+  On the real voice that put the axes at 884 and 702 and so placed **182 cents
+  inside every chord the mapping could play**: not a degree, not near one, and
+  close to where the roughness curve peaks. Every listening session on this
+  mapping had been conducted underneath a whole-tone clash, which is why a
+  sixteen-cent tuning question kept coming back as "very little difference".
+
+  Now a pair is admitted only if its difference is also a consonance, and among
+  those the chosen pair is the one whose *shallowest* minimum is deepest — a
+  chord being as rough as the roughest thing in it. Measured: chord beating
+  halved (`src/bin/beating.rs`, 0.0671 → 0.0363), and `bind` on this mapping
+  moved from 0.61× — backwards — to 1.03×, the predicted direction for the first
+  time.
+
+  **This overturns a recorded result.** The note that "this speaker's lattice is
+  not the classical one — a major sixth and a fifth rather than a fifth and a
+  third" was an artefact of the old rule. Requiring the whole triangle to be
+  consonant gives axes of **702 and 316**, an up-triangle of `{0, 316, 702}` —
+  a just minor triad whose third interval is the just major third. The classical
+  Tonnetz, derived from one speaker's spectrum rather than assumed, which is a
+  considerably stronger result than an exotic lattice.
+
+  **Falls back to the deepest independent pair** where no pair has a consonant
+  difference. A lattice with a rough interval in every chord is worse than one
+  without and better than the mapping silently vanishing for that speaker.
+
+- **`bind` binds the note, not the lattice** (2026-07-29). Retuning used to move
+  the lattice's axes, and a point's pitch is `x·a + y·b` — so an error in an
+  axis multiplies by how far out the point sits, moving a chord near the tonic
+  by a few cents and one three cells away by fifty or more, and past that,
+  folding into a different note entirely. `bind` was a structural knob wearing a
+  tuning knob's name, and the two settings of a comparison were two different
+  pieces. The lattice is now laid out on the speaker's own scale unconditionally
+  and `bind` is applied to each sounding pitch, so every note moves at most a
+  quarter tone and the chord it belongs to is untouched.
+
+  Consequence worth having: the `density` refusal is now a fact about the
+  speaker's own scale rather than about where `bind` happens to sit, so the
+  route refuses in fewer places and always for the reason it names.
 
 - **A knob says whether it is offered before anyone asks** (2026-07-29).
   `Knob::primary` splits the table into the controls that decide what kind of

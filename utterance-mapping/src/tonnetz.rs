@@ -111,11 +111,15 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
 /// Returns `None` in exactly the cases [`compose_with`] does.
 pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Vec<Triangle>> {
     let params = params.sane();
-    let tuning = params::bind_toward_equal(&voice.tuning, params.bind);
+    // **The speaker's own scale, never the bound one.** See `compose_with` for
+    // why the axes must not follow `bind`; here it also means the walk itself is
+    // the same walk whatever the tuning, so two settings can be compared without
+    // comparing two different pieces.
+    //
     // The reason it spans no plane is not thrown away here so much as asked for
     // somewhere else: `routes::api` calls `Lattice::from_tuning` itself, so a
     // refusal reaches the browser as a sentence rather than as silence.
-    Lattice::from_tuning(&tuning).ok()?;
+    Lattice::from_tuning(&voice.tuning).ok()?;
     if vp.frame.count == 0 {
         return None;
     }
@@ -157,8 +161,22 @@ pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<V
 /// nothing.
 pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Field> {
     let params = params.sane();
-    let tuning = params::bind_toward_equal(&voice.tuning, params.bind);
-    let lattice = Lattice::from_tuning(&tuning).ok()?;
+    // **The lattice is laid out on the speaker's own scale, and `bind` is
+    // applied to the notes it produces rather than to its axes.**
+    //
+    // Binding the axes was the first arrangement and it made `bind` untestable
+    // here. A point's pitch is `x·a + y·b`, so moving an axis moves a chord near
+    // the tonic by a few cents and one three cells out by fifty or more — and
+    // once that folds into an octave, far enough out it is a different note. Two
+    // renders differing in `bind` were therefore two different chord sequences,
+    // and comparing their tuning was comparing nothing.
+    //
+    // Measured: `src/bin/beating.rs` had equal temperament beating *less* than
+    // the derived scale on this mapping, the reverse of the claim and of what
+    // the field mapping shows, because the structural change swamped the tuning.
+    // Applied per sounding pitch, `bind` moves every note by at most a quarter
+    // tone and leaves the chord it belongs to alone.
+    let lattice = Lattice::from_tuning(&voice.tuning).ok()?;
     let path = harmonic_path(vp, voice, params)?;
 
     let frames = vp.frame.count;
@@ -200,10 +218,15 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
         // Absolute pitch classes, not intervals above a moving root. That is
         // what makes two adjacent chords share tones *in sound* rather than only
         // on paper: a pitch the lattice keeps is a frequency the ear keeps.
+        // Bound here, at the last moment, on the note that will actually sound.
+        // Every pitch moves by at most a quarter tone toward the grid everyone
+        // else uses, and the chord it belongs to — which lattice points, in what
+        // order, held for how long — is untouched. That is what makes `bind` a
+        // tuning knob on this mapping rather than a structural one.
         let mut pitch_classes: Vec<f32> = here
             .ring(params.voices)
             .into_iter()
-            .map(|(x, y)| lattice.pitch_class(x, y))
+            .map(|(x, y)| params::bind_cents_toward_equal(lattice.pitch_class(x, y), params.bind))
             .collect();
         pitch_classes.sort_by(f32::total_cmp);
 

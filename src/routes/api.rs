@@ -468,7 +468,13 @@ pub async fn voice_summary(
         takes: calibrated.profile.takes,
         // The same verdict the render will reach, from the same tuning, so what
         // is on screen cannot promise audio the render then refuses.
-        refusal: refusal(&tuning, &mapping_names(&params)),
+        // Against the speaker's own scale, not the bound one: the Tonnetz lays
+        // its lattice on the unbound degrees and binds each note afterwards, so
+        // whether a plane exists is a fact about this voice and not about where
+        // the knob is. Asking of the bound scale would refuse settings that play
+        // perfectly well, and explain the refusal by naming a knob that is not
+        // the cause.
+        refusal: refusal(&calibrated.voice.tuning, &mapping_names(&params)),
     }))
 }
 
@@ -700,7 +706,7 @@ fn build_score(
     // Refused before anything is rendered. A mapping that cannot be applied
     // still produces a score — one with no field in it — and that renders to
     // consonants over silence, which is indistinguishable from a broken build.
-    if let Some(why) = refusal(&tuning, &names) {
+    if let Some(why) = refusal(&calibrated.voice.tuning, &names) {
         return Err(AppError::Unplayable(why));
     }
 
