@@ -97,21 +97,34 @@ In rough order of how much each unlocks.
 
 ## Known gaps, with their cost
 
-- **Labelling is parked, and nothing may be made to depend on it**
-  (Pippijn, 2026-07-29). `/label` exists and works — tap, then place each mark
-  against the level curve, at up to 400 px/s, playable down to a quarter speed.
-  It is not to be asked for again until somebody volunteers it.
+- **Syllable labelling was built and removed** (2026-07-29). `/label` collected
+  syllable onsets by ear: tap while playing, then place each mark against the
+  level curve at up to 400 px/s, at a quarter speed. It is gone; recoverable at
+  `5ff52dd` if the stress work ever wants it.
 
-  **The ask was misjudged.** It was put as ten minutes of tapping; placing a
-  consonant onset precisely is slow, skilled work, and even a ten-second stretch
-  is thirty or forty careful judgements. The person it was asked of spent hours
-  finding defects in the tool instead — a chart that painted itself invisible, a
-  rate that called a correct session wrong, a drag that let go of its mark.
+  **Two reasons, and the second is the one that matters.**
 
-  So the two gaps below stay open, and that is the correct state rather than a
-  problem to route around. Do not substitute a worse ground truth: pre-placing
-  marks from the detector, or scoring a tracker on how many slots it fills,
-  would each produce a number that agrees with itself and means nothing.
+  The ask was misjudged. It was put as ten minutes of tapping; placing a
+  consonant onset precisely is slow, skilled work — thirty or forty careful
+  judgements for ten seconds of speech. Pippijn spent hours finding defects in
+  the tool instead, none of which any check here could reach: a chart that
+  painted dark on dark, a rate that called a correct session wrong, no way to
+  discover that a mark is moved by dragging, and a drag that let go of its mark
+  when the autosave reordered the list.
+
+  Then he asked whether reciting the alphabet would do instead — and the idea
+  generalises past what it was offered as. **The measurement wanted is a count,
+  and a count comes from the text rather than the audio.** A known passage has a
+  known number of syllables; the detector either reports that number or it does
+  not. Nobody marks anything. Isolated letters with pauses only establish a floor
+  — flux fails *inside* connected speech, where the silences are not there to
+  help it — but one read sentence with a hand-counted syllable total measures the
+  real distribution, and counting syllables in writing is a desk task.
+
+  **What labelling was never for**, though it was repeatedly described that way
+  here: scoring the formant tracker. Syllable onsets say nothing about where F1
+  is; that would need somebody marking frequencies, which is a different job
+  entirely and is not on offer.
 
 - **Onsets mean "the spectrum changed", not "a syllable began."** Spectral flux
   cannot separate the two; a continuously glided vowel demonstrates it. Threshold

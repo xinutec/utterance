@@ -10,7 +10,7 @@ use utterance_analysis::voiceprint::Voiceprint;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::store::{Labels, RecordingMeta, Role};
+use crate::store::{RecordingMeta, Role};
 use crate::voice;
 use utterance_mapping::params::Params;
 
@@ -258,33 +258,6 @@ pub async fn list(State(app): State<AppState>) -> Result<Json<Vec<RecordingMeta>
 }
 
 /// `GET /api/recordings/{id}` — one recording with its voiceprint.
-/// What a person has marked in this recording.
-///
-/// Ground truth, and the reason it has its own endpoint rather than riding on
-/// the detail response: it is written far more often than it is read while
-/// somebody is labelling, and it must not be entangled with the voiceprint,
-/// which is re-derived whenever the analyser changes.
-pub async fn labels(
-    State(app): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<Labels>, AppError> {
-    Ok(Json(app.store.labels(&id)?))
-}
-
-/// Replace what a person has marked, and answer with what was stored.
-///
-/// The tidied set comes back rather than an empty acknowledgement, because
-/// storing sorts the marks and merges any two closer together than a syllable
-/// can be — so the caller's copy and the store's would otherwise disagree the
-/// moment somebody double-tapped.
-pub async fn put_labels(
-    State(app): State<AppState>,
-    Path(id): Path<String>,
-    Json(labels): Json<Labels>,
-) -> Result<Json<Labels>, AppError> {
-    Ok(Json(app.store.put_labels(&id, labels)?))
-}
-
 pub async fn detail(
     State(app): State<AppState>,
     Path(id): Path<String>,

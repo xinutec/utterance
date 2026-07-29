@@ -51,7 +51,6 @@ export class App {
     { path: "/calibrate", label: "Calibrate", exact: false },
     { path: "/", label: "Studio", exact: true },
     { path: "/compare", label: "Compare", exact: false },
-    { path: "/label", label: "Label", exact: false },
   ] as const;
 
   private readonly breakpoints = inject(BreakpointObserver);

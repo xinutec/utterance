@@ -524,74 +524,9 @@ test("studio — a folded-away knob still says it was moved", async ({ page }) =
   await expect(panel).toContainText("1 moved");
 });
 
-test("label — marking syllables lays out cleanly @ phone", async ({ page }, testInfo) => {
-  // The tap target is pressed in time with speech, so it has to be findable
-  // without looking away from the transport — and on a phone it competes with
-  // the take picker, the player and a growing list of marks.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) =>
-    r.request().method() === "GET"
-      ? r.fulfill({ json: { syllables: [{ atS: 0.4 }, { atS: 0.9 }, { atS: 1.5 }] } })
-      : r.fulfill({ json: { syllables: [] } }),
-  );
-  await page.goto("/label");
-  await page.getByRole("button", { name: "Mark a syllable" }).waitFor();
 
-  await expectNoTextOverlaps(page, testInfo);
-  // The chart scrolls sideways on purpose: at a magnification that makes a
-  // 230 ms syllable placeable, a minute of speech is thousands of pixels and
-  // cannot fit on any screen. Named explicitly, because the harness will not
-  // infer it from `overflow-x` — `overflow-y: auto` forces that to compute to
-  // auto too, which would exempt every vertically-scrollable container.
-  await expectNoHorizontalOverflow(page, testInfo, null, [".scroller"]);
-  await expectNoOccludedControls(page, testInfo);
-});
 
-test("label — a mark that was never made is not offered", async ({ page }) => {
-  // An empty set is the normal state of a take, so the page must open on it
-  // without an error and without inventing a mark to show. It must also not
-  // claim a rate: one mark is not a rhythm.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
-  await page.goto("/label");
-  await page.getByRole("button", { name: "Mark a syllable" }).waitFor();
 
-  await expect(page.locator(".marks li")).toHaveCount(0);
-  await expect(page.locator(".tally")).toContainText("0 marked");
-  await expect(page.locator(".tally")).not.toContainText("a second");
-});
-
-test("label — a rate is not claimed from too few marks", async ({ page }) => {
-  // Two marks are one interval, not a speaking rate. Reported as one, it read
-  // "1.6 a second — outside the rate of ordinary speech" and told somebody their
-  // careful work was wrong. Found by Pippijn on the first real session.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) =>
-    r.fulfill({ json: { syllables: [{ atS: 0.49 }, { atS: 1.1 }] } }),
-  );
-  await page.goto("/label");
-  await page.locator("app-label-chart canvas").waitFor();
-
-  await expect(page.locator(".tally")).toContainText("2 marked");
-  await expect(page.locator(".tally")).not.toContainText("a second");
-});
-
-test("label — the rate ignores the pauses between phrases", async ({ page }) => {
-  // A take is mostly silence, so marks-per-elapsed-second counts every pause as
-  // slow speaking: 56 marks over 46s reads 1.2/s for a flawless session. The
-  // median gap describes the speaking instead. Here: eight marks at 0.25s, then
-  // a three-second pause and two more — 4/s, well inside ordinary speech.
-  const syllables = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 4.75, 5.0].map((atS) => ({
-    atS,
-  }));
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables } }));
-  await page.goto("/label");
-  await page.locator("app-label-chart canvas").waitFor();
-
-  await expect(page.locator(".tally")).toContainText("4.0 a second");
-  await expect(page.locator(".tally")).not.toContainText("outside");
-});
 
 test("the menu reaches every page @ phone", async ({ page }) => {
   // Four destinations behind one button. The failure worth guarding is not that
@@ -604,7 +539,6 @@ test("the menu reaches every page @ phone", async ({ page }) => {
   for (const [name, path] of [
     ["Calibrate", "/calibrate"],
     ["Compare", "/compare"],
-    ["Label", "/label"],
     ["Studio", "/"],
   ] as const) {
     await page.getByRole("button", { name: "Open the menu" }).click();
@@ -639,7 +573,7 @@ test("the pages are inline when there is room for them", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByRole("button", { name: "Open the menu" })).toHaveCount(0);
-  for (const name of ["Studio", "Calibrate", "Compare", "Label"]) {
+  for (const name of ["Calibrate", "Studio", "Compare"]) {
     await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   }
   // And the current one is marked the same way it is in the menu, from the same
@@ -684,163 +618,19 @@ test("a question mark opens the explanation, and it is not there until asked", a
   // version exists only for somebody who wants it. Rendered eagerly it would sit
   // in the page for a screen reader to read out unprompted.
   await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
-  await page.goto("/label");
+  // The one explanation on the studio belongs to the no-voice card, so this
+  // needs a store with nothing that defines the speaker.
+  await page.route("**/api/recordings", (r) =>
+    r.fulfill({ json: [{ ...META, role: "material" }] }),
+  );
+  await page.goto("/");
 
   await expect(page.locator(".help-body")).toHaveCount(0);
   await page.getByRole("button", { name: "What is this?" }).first().click();
-  await expect(page.locator(".help-body")).toContainText("once per syllable");
+  await expect(page.locator(".help-body")).toContainText("spectrum of a sustained vowel");
 });
 
-test("label — a mark can be placed, moved and removed on the chart", async ({ page }) => {
-  // At 56 marks precision matters more than speed, so the chart is where the
-  // work happens: tapping gets a mark roughly right, this puts it right. All
-  // three operations are one gesture on the thing itself, and none of them is
-  // visible to a layout assertion.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) =>
-    r.request().method() === "GET"
-      ? r.fulfill({ json: { syllables: [] } })
-      : r.fulfill({ json: JSON.parse(r.request().postData() ?? "{}") }),
-  );
-  await page.goto("/label");
-  const canvas = page.locator("app-label-chart canvas");
-  await canvas.waitFor();
 
-  const box = (await canvas.boundingBox())!;
-  const y = box.y + box.height / 2;
 
-  // Place two.
-  await page.mouse.click(box.x + 40, y);
-  await page.mouse.click(box.x + 120, y);
-  await expect(page.locator(".tally")).toContainText("2 marked");
 
-  // Move one: press, travel, release. A drag must not be read as a removal.
-  await page.mouse.move(box.x + 120, y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 200, y, { steps: 8 });
-  await page.mouse.up();
-  await expect(page.locator(".tally")).toContainText("2 marked");
 
-  // Remove one: press and release without moving.
-  await page.mouse.click(box.x + 200, y);
-  await expect(page.locator(".tally")).toContainText("1 marked");
-});
-
-test("label — dragging a mark does not scroll the chart out from under you", async ({
-  page,
-}) => {
-  // `draw` runs on every redraw, including each pointermove of a drag, and the
-  // follow-the-playhead rule ran with it: with the playhead off-screen, pulling
-  // a mark scrolled the view once per frame. Reported from the first real
-  // session — "when I pull a line, shortly after, the whole graph starts to
-  // move" — and invisible to every other check here.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) =>
-    r.request().method() === "GET"
-      ? r.fulfill({ json: { syllables: [{ atS: 3.4 }] } })
-      : r.fulfill({ json: JSON.parse(r.request().postData() ?? "{}") }),
-  );
-  await page.goto("/label");
-  const canvas = page.locator("app-label-chart canvas");
-  await canvas.waitFor();
-
-  // Scroll away from the playhead, which sits at zero and unseen.
-  const scroller = page.locator("app-label-chart .scroller");
-  await scroller.evaluate((el) => (el.scrollLeft = 300));
-  const before = await scroller.evaluate((el) => el.scrollLeft);
-  expect(before).toBeGreaterThan(0);
-
-  const box = (await canvas.boundingBox())!;
-  const y = box.y + box.height / 2;
-  // The mark at 3.4s, with the view scrolled 300px at 100px/s, sits at x = 40.
-  await page.mouse.move(box.x + 40, y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 90, y, { steps: 10 });
-  await page.mouse.up();
-
-  expect(await scroller.evaluate((el) => el.scrollLeft)).toBe(before);
-});
-
-test("label — the chart magnifies, because a syllable is two pixels otherwise", async ({
-  page,
-}) => {
-  // A 46s take on a phone is under 9 px/second; a syllable at four a second is
-  // 230 ms, which is two pixels. Nothing can be placed at that scale, so the
-  // magnification is the feature rather than a convenience.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
-  await page.goto("/label");
-  await page.locator("app-label-chart canvas").waitFor();
-
-  // The canvas stays the width of the screen; what grows is how far the window
-  // can travel, which is what "more magnification" actually means here.
-  const extent = async () =>
-    (await page.locator("app-label-chart .extent").boundingBox())!.width;
-  const before = await extent();
-  await page.getByRole("button", { name: "Show less time" }).click();
-  // Wait for the magnification to actually change before measuring the extent.
-  // `boundingBox` does not retry, so reading it straight after the click races
-  // the re-render — which passed alone and failed in the suite, the worst way
-  // for a test to be wrong.
-  await expect(page.locator("app-label-chart .scale")).toHaveText("200 px/s");
-  expect(await extent()).toBeGreaterThan(before);
-});
-
-test("label — the take can be slowed to place a consonant", async ({ page }) => {
-  // A consonant onset at a quarter speed is four times as wide in time, which
-  // is the difference between hearing where a syllable starts and hearing that
-  // it started. Asked for after a real session.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
-  await page.goto("/label");
-  await page.getByRole("button", { name: "Mark a syllable" }).waitFor();
-
-  // A single-selection `mat-button-toggle-group` is a radiogroup, so its
-  // members are radios rather than buttons.
-  await page.getByRole("radio", { name: "0.25×" }).click();
-  expect(
-    await page.locator("app-label audio").evaluate((el: HTMLAudioElement) => el.playbackRate),
-  ).toBe(0.25);
-});
-
-test("label — a drag keeps hold of the mark it grabbed", async ({ page }) => {
-  // **Reported from a real session**: "when I move the bar around, after a
-  // second or so, it no longer moves". The drag held an array *index*, the
-  // autosave answered with the stored list sorted, and after a mark crossed its
-  // neighbour that index addressed the other one — so the rest of the gesture
-  // moved a mark somewhere off screen while the bar under the finger sat still.
-  //
-  // Two things keep it honest now: the mark is identified by where it is rather
-  // than by its place in an array, and no write goes out until the hand lets go.
-  await mockApi(page);
-  await page.route("**/api/recordings/*/labels", (r) =>
-    r.request().method() === "GET"
-      ? r.fulfill({ json: { syllables: [{ atS: 0.5 }, { atS: 1.0 }] } })
-      : // What the store really does — sort. An echo-verbatim mock hides this.
-        r.fulfill({
-          json: {
-            syllables: [...JSON.parse(r.request().postData() ?? "{}").syllables].sort(
-              (a: { atS: number }, b: { atS: number }) => a.atS - b.atS,
-            ),
-          },
-        }),
-  );
-  await page.goto("/label");
-  const canvas = page.locator("app-label-chart canvas");
-  await canvas.waitFor();
-  const box = (await canvas.boundingBox())!;
-  const y = box.y + box.height / 2;
-
-  // Grab the mark at 1.0s and drag it left past the one at 0.5s.
-  await page.mouse.move(box.x + 100, y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 20, y, { steps: 5 });
-  // Long enough that the old code would have saved, and been answered sorted.
-  await page.waitForTimeout(2200);
-  // Keep going: the same mark must move, not the one that was its neighbour.
-  await page.mouse.move(box.x + 300, y, { steps: 8 });
-  await page.mouse.up();
-
-  await expect(page.locator(".marks li")).toHaveText([/0\.50s/, /3\.00s/]);
-});
