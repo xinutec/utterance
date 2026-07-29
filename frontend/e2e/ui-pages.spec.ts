@@ -712,5 +712,10 @@ test("label — the chart magnifies, because a syllable is two pixels otherwise"
     (await page.locator("app-label-chart .extent").boundingBox())!.width;
   const before = await extent();
   await page.getByRole("button", { name: "Show less time" }).click();
+  // Wait for the magnification to actually change before measuring the extent.
+  // `boundingBox` does not retry, so reading it straight after the click races
+  // the re-render — which passed alone and failed in the suite, the worst way
+  // for a test to be wrong.
+  await expect(page.locator("app-label-chart .scale")).toHaveText("200 px/s");
   expect(await extent()).toBeGreaterThan(before);
 });

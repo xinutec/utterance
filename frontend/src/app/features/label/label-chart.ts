@@ -15,6 +15,7 @@ import { MatButtonModule } from "@angular/material/button";
 import { MatIconModule } from "@angular/material/icon";
 
 import type { Syllable, Voiceprint } from "../../models";
+import { resolveThemeColours } from "../studio/theme-colours";
 
 /** Quietest level drawn, in dBFS. Below this a frame is silence to the eye. */
 const FLOOR_DB = -70;
@@ -189,10 +190,14 @@ export class LabelChart {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const style = getComputedStyle(canvas);
-    const ink = style.getPropertyValue("--chart-ink").trim() || "#888";
-    const markInk = style.getPropertyValue("--chart-mark").trim() || "#c00";
-    const headInk = style.getPropertyValue("--chart-head").trim() || "#06c";
+    // Resolved by the style engine, never read as a custom property. A custom
+    // property is untyped, so `getPropertyValue` returns the raw substitution
+    // text — `light-dark(#1a1b1f, #e3e2e6)` — which no canvas can parse, and
+    // assigning it to `fillStyle` is ignored in silence, leaving black. Which is
+    // exactly what this chart did on a dark background. Renaming the token
+    // behind one of my own (`--chart-ink`) also walked around the lint rule that
+    // exists to catch it.
+    const { ink, accent: markInk, warm: headInk } = resolveThemeColours(canvas);
 
     // Level, as an area. One point per frame; at the widest zoom that is four
     // pixels a frame, which is why the edges of a syllable are placeable.
