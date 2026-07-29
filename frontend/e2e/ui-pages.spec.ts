@@ -522,3 +522,35 @@ test("studio — a folded-away knob still says it was moved", async ({ page }) =
 
   await expect(panel).toContainText("1 moved");
 });
+
+test("label — marking syllables lays out cleanly @ phone", async ({ page }, testInfo) => {
+  // The tap target is pressed in time with speech, so it has to be findable
+  // without looking away from the transport — and on a phone it competes with
+  // the take picker, the player and a growing list of marks.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) =>
+    r.request().method() === "GET"
+      ? r.fulfill({ json: { syllables: [{ atS: 0.4 }, { atS: 0.9 }, { atS: 1.5 }] } })
+      : r.fulfill({ json: { syllables: [] } }),
+  );
+  await page.goto("/label");
+  await page.getByRole("button", { name: "Mark a syllable" }).waitFor();
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
+test("label — a mark that was never made is not offered", async ({ page }) => {
+  // An empty set is the normal state of a take, so the page must open on it
+  // without an error and without inventing a mark to show. It must also not
+  // claim a rate: one mark is not a rhythm.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
+  await page.goto("/label");
+  await page.getByRole("button", { name: "Mark a syllable" }).waitFor();
+
+  await expect(page.locator(".marks li")).toHaveCount(0);
+  await expect(page.locator(".tally")).toContainText("0 marked");
+  await expect(page.locator(".tally")).not.toContainText("a second");
+});

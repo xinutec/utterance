@@ -1,0 +1,81 @@
+<section class="label">
+  <header>
+    <h2>Mark the syllables</h2>
+    <p class="note">
+      Play the take and tap <kbd>M</kbd> — or the button — each time a syllable
+      begins. Marks land where your hand was, which is a fraction of a second
+      late; getting them exact is the next step, not this one.
+    </p>
+  </header>
+
+  <mat-form-field class="take" appearance="outline" subscriptSizing="dynamic">
+    <mat-label>Take</mat-label>
+    <mat-select [value]="chosen()" (selectionChange)="choose($event.value)">
+      @for (take of store.recordings(); track take.id) {
+        <mat-option [value]="take.id">
+          {{ take.label || take.id }} · {{ take.durationS | number: "1.0-1" }}s
+        </mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  @if (audioUrl(); as url) {
+    <audio #player class="player" controls preload="auto" [src]="url" (timeupdate)="onTimeUpdate()"></audio>
+
+    <div class="transport">
+      <button matButton="filled" type="button" class="tap" (click)="mark()">
+        <mat-icon>add</mat-icon>
+        Mark a syllable
+      </button>
+      <span class="at">at {{ playhead() | number: "1.2-2" }}s</span>
+      @if (syllables().length > 0) {
+        <button matButton type="button" (click)="clear()">Clear all</button>
+      }
+      <span class="state" [class.unsaved]="!saved()">
+        {{ saved() ? "saved" : "saving…" }}
+      </span>
+    </div>
+
+    <p class="tally">
+      {{ syllables().length }} marked
+      @if (rate(); as perSecond) {
+        · {{ perSecond | number: "1.1-1" }} a second
+        <!--
+          The cheapest check that a session went right. Running speech is three
+          to eight syllables a second, so a rate outside that means taps were
+          missed or doubled — worth seeing now rather than discovering when the
+          labels fail to tune anything.
+        -->
+        @if (perSecond < 2 || perSecond > 9) {
+          <span class="warn">— outside the rate of ordinary speech</span>
+        }
+      }
+    </p>
+
+    @if (syllables().length > 0) {
+      <ol class="marks">
+        @for (syllable of syllables(); track syllable.atS) {
+          <li>
+            <button matButton type="button" (click)="seekTo(syllable.atS)">
+              {{ syllable.atS | number: "1.2-2" }}s
+            </button>
+            <button
+              matIconButton
+              type="button"
+              [attr.aria-label]="'Remove the mark at ' + (syllable.atS | number: '1.2-2') + ' seconds'"
+              (click)="remove(syllable.atS)"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          </li>
+        }
+      </ol>
+    }
+  } @else {
+    <p class="note">Nothing recorded yet — make a take first.</p>
+  }
+
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+</section>

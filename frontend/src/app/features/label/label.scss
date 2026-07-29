@@ -1,0 +1,99 @@
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+header {
+  h2 {
+    margin: 0;
+    font: var(--mat-sys-headline-small);
+  }
+}
+
+.note {
+  margin: 0.25rem 0 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+
+  kbd {
+    font: var(--mat-sys-label-medium);
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 0.25rem;
+    padding: 0.05rem 0.35rem;
+  }
+}
+
+.take {
+  min-width: 14rem;
+  max-width: 26rem;
+}
+
+.player {
+  width: 100%;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tap {
+  // Large on purpose: it is pressed in time with speech, so the target has to be
+  // findable without looking away from the transport.
+  min-height: 3rem;
+  min-width: 12rem;
+}
+
+.at,
+.state {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  font-variant-numeric: tabular-nums;
+}
+
+.state.unsaved {
+  color: var(--mat-sys-tertiary);
+}
+
+.tally {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.warn {
+  color: var(--mat-sys-error);
+}
+
+.marks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+
+  li {
+    display: flex;
+    align-items: center;
+    // Enough of a gutter that a thumb reaching the remove button on a phone
+    // does not land on the seek button beside it.
+    gap: 0.1rem;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 999px;
+    padding-inline: 0.15rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.error {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-error);
+}

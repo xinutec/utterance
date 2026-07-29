@@ -6,6 +6,7 @@ import { catchError } from "rxjs/operators";
 import type {
   Controls,
   Deleted,
+  Labels,
   RecordingDetail,
   RecordingMeta,
   ScoreView,
@@ -148,6 +149,30 @@ export class RecordingsApi {
     return this.http
       .get<ScoreView>(`/api/recordings/${id}/score${suffix(query)}`)
       .pipe(catchError(rethrow));
+  }
+
+  /**
+   * What a person has marked in this take.
+   *
+   * Its own endpoint rather than a field on the detail, because it is written
+   * far more often than read while somebody is labelling, and because it must
+   * not be entangled with the voiceprint — which is rebuilt whenever the
+   * analyser changes, where this never is.
+   */
+  labels(id: string): Observable<Labels> {
+    return this.http.get<Labels>(`/api/recordings/${id}/labels`).pipe(catchError(rethrow));
+  }
+
+  /**
+   * Replace this take's marks, and answer with what was stored.
+   *
+   * The response is used rather than discarded: the backend sorts the marks and
+   * merges any two closer together than a syllable can be, so trusting the sent
+   * copy would leave the screen disagreeing with the store the first time
+   * somebody double-tapped.
+   */
+  putLabels(id: string, labels: Labels): Observable<Labels> {
+    return this.http.put<Labels>(`/api/recordings/${id}/labels`, labels).pipe(catchError(rethrow));
   }
 
   audioUrl(id: string): string {
