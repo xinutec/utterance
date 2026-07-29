@@ -9,6 +9,7 @@ import type {
   Labels,
   RecordingDetail,
   RecordingMeta,
+  Role,
   ScoreView,
   VoiceSummary,
 } from "./models";
@@ -102,10 +103,19 @@ export class RecordingsApi {
     return this.http.get<RecordingDetail>(`/api/recordings/${id}`).pipe(catchError(rethrow));
   }
 
-  upload(wav: Blob, label: string): Observable<RecordingDetail> {
+  /**
+   * Store a take.
+   *
+   * `role` says whether it defines the speaker or is only something to render,
+   * and defaults to material — the safe direction. Only the guided calibration
+   * flow sends `calibration`, because an upload that did not say what it was for
+   * must not start shaping the sound world: this store fills up with other
+   * people's singing, and a vowel space pooled across a crowd belongs to nobody.
+   */
+  upload(wav: Blob, label: string, role: Role = "material"): Observable<RecordingDetail> {
     return this.http
       .post<RecordingDetail>("/api/recordings", wav, {
-        params: { label },
+        params: { label, role },
         headers: { "Content-Type": "audio/wav" },
       })
       .pipe(catchError(rethrow));

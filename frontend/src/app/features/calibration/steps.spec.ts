@@ -24,6 +24,9 @@ function goodTake(overrides: Partial<Fixture> = {}): RecordingDetail {
     meta: {
       id: "0123456789abcdef",
       label: "steady-ah",
+      // These are the guided vowels: they define the speaker rather than being
+      // material to render.
+      role: "calibration" as const,
       createdAtMs: 0,
       durationS: f.durationS,
       sampleRateHz: 44100,

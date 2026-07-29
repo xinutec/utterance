@@ -88,7 +88,11 @@ export class Calibration implements OnInit {
     }
     // Labelled with the step id so the audio says what it was for. The whole
     // take carries the label, which is the only claim about it that is exact.
-    this.store.upload(take.wav, this.step().id);
+    // Declared as calibration: these guided vowels are what the scale,
+    // the timbre, the pitch range and the vowel space are derived from.
+    // Everything else uploaded here is material to render and must not
+    // shape the speaker — see `Role` in the store.
+    this.store.upload(take.wav, this.step().id, "calibration");
   }
 
   async cancelRecording(): Promise<void> {

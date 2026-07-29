@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use utterance::store::{Store, StoreError};
+use utterance::store::{Role, Store, StoreError};
 use utterance_analysis::resample::ANALYSIS_RATE;
 use utterance_analysis::voiceprint::{Source, Voiceprint};
 
@@ -94,7 +94,9 @@ fn a_stale_voiceprint_is_re_analysed_from_its_audio() {
     // stale cache, not lost data.
     let store = TempStore::open();
     let audio = wav(1.0);
-    let meta = store.put(&audio, "an old take", &a_voiceprint()).unwrap();
+    let meta = store
+        .put(&audio, "an old take", &a_voiceprint(), Role::Material)
+        .unwrap();
 
     // Downgrade the stored voiceprint the way a schema bump leaves it: an old
     // version, missing the fields the current analyser adds.
@@ -120,7 +122,9 @@ fn a_rebuild_keeps_the_original_ordering() {
     // created_at_ms is preserved across a re-analysis, so refreshing a stale
     // record does not jump it to the top of the take list.
     let store = TempStore::open();
-    let meta = store.put(&wav(1.0), "old", &a_voiceprint()).unwrap();
+    let meta = store
+        .put(&wav(1.0), "old", &a_voiceprint(), Role::Material)
+        .unwrap();
     let path = store.path().join(&meta.id).join("voiceprint.json");
     fs::write(&path, r#"{"schemaVersion":1}"#).unwrap();
 
@@ -135,7 +139,12 @@ fn stores_and_reads_back_a_recording() {
     let store = TempStore::open();
     let stored = a_voiceprint();
     let meta = store
-        .put(b"fake audio bytes", "brother, take 1", &stored)
+        .put(
+            b"fake audio bytes",
+            "brother, take 1",
+            &stored,
+            Role::Material,
+        )
         .unwrap();
 
     assert_eq!(store.audio(&meta.id).unwrap(), b"fake audio bytes");
@@ -150,8 +159,12 @@ fn stores_and_reads_back_a_recording() {
 #[test]
 fn identical_audio_gets_the_same_id() {
     let store = TempStore::open();
-    let a = store.put(b"same bytes", "take 1", &a_voiceprint()).unwrap();
-    let b = store.put(b"same bytes", "take 2", &a_voiceprint()).unwrap();
+    let a = store
+        .put(b"same bytes", "take 1", &a_voiceprint(), Role::Material)
+        .unwrap();
+    let b = store
+        .put(b"same bytes", "take 2", &a_voiceprint(), Role::Material)
+        .unwrap();
 
     assert_eq!(a.id, b.id);
     assert_eq!(
@@ -164,9 +177,11 @@ fn identical_audio_gets_the_same_id() {
 #[test]
 fn different_audio_gets_a_different_id() {
     let store = TempStore::open();
-    let a = store.put(b"one recording", "a", &a_voiceprint()).unwrap();
+    let a = store
+        .put(b"one recording", "a", &a_voiceprint(), Role::Material)
+        .unwrap();
     let b = store
-        .put(b"another recording", "b", &a_voiceprint())
+        .put(b"another recording", "b", &a_voiceprint(), Role::Material)
         .unwrap();
 
     assert_ne!(a.id, b.id);
@@ -175,7 +190,9 @@ fn different_audio_gets_a_different_id() {
 #[test]
 fn an_empty_label_falls_back_to_the_id() {
     let store = TempStore::open();
-    let meta = store.put(b"audio", "   ", &a_voiceprint()).unwrap();
+    let meta = store
+        .put(b"audio", "   ", &a_voiceprint(), Role::Material)
+        .unwrap();
 
     assert_eq!(meta.label, meta.id);
 }
@@ -184,7 +201,7 @@ fn an_empty_label_falls_back_to_the_id() {
 fn metadata_summarises_the_voiceprint() {
     let store = TempStore::open();
     let vp = a_voiceprint();
-    let meta = store.put(b"audio", "take", &vp).unwrap();
+    let meta = store.put(b"audio", "take", &vp, Role::Material).unwrap();
 
     assert_eq!(meta.duration_s, vp.source.duration_s);
     assert_eq!(meta.sample_rate_hz, vp.source.sample_rate_hz);
@@ -205,11 +222,15 @@ fn listing_a_store_whose_directory_is_gone_is_not_an_error() {
 #[test]
 fn listing_is_newest_first() {
     let store = TempStore::open();
-    let a = store.put(b"first", "a", &a_voiceprint()).unwrap();
+    let a = store
+        .put(b"first", "a", &a_voiceprint(), Role::Material)
+        .unwrap();
     // created_at_ms has millisecond resolution; two puts in the same millisecond
     // would tie, so make the ordering observable.
     std::thread::sleep(std::time::Duration::from_millis(2));
-    let b = store.put(b"second", "b", &a_voiceprint()).unwrap();
+    let b = store
+        .put(b"second", "b", &a_voiceprint(), Role::Material)
+        .unwrap();
 
     let ids: Vec<String> = store.list().unwrap().into_iter().map(|m| m.id).collect();
     assert_eq!(ids, vec![b.id, a.id]);
@@ -218,7 +239,9 @@ fn listing_is_newest_first() {
 #[test]
 fn deletes_a_recording() {
     let store = TempStore::open();
-    let meta = store.put(b"audio", "x", &a_voiceprint()).unwrap();
+    let meta = store
+        .put(b"audio", "x", &a_voiceprint(), Role::Material)
+        .unwrap();
     store.delete(&meta.id).unwrap();
 
     assert!(matches!(store.meta(&meta.id), Err(StoreError::NotFound(_))));
@@ -256,4 +279,44 @@ fn ids_that_are_not_ours_are_not_found_rather_than_resolved() {
             "id {id:?} was not rejected"
         );
     }
+}
+
+#[test]
+fn a_take_that_did_not_say_what_it_was_for_is_material() {
+    // The safe direction, and the one every take stored before roles existed
+    // reads back as. A recording that never declared itself must not start
+    // shaping the sound world — a store fills up with other people's singing.
+    let store = TempStore::open();
+    let meta = store
+        .put(&wav(1.0), "somebody else", &a_voiceprint(), Role::Material)
+        .unwrap();
+    assert_eq!(meta.role, Role::Material);
+    assert_eq!(store.meta(&meta.id).unwrap().role, Role::Material);
+}
+
+#[test]
+fn a_calibration_take_stays_one_when_the_analyser_changes() {
+    // **The failure this exists to prevent**, which nothing downstream could
+    // detect: `ensure_current` rebuilds the metadata from the audio, and the
+    // role is not in the audio. Defaulting it there would demote every
+    // calibration take on the next schema bump and dissolve the speaker's whole
+    // sound world for a reason nothing reports.
+    let store = TempStore::open();
+    let meta = store
+        .put(&wav(1.0), "vowel-ah", &a_voiceprint(), Role::Calibration)
+        .unwrap();
+
+    // Downgrade the stored voiceprint the way a schema bump leaves it.
+    fs::write(
+        store.path().join(&meta.id).join("voiceprint.json"),
+        r#"{"schemaVersion":1,"source":{"sampleRateHz":16000}}"#,
+    )
+    .unwrap();
+
+    store.ensure_current(&meta.id).unwrap();
+    assert_eq!(
+        store.meta(&meta.id).unwrap().role,
+        Role::Calibration,
+        "re-analysis demoted a calibration take to material"
+    );
 }

@@ -147,8 +147,23 @@ async fn send(app: &TestApp, req: Request<Body>) -> (StatusCode, Value) {
     (status, body)
 }
 
+/// Store a take that defines the speaker.
+///
+/// Calibration rather than material, because in these tests the uploaded
+/// fixture *is* the voice: everything derived — the scale, the timbre, the vowel
+/// space — has to come from somewhere, and there is nothing else in the store.
+/// `upload_material` is for the tests that care about the difference.
 async fn upload(app: &TestApp, label: &str, wav: Vec<u8>) -> (StatusCode, Value) {
-    let req = Request::post(format!("/api/recordings?label={label}"))
+    upload_as(app, label, wav, "calibration").await
+}
+
+/// Store a take that is only something to render.
+async fn upload_material(app: &TestApp, label: &str, wav: Vec<u8>) -> (StatusCode, Value) {
+    upload_as(app, label, wav, "material").await
+}
+
+async fn upload_as(app: &TestApp, label: &str, wav: Vec<u8>, role: &str) -> (StatusCode, Value) {
+    let req = Request::post(format!("/api/recordings?label={label}&role={role}"))
         .body(Body::from(wav))
         .unwrap();
     send(app, req).await
@@ -1436,4 +1451,63 @@ async fn labelling_a_recording_that_is_not_here_is_refused() {
     let app = TestApp::new();
     let (status, _) = put_labels(&app, "0123456789abcdef", &[0.5]).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn other_peoples_singing_does_not_shape_the_speaker() {
+    // **The bug this whole distinction exists to prevent.** A singer uploads
+    // other voices to render, and pooling them into the profile measures a vowel
+    // space, a pitch range and a timbre belonging to nobody. The project's claim
+    // is that *this* speaker's spectrum gives *this* speaker's scale, and it is
+    // worth nothing if the spectrum is a crowd.
+    //
+    // Two takes with genuinely different anatomy: one is the speaker, the other
+    // is somebody else. The derived voice must not move when the stranger
+    // arrives.
+    let app = TestApp::new();
+    upload(&app, "vowel-ah", wav_fixture_moving_vowel(8.0)).await;
+    let (status, before) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{before}");
+
+    upload_material(&app, "somebody-else", wav_fixture(4.0)).await;
+    let (status, after) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{after}");
+
+    assert_eq!(
+        before["degrees"], after["degrees"],
+        "material changed the speaker's scale"
+    );
+    assert_eq!(
+        before["tonicHz"], after["tonicHz"],
+        "material moved where the speaker's music centres"
+    );
+}
+
+#[tokio::test]
+async fn a_store_with_nothing_but_material_says_to_calibrate() {
+    // Refusing is right and the message has to say what to do about it. The
+    // alternative — deriving a voice from whatever happens to be lying around —
+    // is the failure above, reported as success.
+    let app = TestApp::new();
+    upload_material(&app, "somebody-else", wav_fixture_moving_vowel(8.0)).await;
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    let message = body["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("calibration"),
+        "the refusal does not name what is missing: {message}"
+    );
 }

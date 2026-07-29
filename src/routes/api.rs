@@ -10,7 +10,7 @@ use utterance_analysis::voiceprint::Voiceprint;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use crate::store::{Labels, RecordingMeta};
+use crate::store::{Labels, RecordingMeta, Role};
 use crate::voice;
 use utterance_mapping::params::Params;
 
@@ -202,6 +202,13 @@ pub struct UploadParams {
     /// Human label for the take. Optional; the id is used when absent.
     #[serde(default)]
     pub label: Option<String>,
+    /// Whether this take defines the speaker or is only material to render.
+    ///
+    /// Absent means material, which is the safe direction: an upload that did
+    /// not say what it was for must not start shaping the sound world. Only the
+    /// guided calibration flow asks for `calibration`.
+    #[serde(default)]
+    pub role: Role,
 }
 
 /// A recording and everything analysis found in it.
@@ -233,6 +240,7 @@ pub async fn upload(
         &body,
         params.label.as_deref().unwrap_or_default(),
         &voiceprint,
+        params.role,
     )?;
     tracing::info!(
         "stored {} ({:.1}s, {:.0}% voiced, {} onsets)",

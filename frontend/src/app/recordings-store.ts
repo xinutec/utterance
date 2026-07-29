@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from "@angular/core";
 
-import type { RecordingDetail, RecordingMeta } from "./models";
+import type { RecordingDetail, RecordingMeta, Role } from "./models";
 import { ApiError, RecordingsApi, type ApiFailure } from "./recordings-api";
 
 /**
@@ -48,10 +48,10 @@ export class RecordingsStore {
     });
   }
 
-  upload(wav: Blob, label: string): void {
+  upload(wav: Blob, label: string, role: Role = "material"): void {
     this.busy.set(true);
     this.error.set(null);
-    this.api.upload(wav, label).subscribe({
+    this.api.upload(wav, label, role).subscribe({
       next: (detail) => {
         this.selected.set(detail);
         this.busy.set(false);

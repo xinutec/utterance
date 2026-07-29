@@ -17,6 +17,31 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use utterance_analysis::voiceprint::{self, Voiceprint};
 
+/// What a recording is *for*.
+///
+/// **Not who owns it — there is one user.** The distinction that matters is
+/// between takes that define the voice and takes that are merely something to
+/// hear, because the store fills up with both: a singer uploads other people's
+/// singing to render, and their own sustained vowels to be modelled from. Pooled
+/// together, the vowel space and the pitch range describe an anatomy belonging
+/// to nobody, and every mapping normalises against that chimera.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub enum Role {
+    /// This take defines the speaker: their scale, timbre, range and vowel space.
+    Calibration,
+    /// Something to render. It contributes nothing to who the speaker is.
+    ///
+    /// The default, and deliberately so: a recording that never said what it was
+    /// for must not silently start shaping the sound world. Every take stored
+    /// before this distinction existed reads back as material, which is the safe
+    /// direction — the speaker then has to be established on purpose.
+    #[default]
+    Material,
+}
+
 /// What we know about a recording without opening its voiceprint.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -52,6 +77,12 @@ pub struct RecordingMeta {
     /// Carried on the summary, not only inside the voiceprint, so the take list
     /// can flag a bad recording without opening every voiceprint.
     pub clipped: bool,
+    /// Whether this take defines the speaker or is only material to render.
+    ///
+    /// Defaulted on read, so a store written before the distinction existed
+    /// stays readable and every one of its takes becomes material.
+    #[serde(default)]
+    pub role: Role,
 }
 
 /// Where a syllable begins, as heard by a person.
@@ -160,6 +191,7 @@ impl Store {
         audio: &[u8],
         label: &str,
         voiceprint: &Voiceprint,
+        role: Role,
     ) -> Result<RecordingMeta, StoreError> {
         let id = content_id(audio);
         let dir = self.dir(&id);
@@ -182,6 +214,7 @@ impl Store {
             onset_count: voiceprint.events.onset_frames.len(),
             peak: voiceprint.source.peak,
             clipped: voiceprint.source.is_clipped(),
+            role,
         };
 
         write(&dir.join(AUDIO), audio)?;
@@ -218,10 +251,16 @@ impl Store {
                 detail: e.to_string(),
             })?;
 
-        // The label is the one thing not recoverable from the audio, so keep it
-        // across the rebuild. Read loosely: the old metadata may be exactly what
-        // failed to parse.
+        // The label and the role are the two things not recoverable from the
+        // audio, so both are kept across the rebuild. Read loosely: the old
+        // metadata may be exactly what failed to parse.
+        //
+        // **The role especially.** Defaulting it here would quietly demote every
+        // calibration take to material on the next analyser change, and the
+        // symptom would be a speaker's whole sound world dissolving for a reason
+        // nothing reports.
         let label = self.stored_label(id).unwrap_or_else(|| id.to_string());
+        let role = self.stored_role(id).unwrap_or_default();
         tracing::info!(
             "re-analysing {id} for schema v{}",
             voiceprint::SCHEMA_VERSION
@@ -238,6 +277,7 @@ impl Store {
             onset_count: voiceprint.events.onset_frames.len(),
             peak: voiceprint.source.peak,
             clipped: voiceprint.source.is_clipped(),
+            role,
         };
         write_json(&dir.join(VOICEPRINT), &voiceprint)?;
         write_json(&dir.join(META), &meta)?;
@@ -258,6 +298,10 @@ impl Store {
 
     fn stored_created_at(&self, id: &str) -> Option<u64> {
         self.stored_field(id, "createdAtMs")?.as_u64()
+    }
+
+    fn stored_role(&self, id: &str) -> Option<Role> {
+        serde_json::from_value(self.stored_field(id, "role")?).ok()
     }
 
     /// Every stored recording, newest first.

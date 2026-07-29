@@ -28,6 +28,7 @@ const META = {
   onsetCount: 74,
   peak: 0.71,
   clipped: false,
+  role: "calibration",
 };
 
 /** A voiceprint with enough frames that the chart draws real curves. */

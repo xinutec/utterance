@@ -5,6 +5,8 @@
 //! serves as calibration, how the speaker profile is pooled, what gets rendered.
 //! No measurement, no aesthetics.
 
+use std::collections::BTreeMap;
+
 use utterance_analysis::partials::Partials;
 use utterance_analysis::speaker::{self, SpeakerProfile};
 use utterance_analysis::voiceprint::Voiceprint;
@@ -12,7 +14,7 @@ use utterance_mapping::tuning;
 use utterance_mapping::voice::{self, Voice};
 
 use crate::error::AppError;
-use crate::store::{RecordingMeta, Store};
+use crate::store::{RecordingMeta, Role, Store};
 
 /// Frames of steady phonation a take needs before it can calibrate a voice.
 ///
@@ -20,6 +22,29 @@ use crate::store::{RecordingMeta, Store};
 /// noise, and it would be reported with exactly the same confidence as a good
 /// one — so the bar is here rather than in the shrug of whoever reads it.
 const MIN_CALIBRATION_FRAMES: usize = 300;
+
+/// The takes that define the speaker, one per calibration step.
+///
+/// **Most recent wins.** A second attempt at a vowel replaces the first rather
+/// than averaging with it: a step is re-recorded precisely because the earlier
+/// take was bad, and a bad take that never stops counting is worse than no
+/// re-record button at all. Steps are told apart by their label, which the
+/// guided flow sets from the step id.
+fn calibration_set(stored: Vec<(RecordingMeta, Voiceprint)>) -> Vec<(RecordingMeta, Voiceprint)> {
+    let mut newest: BTreeMap<String, (RecordingMeta, Voiceprint)> = BTreeMap::new();
+    for (meta, voiceprint) in stored {
+        if meta.role != Role::Calibration {
+            continue;
+        }
+        match newest.get(&meta.label) {
+            Some((held, _)) if held.created_at_ms >= meta.created_at_ms => {}
+            _ => {
+                newest.insert(meta.label.clone(), (meta, voiceprint));
+            }
+        }
+    }
+    newest.into_values().collect()
+}
 
 /// A speaker's world, plus which recording it came from.
 pub struct Calibrated {
@@ -60,14 +85,23 @@ pub fn calibrate_with(
     min_depth: f32,
 ) -> Result<Calibrated, AppError> {
     let metas = store.list()?;
-    let takes: Vec<(RecordingMeta, Voiceprint)> = metas
+    let stored: Vec<(RecordingMeta, Voiceprint)> = metas
         .into_iter()
         .filter_map(|m| store.voiceprint(&m.id).ok().map(|v| (m, v)))
         .collect();
 
+    // **Only the takes that say they define the speaker.** A store fills up with
+    // other people's singing — material to render — and pooling it here would
+    // measure a vowel space, a pitch range and a timbre belonging to nobody. The
+    // whole claim of the project is that *this* speaker's spectrum gives *this*
+    // speaker's scale, and it is worth nothing if the spectrum is a crowd.
+    let takes = calibration_set(stored);
+
     if takes.is_empty() {
         return Err(AppError::BadRequest(
-            "nothing has been recorded yet — record a calibration take first".into(),
+            "no calibration take yet — record the guided vowels so the music has \
+             a voice to be derived from"
+                .into(),
         ));
     }
 

@@ -19,6 +19,7 @@ export type { Partials } from "./generated/Partials";
 export type { Pitch } from "./generated/Pitch";
 export type { RecordingDetail } from "./generated/RecordingDetail";
 export type { RecordingMeta } from "./generated/RecordingMeta";
+export type { Role } from "./generated/Role";
 export type { ScaleDegree } from "./generated/ScaleDegree";
 export type { ScoreView } from "./generated/ScoreView";
 export type { Source } from "./generated/Source";

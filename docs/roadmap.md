@@ -279,26 +279,37 @@ source, plus the one that most shapes daily work.
   moved, while a knob in mapping can be swept against a fixed voiceprint and
   heard immediately.
 
-- **One shared voice, whoever is signed in** (2026-07-29). The deployment
-  admits two accounts and the store has no notion of who recorded what:
-  `voice::calibrate` picks one calibration take for everybody — whichever
-  yields the richest scale — and `speaker::profile` pools *every* take for
-  vowel-space corners, pitch range and brightness. Pippijn's call, and the
-  reasoning is that two brothers working on one thing want one sound world
-  rather than two private ones.
+- **A take says what it is for, and only some takes define the speaker**
+  (2026-07-29). `Role::Calibration` or `Role::Material`, declared at upload and
+  defaulting to material. `voice::calibrate` and `speaker::profile` read the
+  calibration takes alone — for the scale, the timbre palette, the pitch range
+  and the vowel space.
 
-  **The consequences, stated rather than discovered later.** A take recorded by
-  the second speaker can change which scale everyone hears, and a profile pooled
-  across two bodies is a hybrid anatomy belonging to neither — which is a real
-  exception to the rule immediately below, not an oversight. Both are visible
-  rather than silent: the studio prints the calibration take's label under the
-  player, so a flip reads as a changed word, and `?calibration=<id>` pins it.
+  **The bug this fixes was already present.** The store holds other people's
+  singing, uploaded as material to render, and the profile pooled *everything*.
+  So the vowel space, the pitch range and the brightness every mapping
+  normalises against described an anatomy belonging to nobody, which is the
+  exact failure the "normalised against the speaker's own extremes" decision
+  below exists to prevent — it was being violated by a crowd rather than by a
+  constant.
 
-  Reopening this means an owner on the recording, taken from the session the
-  backend already authenticates, and filtering both `calibrate` and `profile` by
-  it. Deliberately not built while the `bind` listening test is unstarted —
-  changing what a take is mapped through would invalidate opinions formed in the
-  meantime.
+  **Not ownership: role.** There is one user. The distinction is between takes
+  that define the voice and takes that are merely something to hear, and it does
+  not become a per-person question until a second singer arrives.
+
+  - **Material is the default**, so a take that never said what it was for
+    cannot start shaping the sound world, and every take stored before this
+    existed reads back as material.
+  - **One take per calibration step, most recent wins.** A step is re-recorded
+    because the earlier take was bad; averaging the two means a bad take that
+    never stops counting.
+  - **The role survives re-analysis.** `ensure_current` rebuilds metadata from
+    the audio and the role is not in the audio, so it is read from the old
+    record and carried across. Defaulting it there would demote every
+    calibration take on the next schema bump and dissolve the speaker silently.
+  - **A store with no calibration take refuses to render** and says to record
+    the guided vowels. Deriving a voice from whatever is lying around is the
+    failure above, reported as success.
 
 - **Recording is no longer tied to the Mac** (2026-07-29). `recorder.ts` gates on
   `navigator.mediaDevices`, which browsers define only in a secure context; that
