@@ -612,3 +612,45 @@ test("the pages are inline when there is room for them", async ({ page }) => {
     "page",
   );
 });
+
+test("studio — with no voice yet, the page offers the way to make one", async ({ page }) => {
+  // A page that knows the next move offers it, and offers it *before* anything
+  // is refused: a prompt that appears only after somebody presses render is a
+  // prompt most people never see.
+  await mockApi(page);
+  await page.route("**/api/recordings", (r) =>
+    r.fulfill({ json: [{ ...META, role: "material" }] }),
+  );
+  await page.goto("/");
+
+  const offer = page.getByRole("link", { name: "Record the calibration vowels" });
+  await expect(offer).toBeVisible();
+  await expect(offer).toHaveAttribute("href", "/calibrate");
+});
+
+test("studio — once there is a voice, it stops asking", async ({ page }) => {
+  // The other half, and the one that keeps it from being nagging: the prompt is
+  // shown only while it is true.
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Render as music" }).waitFor();
+
+  await expect(
+    page.getByRole("link", { name: "Record the calibration vowels" }),
+  ).toHaveCount(0);
+});
+
+test("a question mark opens the explanation, and it is not there until asked", async ({
+  page,
+}) => {
+  // The point of the control: a page says the short true thing, and the longer
+  // version exists only for somebody who wants it. Rendered eagerly it would sit
+  // in the page for a screen reader to read out unprompted.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
+  await page.goto("/label");
+
+  await expect(page.locator(".help-body")).toHaveCount(0);
+  await page.getByRole("button", { name: "What is this?" }).first().click();
+  await expect(page.locator(".help-body")).toContainText("once per syllable");
+});

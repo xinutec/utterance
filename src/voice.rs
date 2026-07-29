@@ -98,7 +98,7 @@ pub fn calibrate_with(
     let takes = calibration_set(stored);
 
     if takes.is_empty() {
-        return Err(AppError::BadRequest(
+        return Err(AppError::NeedsCalibration(
             "no calibration take yet — record the guided vowels so the music has \
              a voice to be derived from"
                 .into(),

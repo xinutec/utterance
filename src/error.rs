@@ -28,6 +28,15 @@ pub enum AppError {
     /// setting rather than to fix a malformed request, and the code says which.
     #[error("{0}")]
     Unplayable(String),
+    /// Nothing in the store says who the speaker is.
+    ///
+    /// Its own code because it is the one failure with an obvious next move —
+    /// record the guided vowels — and a UI that knows the move should offer it
+    /// as a button rather than print a sentence about it. Matching the message
+    /// instead would break the moment somebody rewords it, which is exactly the
+    /// drift `ErrorBody::message` warns against.
+    #[error("{0}")]
+    NeedsCalibration(String),
 }
 
 /// The JSON body of any failed request.
@@ -63,6 +72,7 @@ impl IntoResponse for AppError {
             }
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             AppError::Unplayable(_) => (StatusCode::UNPROCESSABLE_ENTITY, "unplayable"),
+            AppError::NeedsCalibration(_) => (StatusCode::BAD_REQUEST, "no_calibration"),
         };
 
         // Server-side faults are logged where they happen; client-side ones are

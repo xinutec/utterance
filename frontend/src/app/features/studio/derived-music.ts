@@ -123,6 +123,8 @@ export class DerivedMusic implements OnInit {
    */
   readonly refusal = computed(() => this.voice()?.refusal ?? null);
 
+
+
   readonly degrees = computed<ShownDegree[]>(() => {
     const summary = this.voice();
     if (!summary) return [];

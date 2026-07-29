@@ -47,8 +47,9 @@ export class App {
   readonly pages = [
     // `exact` on the studio alone: every route is a prefix of "/", so without it
     // the studio reads as current on every page.
-    { path: "/", label: "Studio", exact: true },
+    // In the order somebody does them: nothing works before a voice exists.
     { path: "/calibrate", label: "Calibrate", exact: false },
+    { path: "/", label: "Studio", exact: true },
     { path: "/compare", label: "Compare", exact: false },
     { path: "/label", label: "Label", exact: false },
   ] as const;

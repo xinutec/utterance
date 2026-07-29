@@ -32,3 +32,21 @@ body {
   color: var(--mat-sys-on-surface);
   font-family: Roboto, system-ui, sans-serif;
 }
+
+// The body of an `<app-help>` bubble. Global because a menu panel renders into
+// the CDK overlay, outside the component that opened it.
+.help-panel .help-body {
+  padding: 0.5rem 1rem 0.75rem;
+  max-width: 22rem;
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  white-space: normal;
+
+  p {
+    margin: 0 0 0.5rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}

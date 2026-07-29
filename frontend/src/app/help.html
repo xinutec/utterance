@@ -1,0 +1,21 @@
+<button
+  matIconButton
+  class="ask"
+  type="button"
+  aria-label="What is this?"
+  [matMenuTriggerFor]="panel"
+>
+  <mat-icon>help_outline</mat-icon>
+</button>
+<mat-menu #panel="matMenu" class="help-panel">
+  <!--
+    Deferred content, so the text is created when it is opened. A menu renders
+    its contents whether or not it is open, and an explanation nobody asked for
+    should not be sitting in the page for a screen reader to read out.
+  -->
+  <ng-template matMenuContent>
+    <div class="help-body">
+      <ng-content />
+    </div>
+  </ng-template>
+</mat-menu>

@@ -60,6 +60,28 @@
     </mat-card-content>
   </mat-card>
 
+  <!--
+    The one thing worth saying before anything else, and only while it is true.
+    A page that knows the next move offers it: without a calibration take there
+    is no voice to derive music from, and nothing else on this page will work.
+  -->
+  @if (needsCalibration()) {
+    <mat-card class="no-voice">
+      <mat-card-content>
+        <span>No voice yet.</span>
+        <a matButton="filled" routerLink="/calibrate">Record the calibration vowels</a>
+        <app-help>
+          <p>
+            The music is derived from your own voice: the scale comes from the
+            spectrum of a sustained vowel, and the tone from the vowels recorded
+            beside it.
+          </p>
+          <p>Other recordings are material to play — they do not define the voice.</p>
+        </app-help>
+      </mat-card-content>
+    </mat-card>
+  }
+
   <div class="columns">
     <mat-card>
       <mat-card-header><mat-card-title>Takes</mat-card-title></mat-card-header>

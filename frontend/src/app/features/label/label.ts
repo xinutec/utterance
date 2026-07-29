@@ -17,6 +17,7 @@ import { MatFormFieldModule } from "@angular/material/form-field";
 import { MatIconModule } from "@angular/material/icon";
 import { MatSelectModule } from "@angular/material/select";
 
+import { Help } from "../../help";
 import type { Syllable } from "../../models";
 import { ApiError, RecordingsApi } from "../../recordings-api";
 import { RecordingsStore } from "../../recordings-store";
@@ -52,6 +53,7 @@ const AUTOSAVE_MS = 1500;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DecimalPipe,
+    Help,
     MatButtonModule,
     MatCardModule,
     MatFormFieldModule,

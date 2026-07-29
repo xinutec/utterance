@@ -6,7 +6,10 @@ import { MatIconModule } from "@angular/material/icon";
 import { MatProgressBarModule } from "@angular/material/progress-bar";
 import { MatTooltipModule } from "@angular/material/tooltip";
 
+import { RouterLink } from "@angular/router";
+
 import { Recorder } from "../../audio/recorder";
+import { Help } from "../../help";
 import type { RecordingMeta } from "../../models";
 import { RecordingsStore } from "../../recordings-store";
 import { DerivedMusic } from "./derived-music";
@@ -23,7 +26,9 @@ const TARGET_SECONDS = 30;
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DecimalPipe,
+    Help,
     MatButtonModule,
+    RouterLink,
     MatCardModule,
     MatIconModule,
     MatProgressBarModule,
@@ -36,6 +41,18 @@ const TARGET_SECONDS = 30;
 export class Studio implements OnInit {
   readonly store = inject(RecordingsStore);
   readonly recorder = inject(Recorder);
+
+  /**
+   * True while no take says who the speaker is.
+   *
+   * Read from the take list rather than from a failed request, so the page can
+   * offer the next move *before* somebody presses render and is refused. The
+   * backend remains the authority — it refuses the render either way — but a
+   * prompt that only appears after a failure is a prompt most people never see.
+   */
+  readonly needsCalibration = computed(
+    () => !this.store.recordings().some((take) => take.role === "calibration"),
+  );
 
   /** Capture problems, which are this component's own — not the store's. */
   readonly captureError = signal<string | null>(null);
