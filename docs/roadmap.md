@@ -297,10 +297,61 @@ In rough order of how much each unlocks.
   eight. Every mapping that reads the *shape* of a scale was being tested
   against something shaped like nothing. Now three formants and a shallower
   source, tuned until the measured partials resemble a measured voice's.
-- **The field reads eight streams; the voice emits about ten.** What is still
-  unread is the *shape* of the spectrum beyond its centroid — a tilt measurement
-  proper, and the harmonic-to-noise balance per band. Neither is measured yet, so
-  this is analysis work rather than mapping work.
+- **The field reads eight streams; the voice emits about ten.** What was unread
+  is the *shape* of the spectrum beyond its centroid — a tilt measurement proper,
+  and the harmonic-to-noise balance per band.
+
+  **Tilt is now measured** (2026-07-29, schema 8): the least-squares slope of
+  power in dB against log frequency, fitted between 300 Hz and 5 kHz, per frame.
+  The ceiling is the measurement rather than a detail — everything is analysed at
+  16 kHz and a band-limited resampler's anti-alias filter collapses approaching
+  8 kHz, so a fit taken to Nyquist would measure that cliff on every frame of
+  every recording and report it as a property of the speaker, steeply and
+  consistently enough to look like a result. `tilt_measures_the_voice_and_not_the_resampler`
+  fits white noise and fails if the answer is not flat.
+
+  On the store's takes the loud-frame medians run −5.5 to −15.4 dB/octave, which
+  is where voiced speech belongs, and they separate the way the physics says:
+  *ee* shallow at −5.5, *oo* dark at −13.7, and a high-pitched take shallower
+  than a low one by 8 dB/octave.
+
+- **Whether a stream is worth reading is now a measurement**, by
+  `src/bin/streams.rs`. The *one stream drives one parameter* decision was taken
+  after the field's `colour` was found being set from the same normalised F2 that
+  walked its root — found by reading the code, which is luck — and nothing had
+  checked it since. The tool correlates every stream a mapping reads, pooled over
+  the sounding frames of every take.
+
+  Silence is gated out, and that is not tidiness: every stream reports something
+  constant in digital silence — tilt fits a flat line through the bin floor and
+  returns exactly 0 — so the silent frames pile up at one point of the scatter
+  and two streams unrelated in the voice are reported as agreeing about nothing.
+
+  Over 31,491 sounding frames from 15 takes:
+
+  - **No welded pairs.** Nothing among the eight reaches \|r\| = 0.9. The
+    decision has held since it was taken.
+  - **Tilt earns admission at r = 0.41 against brightness** — the stream it most
+    resembles, and not a restatement of it. Its other neighbours are aperiodicity
+    at 0.55 and energy at −0.45, both physically expected: a pressed voice is
+    loud, periodic and shallow-tilted together.
+  - **Flatness does not, at r = 0.80 against aperiodicity.** The second unread
+    stream is nearly one already read. It stays measured and stays unread.
+  - The strongest existing pair is energy against aperiodicity at −0.73. Below
+    the threshold, and worth knowing: two of the eight carry less separate
+    information than the count suggests.
+
+  **Neither is wired into a mapping yet.** Measuring a stream and reading it are
+  separate steps, and what tilt should *drive* is a mapping question to be
+  settled by ear.
+
+  **Harmonic-to-noise per band is still not measured, now with a reason to be
+  careful.** Flatness came in at 0.80 against aperiodicity, and HNR measures the
+  same thing — periodicity. Its distinct claim is that it varies *across* bands:
+  a breathy voice is periodic low and noisy high, which one global aperiodicity
+  cannot express. That claim is testable with the tool above before any of it is
+  built, and it should be, rather than adding a ninth stream that turns out to be
+  the eighth.
 - **Nothing operates above the phrase.** The field moves at three timescales —
   level, articulation, prosodic drift — and the longest is two seconds. A piece
   has a shape across its whole length and nothing here produces one. The Tonnetz

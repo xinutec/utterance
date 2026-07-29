@@ -18,8 +18,14 @@
 //! - **flatness** — how noise-like the spectrum is, from 0 for a pure tone to 1
 //!   for white noise. What separates a fricative from a vowel, and a sustained
 //!   hiss from a plosive burst.
+//! - **tilt** — how fast the spectrum falls away with frequency, in dB per
+//!   octave. The correlate of vocal effort: a pressed or shouted voice has a
+//!   shallow tilt because the glottis closes abruptly and throws energy high, a
+//!   breathy or relaxed one falls off steeply. Centroid says *where* the energy
+//!   sits; tilt says *how it is distributed*, and a voice can move either
+//!   without moving the other.
 //!
-//! Both are computed for every frame, voiced or not. They are defined
+//! All three are computed for every frame, voiced or not. They are defined
 //! everywhere, and deciding where they are *interesting* is the mapping layer's
 //! business rather than this one's.
 
@@ -45,6 +51,21 @@ use crate::resample::ANALYSIS_RATE;
 /// having them.
 pub const NOISE_BAND_LOW_HZ: f32 = 300.0;
 
+/// Highest frequency the tilt is fitted up to.
+///
+/// **Not Nyquist, and this is the whole correctness of the measurement.**
+/// Everything is resampled to 16 kHz, and a band-limited resampler's
+/// anti-aliasing filter falls off a cliff approaching 8 kHz. Fitting a slope
+/// through that would measure the filter — steeply, consistently, and on every
+/// frame of every recording — and report it as a property of the speaker. Fitted
+/// to 5 kHz instead, which is clear of the transition band and still spans four
+/// octaves of the band a voice actually radiates into.
+///
+/// The same reasoning as [`NOISE_BAND_LOW_HZ`] at the other end, and the same
+/// failure it was written for: a measure whose average is dominated by something
+/// that is not the voice.
+const TILT_HIGH_HZ: f32 = 5000.0;
+
 /// Floor added to every bin before the flatness ratio.
 ///
 /// A geometric mean collapses to zero if any single bin is zero, which in a
@@ -69,6 +90,11 @@ pub struct Texture {
     /// A vowel sits near zero: its energy is concentrated in harmonics. A
     /// fricative sits high: its energy is spread across everything.
     pub flatness: Vec<f32>,
+    /// Spectral tilt per frame, in dB per octave. Negative falls away.
+    ///
+    /// Fitted between [`NOISE_BAND_LOW_HZ`] and [`TILT_HIGH_HZ`], so it describes
+    /// the voice rather than the room below it or the resampler above it.
+    pub tilt_db_per_octave: Vec<f32>,
 }
 
 /// Measure the centroid and flatness of every frame.
@@ -78,6 +104,7 @@ pub fn track(samples: &[f32]) -> Texture {
         return Texture {
             centroid_hz: Vec::new(),
             flatness: Vec::new(),
+            tilt_db_per_octave: Vec::new(),
         };
     }
 
@@ -87,9 +114,20 @@ pub fn track(samples: &[f32]) -> Texture {
     let bins = SPECTRAL_WINDOW / 2 + 1; // real input: the upper half mirrors.
     let bin_hz = ANALYSIS_RATE as f32 / SPECTRAL_WINDOW as f32;
     let lowest = ((NOISE_BAND_LOW_HZ / bin_hz).ceil() as usize).min(bins - 1);
+    let highest = ((TILT_HIGH_HZ / bin_hz).floor() as usize).min(bins - 1);
+
+    // The abscissa of the tilt fit never changes from frame to frame, so the
+    // octave positions and their spread are computed once. What varies is only
+    // the power in each bin.
+    let octaves: Vec<f32> = (lowest..=highest)
+        .map(|k| (k as f32 * bin_hz / NOISE_BAND_LOW_HZ).log2())
+        .collect();
+    let octave_mean = octaves.iter().sum::<f32>() / octaves.len().max(1) as f32;
+    let octave_spread: f32 = octaves.iter().map(|o| (o - octave_mean).powi(2)).sum();
 
     let mut centroid_hz = vec![0.0f32; n];
     let mut flatness = vec![0.0f32; n];
+    let mut tilt_db_per_octave = vec![0.0f32; n];
     let mut buf = vec![Complex32::new(0.0, 0.0); SPECTRAL_WINDOW];
 
     for i in 0..n {
@@ -129,10 +167,29 @@ pub fn track(samples: &[f32]) -> Texture {
         } else {
             (log_mean.exp() / arithmetic_mean).clamp(0.0, 1.0)
         };
+
+        // Least squares in dB against octaves, which is what "dB per octave"
+        // means and is also the domain the ear works in: a fit against linear
+        // frequency would let the top octave, holding half the bins, decide the
+        // answer on its own.
+        if octave_spread > 0.0 {
+            let decibels: Vec<f32> = power[..=highest - lowest]
+                .iter()
+                .map(|p| 10.0 * p.log10())
+                .collect();
+            let db_mean = decibels.iter().sum::<f32>() / decibels.len() as f32;
+            let covariance: f32 = octaves
+                .iter()
+                .zip(&decibels)
+                .map(|(o, d)| (o - octave_mean) * (d - db_mean))
+                .sum();
+            tilt_db_per_octave[i] = covariance / octave_spread;
+        }
     }
 
     Texture {
         centroid_hz,
         flatness,
+        tilt_db_per_octave,
     }
 }

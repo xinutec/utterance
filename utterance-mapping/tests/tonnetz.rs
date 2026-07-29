@@ -88,6 +88,7 @@ fn take(frames: usize) -> Voiceprint {
         texture: Texture {
             centroid_hz: vec![500.0; frames],
             flatness: vec![0.01; frames],
+            tilt_db_per_octave: vec![-9.0; frames],
         },
     }
 }

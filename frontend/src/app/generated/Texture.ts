@@ -17,4 +17,11 @@ centroidHz: Array<number>,
  * A vowel sits near zero: its energy is concentrated in harmonics. A
  * fricative sits high: its energy is spread across everything.
  */
-flatness: Array<number>, };
+flatness: Array<number>, 
+/**
+ * Spectral tilt per frame, in dB per octave. Negative falls away.
+ *
+ * Fitted between [`NOISE_BAND_LOW_HZ`] and [`TILT_HIGH_HZ`], so it describes
+ * the voice rather than the room below it or the resampler above it.
+ */
+tiltDbPerOctave: Array<number>, };

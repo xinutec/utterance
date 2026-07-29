@@ -30,7 +30,9 @@ use serde::{Deserialize, Serialize};
 /// - 6: added `texture` (spectral centroid and flatness per frame).
 /// - 7: `texture` measured above 300 Hz — below it, room rumble dominated
 ///   both series and every consonant read as tonal.
-pub const SCHEMA_VERSION: u32 = 7;
+/// - 8: `texture` gained `tiltDbPerOctave` — the slope of the spectrum, which
+///   the centroid alone cannot express.
+pub const SCHEMA_VERSION: u32 = 8;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]

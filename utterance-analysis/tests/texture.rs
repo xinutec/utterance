@@ -168,3 +168,96 @@ fn nothing_below_the_band_reaches_either_measure() {
         "a 120 Hz tone moved a measurement that starts at 300 Hz"
     );
 }
+
+/// White noise shaped to a known slope, by a one-pole filter with a known one.
+///
+/// A single pole rolls off at 6 dB per octave above its corner, so cascading `n`
+/// of them at a corner below the measured band gives −6·n dB/octave across it.
+/// That makes the expected answer arithmetic rather than a number read off a
+/// previous run of the code being tested.
+fn sloped(poles: usize, secs: f32) -> Vec<f32> {
+    let mut signal = white(secs);
+    // Well below NOISE_BAND_LOW_HZ, so the whole fitted band is in the roll-off
+    // rather than straddling the corner.
+    let corner_hz = 50.0;
+    let alpha = 1.0 - (-2.0 * std::f32::consts::PI * corner_hz / ANALYSIS_RATE as f32).exp();
+    for _ in 0..poles {
+        let mut y = 0.0f32;
+        for sample in &mut signal {
+            y += alpha * (*sample - y);
+            *sample = y;
+        }
+    }
+    let peak = signal.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+    if peak > 0.0 {
+        for s in &mut signal {
+            *s /= peak;
+        }
+    }
+    signal
+}
+
+#[test]
+fn tilt_reads_a_known_slope_in_decibels_per_octave() {
+    // Not "steeper than the other one" — the actual number. A slope measurement
+    // that only orders things correctly can be wrong by a factor and never say
+    // so, and the unit is what a mapping would normalise against.
+    for poles in [1usize, 2, 3] {
+        let measured = steady_median(&texture::track(&sloped(poles, 1.0)).tilt_db_per_octave);
+        let expected = -6.0 * poles as f32;
+        assert!(
+            (measured - expected).abs() < 1.5,
+            "{poles} poles should fall at {expected:.0} dB/octave, measured {measured:.1}"
+        );
+    }
+}
+
+#[test]
+fn tilt_measures_the_voice_and_not_the_resampler() {
+    // The design decision, made falsifiable. Everything is analysed at 16 kHz and
+    // a band-limited resampler's anti-aliasing filter collapses approaching 8 kHz.
+    // A fit taken to Nyquist would measure that cliff on every frame of every
+    // recording and report it as a property of the speaker — steeply, and
+    // consistently enough to look like a real result.
+    //
+    // White noise is the signal that catches it: genuinely flat, so anything the
+    // measurement finds is the machinery.
+    let flat = steady_median(&texture::track(&white(1.0)).tilt_db_per_octave);
+    assert!(
+        flat.abs() < 2.0,
+        "white noise reads as {flat:.1} dB/octave, so the fit is measuring the filter"
+    );
+}
+
+#[test]
+fn tilt_separates_two_vowels_the_centroid_agrees_about() {
+    // Why this is a stream rather than a restatement of the brightness already
+    // read. Two bands with the same centre have the same centroid by
+    // construction, and a spectrum that falls away from it steeply is a different
+    // sound from one that does not.
+    let narrow = texture::track(&band(1_200.0, 200.0, 1.0));
+    let wide = texture::track(&band(1_200.0, 2_000.0, 1.0));
+
+    let centroids = (
+        steady_median(&narrow.centroid_hz),
+        steady_median(&wide.centroid_hz),
+    );
+    let tilts = (
+        steady_median(&narrow.tilt_db_per_octave),
+        steady_median(&wide.tilt_db_per_octave),
+    );
+    assert!(
+        tilts.0 < tilts.1 - 3.0,
+        "a narrow band and a wide one at the same place tilt alike: {:.1} and {:.1}",
+        tilts.0,
+        tilts.1
+    );
+    // Stated so the test fails loudly if the fixtures stop sharing a centroid and
+    // the comparison quietly becomes about brightness after all.
+    assert!(
+        (centroids.0 - centroids.1).abs() < 600.0,
+        "the two bands no longer share a centroid: {:.0} and {:.0} Hz",
+        centroids.0,
+        centroids.1
+    );
+}

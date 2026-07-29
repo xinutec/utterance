@@ -56,6 +56,7 @@ fn voiceprint(f1: Vec<Option<f32>>, f2: Vec<Option<f32>>, hz: Vec<Option<f32>>) 
         texture: Texture {
             centroid_hz: vec![0.0; count],
             flatness: vec![0.0; count],
+            tilt_db_per_octave: vec![0.0; count],
         },
     }
 }
