@@ -32,6 +32,12 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         .route("/recordings", post(api::upload).get(api::list))
         .route("/recordings/{id}", get(api::detail).delete(api::delete))
         .route("/recordings/{id}/audio", get(api::audio))
+        // Ground truth a person marked. `put` rather than `post`: the editor
+        // holds the whole set, so replacing is the only operation there is.
+        .route(
+            "/recordings/{id}/labels",
+            get(api::labels).put(api::put_labels),
+        )
         .route("/recordings/{id}/render", get(api::render))
         .route("/recordings/{id}/score", get(api::score))
         .route("/voice", get(api::voice_summary))

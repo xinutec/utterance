@@ -54,6 +54,71 @@ pub struct RecordingMeta {
     pub clipped: bool,
 }
 
+/// Where a syllable begins, as heard by a person.
+///
+/// Seconds from the start of the take. One number, because that is the one thing
+/// a listener can state exactly: prominence — which syllable is stronger — is
+/// the measurement the stress hierarchy will need next, and it goes here when
+/// somebody has decided how to elicit it, not before.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Syllable {
+    pub at_s: f32,
+}
+
+/// What a person has marked in a recording.
+///
+/// **A record, not a cache — the opposite of a voiceprint, and the distinction
+/// decides how this file is treated.** A voiceprint is a pure function of the
+/// audio, so `SCHEMA_VERSION` may throw it away and re-derive it at any time.
+/// Nothing can re-derive this: it is somebody's ear, spent once. So it is never
+/// touched by [`Store::ensure_current`], it survives every analyser change, and
+/// unknown fields in an older file must not make it unreadable — which is what
+/// `#[serde(default)]` below is for.
+///
+/// It exists because two separate gaps in `docs/architecture.md` are blocked on
+/// ground truth nobody has produced: onsets mean "the spectrum changed" rather
+/// than "a syllable began", and there is no way to score a formant tracker
+/// against a real take.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct Labels {
+    /// Ascending, and never two at the same instant.
+    ///
+    /// Ordering is enforced on the way in rather than assumed, because a caller
+    /// dragging a mark past its neighbour is ordinary and the alternative is
+    /// every reader sorting defensively.
+    #[serde(default)]
+    pub syllables: Vec<Syllable>,
+}
+
+impl Labels {
+    /// The same labels, ordered and with duplicates removed.
+    ///
+    /// Two marks a millisecond apart are one syllable marked twice — a double
+    /// tap, or a drag that landed on its neighbour — and keeping both would
+    /// report a rhythm nobody performed.
+    pub fn tidied(mut self) -> Self {
+        self.syllables
+            .retain(|s| s.at_s.is_finite() && s.at_s >= 0.0);
+        self.syllables.sort_by(|a, b| a.at_s.total_cmp(&b.at_s));
+        self.syllables
+            .dedup_by(|a, b| (a.at_s - b.at_s).abs() < MIN_SYLLABLE_S);
+        self
+    }
+}
+
+/// Closest two marks may be before they count as one, in seconds.
+///
+/// 60 ms. Faster than any speaker produces syllables — the quickest running
+/// speech is around eight a second — so anything closer is a slip of the hand
+/// rather than a rhythm.
+const MIN_SYLLABLE_S: f32 = 0.06;
+
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
     #[error("recording not found: {0}")]
@@ -243,6 +308,39 @@ impl Store {
         self.read_json(id, VOICEPRINT)
     }
 
+    /// What a person has marked in this recording, or nothing marked yet.
+    ///
+    /// An absent file is an empty answer rather than an error: every recording
+    /// made before labelling existed has none, and so does every one nobody has
+    /// sat down with. "Not labelled" is the normal state, not a fault.
+    pub fn labels(&self, id: &str) -> Result<Labels, StoreError> {
+        let path = self.checked_dir(id)?.join(LABELS);
+        match fs::read(&path) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(|e| StoreError::Corrupt {
+                id: id.to_string(),
+                detail: e.to_string(),
+            }),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(Labels::default()),
+            Err(source) => Err(StoreError::Io { path, source }),
+        }
+    }
+
+    /// Replace this recording's labels, tidied.
+    ///
+    /// Replace rather than merge, because the editor holds the whole set and a
+    /// merge would make deleting a mark impossible to express. The recording
+    /// must already exist: labels for a take that is not here would be
+    /// unreachable and would survive it.
+    pub fn put_labels(&self, id: &str, labels: Labels) -> Result<Labels, StoreError> {
+        let dir = self.checked_dir(id)?;
+        if !dir.join(META).is_file() {
+            return Err(StoreError::NotFound(id.to_string()));
+        }
+        let tidied = labels.tidied();
+        write_json(&dir.join(LABELS), &tidied)?;
+        Ok(tidied)
+    }
+
     pub fn audio(&self, id: &str) -> Result<Vec<u8>, StoreError> {
         let path = self.checked_dir(id)?.join(AUDIO);
         fs::read(&path).map_err(|source| match source.kind() {
@@ -299,6 +397,7 @@ impl Store {
 const AUDIO: &str = "audio.wav";
 const VOICEPRINT: &str = "voiceprint.json";
 const META: &str = "meta.json";
+const LABELS: &str = "labels.json";
 
 /// Length of the hex id taken from the content hash.
 ///
