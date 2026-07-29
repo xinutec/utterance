@@ -26,13 +26,16 @@
   </div>
 } @else {
   <mat-toolbar class="bar">
-    <span class="title">utterance</span>
-    <span class="subtitle">the voice as law-giver</span>
     <!--
       Behind a menu rather than laid out along the bar. Four destinations is
       already more than fits beside the title on a phone, and the app is used by
       one person who knows where things are — a permanent row of labels costs
       width on every page to save a click on the few occasions anyone moves.
+
+      At the *start* of the bar, which is where Material puts a navigation icon
+      and where recall already puts this same button. It sat at the trailing edge
+      first, for no better reason than that the row of links it replaced was
+      pushed there.
     -->
     <button
       matIconButton
@@ -78,6 +81,9 @@
         Label
       </a>
     </mat-menu>
+    <span class="title">utterance</span>
+    <span class="subtitle">the voice as law-giver</span>
+
   </mat-toolbar>
 
   <main>
