@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  effect,
   type OnDestroy,
   type OnInit,
   computed,
@@ -18,7 +19,8 @@ import { MatIconModule } from "@angular/material/icon";
 import { MatSelectModule } from "@angular/material/select";
 
 import { Help } from "../../help";
-import type { Syllable } from "../../models";
+import type { Syllable, Voiceprint } from "../../models";
+import { LabelChart } from "./label-chart";
 import { ApiError, RecordingsApi } from "../../recordings-api";
 import { RecordingsStore } from "../../recordings-store";
 
@@ -54,6 +56,7 @@ const AUTOSAVE_MS = 1500;
   imports: [
     DecimalPipe,
     Help,
+    LabelChart,
     MatButtonModule,
     MatCardModule,
     MatFormFieldModule,
@@ -80,6 +83,15 @@ export class Label implements OnInit, OnDestroy {
 
   /** Where the player is, so a mark lands where the ear was. */
   readonly playhead = signal(0);
+
+  /**
+   * The take's own measurements, for the level curve marks are placed against.
+   *
+   * Fetched here rather than derived: a mark is only as good as what it can be
+   * seen against, and at the width that makes a syllable placeable there is no
+   * fitting a take on a screen — see `LabelChart`.
+   */
+  readonly voiceprint = signal<Voiceprint | null>(null);
 
   private readonly player = viewChild<ElementRef<HTMLAudioElement>>("player");
   private pending: ReturnType<typeof setTimeout> | null = null;
@@ -112,11 +124,22 @@ export class Label implements OnInit, OnDestroy {
     return span > 0 ? (marks.length - 1) / span : null;
   });
 
+  constructor() {
+    // **Loading follows the choice rather than the page.** `chosen()` falls back
+    // to the longest take, which does not exist until the list arrives — so a
+    // load fired once on init runs while there is nothing to load, returns, and
+    // is never tried again. The symptom is a page that looks like a take with no
+    // marks, which is indistinguishable from a take nobody has marked.
+    effect(() => {
+      const id = this.chosen();
+      if (id) this.load(id);
+    });
+  }
+
   ngOnInit(): void {
     this.store.refresh();
     const take = this.route.snapshot.queryParamMap.get("take");
     if (take) this.recordingId.set(take);
-    this.load();
   }
 
   ngOnDestroy(): void {
@@ -136,12 +159,9 @@ export class Label implements OnInit, OnDestroy {
       queryParams: { take: id },
       replaceUrl: true,
     });
-    this.load();
   }
 
-  private load(): void {
-    const id = this.chosen();
-    if (!id) return;
+  private load(id: string): void {
     // dev-lint: allow-component-list re-fetching on return is the correct
     // behaviour here rather than a loss. The rule guards against a list that
     // blanks and re-requests, taking unsaved state with it; these marks are
@@ -150,6 +170,10 @@ export class Label implements OnInit, OnDestroy {
     // this page learns what the other listener marked. Holding them in a
     // root-provided store would instead keep one take's marks alive while
     // showing another's.
+    this.api.get(id).subscribe({
+      next: (detail) => this.voiceprint.set(detail.voiceprint),
+      error: (err: unknown) => this.fail(err),
+    });
     this.api.labels(id).subscribe({
       next: (labels) => {
         this.syllables.set(labels.syllables);
@@ -166,6 +190,11 @@ export class Label implements OnInit, OnDestroy {
     this.syllables.update((marks) =>
       [...marks, { atS: player.currentTime }].sort((a, b) => a.atS - b.atS),
     );
+    this.touched();
+  }
+
+  /** A mark was placed, moved or removed on the chart. */
+  touchedFromChart(): void {
     this.touched();
   }
 

@@ -46,6 +46,20 @@
       </span>
     </div>
 
+    <!--
+      Where the marks actually are. Tapping gets them roughly right; this is
+      where they are made right, against the loudness the ear was following.
+    -->
+    @if (voiceprint(); as vp) {
+      <app-label-chart
+        [voiceprint]="vp"
+        [(syllables)]="syllables"
+        [playhead]="playhead()"
+        (seek)="seekTo($event)"
+        (syllablesChange)="touchedFromChart()"
+      />
+    }
+
     <p class="tally">
       {{ syllables().length }} marked
       @if (rate(); as perSecond) {

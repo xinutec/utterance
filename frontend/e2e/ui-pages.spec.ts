@@ -538,7 +538,12 @@ test("label — marking syllables lays out cleanly @ phone", async ({ page }, te
   await page.getByRole("button", { name: "Mark a syllable" }).waitFor();
 
   await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  // The chart scrolls sideways on purpose: at a magnification that makes a
+  // 230 ms syllable placeable, a minute of speech is thousands of pixels and
+  // cannot fit on any screen. Named explicitly, because the harness will not
+  // infer it from `overflow-x` — `overflow-y: auto` forces that to compute to
+  // auto too, which would exempt every vertically-scrollable container.
+  await expectNoHorizontalOverflow(page, testInfo, null, [".scroller"]);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -653,4 +658,59 @@ test("a question mark opens the explanation, and it is not there until asked", a
   await expect(page.locator(".help-body")).toHaveCount(0);
   await page.getByRole("button", { name: "What is this?" }).first().click();
   await expect(page.locator(".help-body")).toContainText("once per syllable");
+});
+
+test("label — a mark can be placed, moved and removed on the chart", async ({ page }) => {
+  // At 56 marks precision matters more than speed, so the chart is where the
+  // work happens: tapping gets a mark roughly right, this puts it right. All
+  // three operations are one gesture on the thing itself, and none of them is
+  // visible to a layout assertion.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) =>
+    r.request().method() === "GET"
+      ? r.fulfill({ json: { syllables: [] } })
+      : r.fulfill({ json: JSON.parse(r.request().postData() ?? "{}") }),
+  );
+  await page.goto("/label");
+  const canvas = page.locator("app-label-chart canvas");
+  await canvas.waitFor();
+
+  const box = (await canvas.boundingBox())!;
+  const y = box.y + box.height / 2;
+
+  // Place two.
+  await page.mouse.click(box.x + 40, y);
+  await page.mouse.click(box.x + 120, y);
+  await expect(page.locator(".tally")).toContainText("2 marked");
+
+  // Move one: press, travel, release. A drag must not be read as a removal.
+  await page.mouse.move(box.x + 120, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 200, y, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator(".tally")).toContainText("2 marked");
+
+  // Remove one: press and release without moving.
+  await page.mouse.click(box.x + 200, y);
+  await expect(page.locator(".tally")).toContainText("1 marked");
+});
+
+test("label — the chart magnifies, because a syllable is two pixels otherwise", async ({
+  page,
+}) => {
+  // A 46s take on a phone is under 9 px/second; a syllable at four a second is
+  // 230 ms, which is two pixels. Nothing can be placed at that scale, so the
+  // magnification is the feature rather than a convenience.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
+  await page.goto("/label");
+  await page.locator("app-label-chart canvas").waitFor();
+
+  // The canvas stays the width of the screen; what grows is how far the window
+  // can travel, which is what "more magnification" actually means here.
+  const extent = async () =>
+    (await page.locator("app-label-chart .extent").boundingBox())!.width;
+  const before = await extent();
+  await page.getByRole("button", { name: "Show less time" }).click();
+  expect(await extent()).toBeGreaterThan(before);
 });
