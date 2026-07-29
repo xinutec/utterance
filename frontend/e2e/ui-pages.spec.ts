@@ -119,14 +119,14 @@ const REFUSAL =
  */
 const CONTROLS = {
   knobs: [
-    { name: "bind", label: "Bind to the voice", min: 0, max: 1, step: 0.05, default: 1, mappings: [], about: "At 1 the notes are exactly where this voice's spectrum puts them. At 0 they snap to the twelve everyone else uses." },
-    { name: "density", label: "Scale density", min: 0.0005, max: 0.5, step: 0.002, default: 0.02, mappings: [], about: "How firm a note has to be to count. Low gives a crowded microtonal set, high gives a handful of very stable intervals." },
-    { name: "voices", label: "Voices", min: 1, max: 12, step: 1, default: 5, mappings: ["field", "tonnetz"], about: "How many tones sound at once." },
-    { name: "spacing", label: "Spacing", min: 1, max: 6, step: 1, default: 2, mappings: ["field", "tonnetz"], about: "How far apart the voices sit. 1 is a cluster, higher is an open chord." },
-    { name: "drift", label: "Follow the pitch", min: 0, max: 2, step: 0.05, default: 0.25, mappings: ["field", "tonnetz"], about: "How far the music transposes with the speaker's pitch. At 0 it sits still; near 1 it reads as a parallel melody." },
-    { name: "reach", label: "Follow the vowel", min: 0, max: 3, step: 0.05, default: 1, mappings: ["field", "tonnetz"], about: "How far the vowel moves the harmony. This is the articulation showing up as harmony." },
-    { name: "hold", label: "Hold the harmony", min: 0, max: 1, step: 0.05, default: 0.35, mappings: ["tonnetz"], about: "How far the mouth must move past a boundary before the chord changes. At 0 the harmony follows every wobble." },
-    { name: "consonants", label: "Consonants", min: 0, max: 2, step: 0.05, default: 1, mappings: [], about: "How loud the unpitched material is against the tones. At 0 they are silent." },
+    { name: "bind", label: "Bind to the voice", min: 0, max: 1, step: 0.05, default: 1, mappings: [], about: "At 1 the notes are exactly where this voice's spectrum puts them. At 0 they snap to the twelve everyone else uses.", primary: true },
+    { name: "density", label: "Scale density", min: 0.0005, max: 0.5, step: 0.002, default: 0.02, mappings: [], about: "How firm a note has to be to count. Low gives a crowded microtonal set, high gives a handful of very stable intervals.", primary: true },
+    { name: "voices", label: "Voices", min: 1, max: 12, step: 1, default: 5, mappings: ["field", "tonnetz"], about: "How many tones sound at once.", primary: true },
+    { name: "spacing", label: "Spacing", min: 1, max: 6, step: 1, default: 2, mappings: ["field", "tonnetz"], about: "How far apart the voices sit. 1 is a cluster, higher is an open chord.", primary: false },
+    { name: "drift", label: "Follow the pitch", min: 0, max: 2, step: 0.05, default: 0.25, mappings: ["field", "tonnetz"], about: "How far the music transposes with the speaker's pitch. At 0 it sits still; near 1 it reads as a parallel melody.", primary: false },
+    { name: "reach", label: "Follow the vowel", min: 0, max: 3, step: 0.05, default: 1, mappings: ["field", "tonnetz"], about: "How far the vowel moves the harmony. This is the articulation showing up as harmony.", primary: true },
+    { name: "hold", label: "Hold the harmony", min: 0, max: 1, step: 0.05, default: 0.35, mappings: ["tonnetz"], about: "How far the mouth must move past a boundary before the chord changes. At 0 the harmony follows every wobble.", primary: true },
+    { name: "consonants", label: "Consonants", min: 0, max: 2, step: 0.05, default: 1, mappings: [], about: "How loud the unpitched material is against the tones. At 0 they are silent.", primary: false },
   ],
   mappings: [
     { name: "field", label: "Field", makes: "texture", about: "Every frame sounds." },
@@ -467,4 +467,56 @@ test("compare — a shared link arrives at the settings it names", async ({ page
   // a URL that changed on arrival would mean the address bar no longer
   // described what is playing.
   await expect(page).toHaveURL(/a=mapping%3Dtonnetz&b=mapping%3Dtonnetz%26bind%3D0/);
+});
+
+/**
+ * Ten sliders at equal weight is an instrument panel for someone who already
+ * knows what each one does. To anybody else — which is to say, to the second
+ * person this was built for — it reads as ten things they might be getting
+ * wrong.
+ *
+ * Checked end to end rather than on the component, because the property worth
+ * guarding is that the split is driven by what the *backend* published: a
+ * frontend that kept its own list of important knobs would pass a unit test and
+ * still hide a knob added in Rust.
+ */
+test("studio — the knobs that decide the piece come first, the rest fold away", async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Render" }).first().waitFor();
+
+  const knobs = page.locator("app-mapping-controls .knob");
+  const panel = page.getByRole("button", { name: /More controls/ });
+
+  // The field mapping is playing, so `hold` is put away as belonging to the
+  // lattice — leaving the four primaries it does read.
+  await expect(knobs).toHaveCount(4);
+  await expect(panel).toBeVisible();
+
+  await panel.click();
+  // Everything the playing mapping reads is reachable, just not all at once:
+  // the four above plus spacing, drift and consonants. Counted in the DOM
+  // rather than by visibility, because a folded panel must not merely hide its
+  // sliders — one that is present and sized zero is what the layout harness
+  // reports as an occluded control, and it is what `.last()` waits forever for.
+  await expect(knobs).toHaveCount(7);
+});
+
+test("studio — a folded-away knob still says it was moved", async ({ page }) => {
+  // Closed, the panel would otherwise hide that something inside is no longer at
+  // its default — and a render nobody can explain then has its cause one click
+  // away and invisible.
+  await mockApi(page);
+  await page.goto("/");
+  const panel = page.getByRole("button", { name: /More controls/ });
+  await expect(panel).toContainText("more");
+
+  await panel.click();
+  const spacing = page.locator("app-mapping-controls .knob", { hasText: "Spacing" });
+  await spacing.locator("input[matSliderThumb]").fill("4");
+  await panel.click();
+
+  await expect(panel).toContainText("1 moved");
 });

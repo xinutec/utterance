@@ -1,7 +1,8 @@
-import { DecimalPipe } from "@angular/common";
+import { DecimalPipe, NgTemplateOutlet } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, input, model } from "@angular/core";
 import { MatButtonModule } from "@angular/material/button";
 import { MatButtonToggleModule } from "@angular/material/button-toggle";
+import { MatExpansionModule } from "@angular/material/expansion";
 import { MatFormFieldModule } from "@angular/material/form-field";
 import { MatSelectModule } from "@angular/material/select";
 import { MatSliderModule } from "@angular/material/slider";
@@ -38,8 +39,10 @@ import { knobValue, withKnob, type MappingSettings } from "./mapping-settings";
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     DecimalPipe,
+    NgTemplateOutlet,
     MatButtonModule,
     MatButtonToggleModule,
+    MatExpansionModule,
     MatFormFieldModule,
     MatSelectModule,
     MatSliderModule,
@@ -74,6 +77,31 @@ export class MappingControls {
     return this.knobs().filter(
       (knob) => knob.mappings.length === 0 || knob.mappings.some((m) => playing.includes(m)),
     );
+  });
+
+  /**
+   * The knobs offered without being asked for, and the rest.
+   *
+   * Ten sliders at equal weight is an instrument panel for someone who already
+   * knows what each one does; to anybody else it reads as ten things they might
+   * be getting wrong. Which handful comes first is a fact about the mapping and
+   * arrives on the knob — a list of important names kept here would be a second
+   * opinion about the knob table, and would drift the first time a knob was
+   * added in Rust.
+   */
+  readonly primary = computed(() => this.relevant().filter((knob) => knob.primary));
+  readonly advanced = computed(() => this.relevant().filter((knob) => !knob.primary));
+
+  /**
+   * How many advanced knobs have been moved, for the disclosure's own label.
+   *
+   * Without it, closing the panel hides the fact that something inside it is no
+   * longer at its default — and then a render nobody can explain is a render
+   * whose cause is one click away and invisible.
+   */
+  readonly advancedMoved = computed(() => {
+    const moved = this.settings().knobs;
+    return this.advanced().filter((knob) => moved[knob.name] !== undefined).length;
   });
 
   /** True once anything has been moved, so the offer to reset means something. */

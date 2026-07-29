@@ -58,6 +58,24 @@ pub struct Knob {
     /// every knob against every mapping it claims and fails if the audio is
     /// unchanged, so a claim made here is a claim that is checked.
     pub mappings: &'static [&'static str],
+    /// Whether to offer this one before anybody asks for it.
+    ///
+    /// **The rule: primary knobs decide what kind of piece this is, advanced
+    /// ones adjust a piece you already have.** Ten sliders at equal weight is
+    /// an instrument panel for someone who already knows what each does; to
+    /// anyone else it reads as ten things they might be getting wrong. So the
+    /// UI shows the primary ones and puts the rest behind a disclosure.
+    ///
+    /// Declared here for the same reason the range is. The alternative — a list
+    /// of important names kept in the frontend — is a second opinion about the
+    /// knob table that drifts the first time somebody adds a knob in Rust, and
+    /// the way *that* failure shows up is a new control nobody can find.
+    ///
+    /// Note this is not simply a ranking by audible authority. `bind` moves the
+    /// field by 18 cents where `spacing` moves it by 1200, and `bind` is still
+    /// primary: it is the axis the whole project is an argument about, and the
+    /// question a listener is being asked to answer.
+    pub primary: bool,
 }
 
 impl Knob {
@@ -77,6 +95,7 @@ pub const BIND: Knob = Knob {
     about: "At 1 the notes are exactly where this voice's spectrum puts them. \
             At 0 they snap to the twelve everyone else uses.",
     mappings: &[],
+    primary: true,
 };
 
 pub const DENSITY: Knob = Knob {
@@ -89,6 +108,7 @@ pub const DENSITY: Knob = Knob {
     about: "How firm a note has to be to count. Low gives a crowded microtonal \
             set, high gives a handful of very stable intervals.",
     mappings: &[],
+    primary: true,
 };
 
 pub const VOICES: Knob = Knob {
@@ -100,6 +120,7 @@ pub const VOICES: Knob = Knob {
     default: 5.0,
     about: "How many tones sound at once.",
     mappings: CONTINUOUS,
+    primary: true,
 };
 
 pub const SPACING: Knob = Knob {
@@ -113,6 +134,7 @@ pub const SPACING: Knob = Knob {
             next in the field mapping, least air between them in the Tonnetz. \
             1 is a cluster, higher is an open chord.",
     mappings: CONTINUOUS,
+    primary: false,
 };
 
 pub const DRIFT: Knob = Knob {
@@ -125,6 +147,7 @@ pub const DRIFT: Knob = Knob {
     about: "How far the music transposes with the speaker's pitch. At 0 it sits \
             still; near 1 it reads as a parallel melody.",
     mappings: CONTINUOUS,
+    primary: false,
 };
 
 pub const REACH: Knob = Knob {
@@ -138,6 +161,7 @@ pub const REACH: Knob = Knob {
             the field mapping, cells of lattice crossed in the Tonnetz. This is \
             the articulation showing up as harmony.",
     mappings: CONTINUOUS,
+    primary: true,
 };
 
 pub const VOICING: Knob = Knob {
@@ -153,6 +177,7 @@ pub const VOICING: Knob = Knob {
             and tips the weight between the chord's top and bottom in the \
             Tonnetz.",
     mappings: CONTINUOUS,
+    primary: false,
 };
 
 pub const ARTICULATION: Knob = Knob {
@@ -166,6 +191,7 @@ pub const ARTICULATION: Knob = Knob {
             busy passage opens the upper voices — rhythm from how fast the \
             spectrum is changing, without cutting anything into notes.",
     mappings: CONTINUOUS,
+    primary: false,
 };
 
 pub const CONSONANTS: Knob = Knob {
@@ -178,6 +204,7 @@ pub const CONSONANTS: Knob = Knob {
     about: "How loud the unpitched material is against the tones. At 0 they are \
             silent.",
     mappings: &[],
+    primary: false,
 };
 
 pub const HOLD: Knob = Knob {
@@ -191,6 +218,7 @@ pub const HOLD: Knob = Knob {
             changes. At 0 the harmony follows every wobble; higher makes it \
             commit, so a chord rings long enough to hear what it is tuned to.",
     mappings: &["tonnetz"],
+    primary: true,
 };
 
 /// Every knob, in the order a person should meet them.

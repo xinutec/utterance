@@ -21,4 +21,13 @@ name: string, label: string, min: number, max: number, step: number, default: nu
  * table exists to prevent, and one belonging to another mapping is that
  * failure with a longer explanation.
  */
-mappings: Array<string>, };
+mappings: Array<string>, 
+/**
+ * Whether to offer this one before anybody asks for it.
+ *
+ * Sent so the UI can show a handful of controls rather than all ten at
+ * equal weight. Which handful is a fact about the mapping — see
+ * `utterance_mapping::params::Knob::primary` for the rule — so it travels
+ * with the knob rather than being decided again in the browser.
+ */
+primary: boolean, };

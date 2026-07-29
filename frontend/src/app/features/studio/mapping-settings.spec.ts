@@ -19,6 +19,7 @@ const knob = (name: string, value: number): Knob => ({
   default: value,
   about: "",
   mappings: [],
+  primary: true,
 });
 
 const BIND = knob("bind", 1);

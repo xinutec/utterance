@@ -236,6 +236,36 @@ source, plus the one that most shapes daily work.
   moved, while a knob in mapping can be swept against a fixed voiceprint and
   heard immediately.
 
+- **One shared voice, whoever is signed in** (2026-07-29). The deployment
+  admits two accounts and the store has no notion of who recorded what:
+  `voice::calibrate` picks one calibration take for everybody — whichever
+  yields the richest scale — and `speaker::profile` pools *every* take for
+  vowel-space corners, pitch range and brightness. Pippijn's call, and the
+  reasoning is that two brothers working on one thing want one sound world
+  rather than two private ones.
+
+  **The consequences, stated rather than discovered later.** A take recorded by
+  the second speaker can change which scale everyone hears, and a profile pooled
+  across two bodies is a hybrid anatomy belonging to neither — which is a real
+  exception to the rule immediately below, not an oversight. Both are visible
+  rather than silent: the studio prints the calibration take's label under the
+  player, so a flip reads as a changed word, and `?calibration=<id>` pins it.
+
+  Reopening this means an owner on the recording, taken from the session the
+  backend already authenticates, and filtering both `calibrate` and `profile` by
+  it. Deliberately not built while the `bind` listening test is unstarted —
+  changing what a take is mapped through would invalidate opinions formed in the
+  meantime.
+
+- **Recording is no longer tied to the Mac** (2026-07-29). `recorder.ts` gates on
+  `navigator.mediaDevices`, which browsers define only in a secure context; that
+  is what made `localhost` the one place a take could be made. Serving over TLS
+  lifted it, so the second speaker can record from his own machine. Noted here
+  because the decision below still reads as though he cannot, and because it is
+  what makes the shared-voice consequence above reachable rather than
+  theoretical. Read from the code and the certificate; not yet exercised from
+  his browser.
+
 - **A vowel space is normalised against the speaker's own extremes**
   (2026-07-27), not against population norms. It makes the *utterance* the
   variable rather than the anatomy, which is what lets a body of work by one
@@ -331,6 +361,29 @@ source, plus the one that most shapes daily work.
   same person said. This is the third time that reasoning has decided a design
   question, which is why it is written here as a rule rather than a third time
   as a case.
+
+- **A knob says whether it is offered before anyone asks** (2026-07-29).
+  `Knob::primary` splits the table into the controls that decide what kind of
+  piece this is — `bind`, `density`, `voices`, `reach`, `hold` — and the ones
+  that adjust a piece you already have. The UI shows the first group and folds
+  the rest behind a disclosure that says how many of them have been moved.
+
+  The failure being avoided is not clutter. Ten sliders at equal weight is an
+  instrument panel for someone who already knows what each one does; to anyone
+  else it reads as ten things they might be getting wrong, and the effect is
+  that they touch none of them. Since exploring is how the questions on this
+  page get answered, a panel nobody dares touch costs evidence.
+
+  **Not a ranking by audible authority**, and the difference matters: `spacing`
+  moves the field 1200 cents and is folded away, `bind` moves it 18 and is
+  offered first, because `bind` is the axis this project is an argument about.
+  Sorting on authority would look more principled and would bury the question.
+
+  Declared on the knob for the same reason its range is. A list of important
+  names kept in the frontend is a second opinion about the knob table, and it
+  drifts the first time somebody adds a knob in Rust — where the symptom is a
+  new control nobody can find. Two test fixtures failed to compile when this
+  field was added, which is the property working.
 
 - **The mapping publishes its own controls** (2026-07-28). `GET /api/controls`
   serves `utterance_mapping::params::KNOBS` — each knob's range, step, starting

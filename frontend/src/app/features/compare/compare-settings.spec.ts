@@ -13,6 +13,7 @@ const knob = (name: string, label: string, def: number): Knob => ({
   default: def,
   about: "",
   mappings: [],
+  primary: true,
 });
 
 const BIND = knob("bind", "Bind to the voice", 1);

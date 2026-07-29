@@ -32,7 +32,12 @@
     </mat-form-field>
   </div>
 
-  @for (knob of relevant(); track knob.name) {
+  <!--
+    One slider, written once and used for both groups. Duplicating it for the
+    advanced panel would be two places to fix the day the layout changes, and
+    the one that gets missed is the one nobody has open.
+  -->
+  <ng-template #slider let-knob>
     <div class="knob">
       <div class="knob-head">
         <span class="knob-label">{{ knob.label }}</span>
@@ -50,6 +55,46 @@
       </mat-slider>
       <p class="knob-about">{{ knob.about }}</p>
     </div>
+  </ng-template>
+
+  @for (knob of primary(); track knob.name) {
+    <ng-container [ngTemplateOutlet]="slider" [ngTemplateOutletContext]="{ $implicit: knob }" />
+  }
+
+  @if (advanced().length > 0) {
+    <mat-expansion-panel class="more">
+      <mat-expansion-panel-header>
+        <mat-panel-title>More controls</mat-panel-title>
+        <!--
+          The count is what keeps the disclosure honest: closed, it would
+          otherwise hide that something inside is no longer at its default, and
+          a render nobody can explain has its cause one click away and unseen.
+        -->
+        <mat-panel-description>
+          @if (advancedMoved() > 0) {
+            {{ advancedMoved() }} moved
+          } @else {
+            {{ advanced().length }} more
+          }
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+      <!--
+        Deferred, and not only to save the work. An expansion panel renders its
+        contents whether or not it is open, so without this the folded-away
+        sliders are still in the page: present to a screen reader, counted by
+        anything measuring the controls, and sized zero — which is exactly what
+        the layout harness reports as an occluded control. Hidden and absent are
+        different things, and only one of them is what "folded away" means.
+      -->
+      <ng-template matExpansionPanelContent>
+        @for (knob of advanced(); track knob.name) {
+          <ng-container
+            [ngTemplateOutlet]="slider"
+            [ngTemplateOutletContext]="{ $implicit: knob }"
+          />
+        }
+      </ng-template>
+    </mat-expansion-panel>
   }
 
   @if (touched()) {

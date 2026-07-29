@@ -366,6 +366,13 @@ pub struct Knob {
     /// table exists to prevent, and one belonging to another mapping is that
     /// failure with a longer explanation.
     pub mappings: Vec<String>,
+    /// Whether to offer this one before anybody asks for it.
+    ///
+    /// Sent so the UI can show a handful of controls rather than all ten at
+    /// equal weight. Which handful is a fact about the mapping — see
+    /// `utterance_mapping::params::Knob::primary` for the rule — so it travels
+    /// with the knob rather than being decided again in the browser.
+    pub primary: bool,
 }
 
 /// One mapping a render may ask for.
@@ -413,6 +420,7 @@ pub async fn controls() -> Json<Controls> {
                 default: k.default,
                 about: k.about.to_string(),
                 mappings: k.mappings.iter().map(|m| (*m).to_string()).collect(),
+                primary: k.primary,
             })
             .collect(),
         mappings: MAPPINGS
