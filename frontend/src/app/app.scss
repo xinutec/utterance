@@ -24,6 +24,15 @@
   flex: none;
 }
 
+.nav {
+  // Pushed to the trailing edge and never squeezed: reaching another page
+  // outranks the tagline for space.
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  flex: none;
+}
+
 .wall {
   // The whole viewport, because this replaces the app rather than covering it.
   // Centred and padded so a phone in portrait shows the card without scrolling,

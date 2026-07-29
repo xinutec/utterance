@@ -592,3 +592,23 @@ test("the menu says which page you are on", async ({ page }) => {
     "page",
   );
 });
+
+test("the pages are inline when there is room for them", async ({ page }) => {
+  // The suite runs at phone geometry, so this one widens the window on purpose:
+  // the collapse is the behaviour under test, and a suite that only ever saw one
+  // width could not tell a responsive bar from a permanently collapsed one.
+  await mockApi(page);
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await page.goto("/");
+
+  await expect(page.getByRole("button", { name: "Open the menu" })).toHaveCount(0);
+  for (const name of ["Studio", "Calibrate", "Compare", "Label"]) {
+    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+  }
+  // And the current one is marked the same way it is in the menu, from the same
+  // component method — so the two renderings cannot disagree about where you are.
+  await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});

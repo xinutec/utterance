@@ -27,62 +27,52 @@
 } @else {
   <mat-toolbar class="bar">
     <!--
-      Behind a menu rather than laid out along the bar. Four destinations is
-      already more than fits beside the title on a phone, and the app is used by
-      one person who knows where things are — a permanent row of labels costs
-      width on every page to save a click on the few occasions anyone moves.
+      One list, rendered two ways. On a phone the destinations do not fit beside
+      the title, so they go behind a button at the *start* of the bar — where
+      Material puts a navigation icon and where recall already puts the same
+      button. On a wider screen they are worth their space and sit inline.
 
-      At the *start* of the bar, which is where Material puts a navigation icon
-      and where recall already puts this same button. It sat at the trailing edge
-      first, for no better reason than that the row of links it replaced was
-      pushed there.
+      The button appears only at handset width because there is nothing else for
+      it to hold; recall keeps one at every width for an overflow set that
+      utterance does not have.
     -->
-    <button
-      matIconButton
-      class="menu"
-      type="button"
-      aria-label="Open the menu"
-      [matMenuTriggerFor]="menu"
-    >
-      <mat-icon>menu</mat-icon>
-    </button>
-    <mat-menu #menu="matMenu">
-      <!--
-        Which item is current comes from the component rather than from
-        `routerLinkActive`, so the highlight and what a screen reader announces
-        are the same fact — see `App.isCurrent`.
-      -->
-      <a
-        mat-menu-item
-        routerLink="/"
-        [attr.aria-current]="isCurrent('/') ? 'page' : null"
+    @if (handset()) {
+      <button
+        matIconButton
+        class="menu"
+        type="button"
+        aria-label="Open the menu"
+        [matMenuTriggerFor]="menu"
       >
-        Studio
-      </a>
-      <a
-        mat-menu-item
-        routerLink="/calibrate"
-        [attr.aria-current]="isCurrent('/calibrate') ? 'page' : null"
-      >
-        Calibrate
-      </a>
-      <a
-        mat-menu-item
-        routerLink="/compare"
-        [attr.aria-current]="isCurrent('/compare') ? 'page' : null"
-      >
-        Compare
-      </a>
-      <a
-        mat-menu-item
-        routerLink="/label"
-        [attr.aria-current]="isCurrent('/label') ? 'page' : null"
-      >
-        Label
-      </a>
-    </mat-menu>
+        <mat-icon>menu</mat-icon>
+      </button>
+      <mat-menu #menu="matMenu">
+        @for (page of pages; track page.path) {
+          <a
+            mat-menu-item
+            [routerLink]="page.path"
+            [attr.aria-current]="isCurrent(page) ? 'page' : null"
+          >
+            {{ page.label }}
+          </a>
+        }
+      </mat-menu>
+    }
     <span class="title">utterance</span>
     <span class="subtitle">the voice as law-giver</span>
+    @if (!handset()) {
+      <nav class="nav">
+        @for (page of pages; track page.path) {
+          <a
+            matButton
+            [routerLink]="page.path"
+            [attr.aria-current]="isCurrent(page) ? 'page' : null"
+          >
+            {{ page.label }}
+          </a>
+        }
+      </nav>
+    }
 
   </mat-toolbar>
 

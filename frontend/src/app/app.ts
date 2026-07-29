@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { MatButtonModule } from "@angular/material/button";
+import { BreakpointObserver, Breakpoints } from "@angular/cdk/layout";
 import { MatCardModule } from "@angular/material/card";
 import { MatIconModule } from "@angular/material/icon";
 import { MatMenuModule } from "@angular/material/menu";
@@ -35,6 +36,40 @@ export class App {
    */
   readonly auth = inject(AuthState);
 
+  /**
+   * Every page, described once.
+   *
+   * The bar renders this list twice — as buttons on a wide screen and as menu
+   * items on a narrow one — so writing the destinations out in the template
+   * would mean maintaining each of them in two places, and the copy that drifts
+   * is always the one nobody has open.
+   */
+  readonly pages = [
+    // `exact` on the studio alone: every route is a prefix of "/", so without it
+    // the studio reads as current on every page.
+    { path: "/", label: "Studio", exact: true },
+    { path: "/calibrate", label: "Calibrate", exact: false },
+    { path: "/compare", label: "Compare", exact: false },
+    { path: "/label", label: "Label", exact: false },
+  ] as const;
+
+  private readonly breakpoints = inject(BreakpointObserver);
+
+  /**
+   * Whether there is only room for one button.
+   *
+   * The same `Breakpoints.Handset` recall uses, so the two apps collapse at the
+   * same width rather than at two hand-picked ones. On a wide screen the
+   * destinations are worth their space; on a phone they are not, and there is
+   * nothing else for the menu to hold — which is why the button appears only
+   * here, where recall keeps one at every width for an overflow set utterance
+   * does not have.
+   */
+  readonly handset = toSignal(
+    this.breakpoints.observe(Breakpoints.Handset).pipe(map((state) => state.matches)),
+    { initialValue: false },
+  );
+
   private readonly router = inject(Router);
 
   /**
@@ -67,8 +102,8 @@ export class App {
    * on every page. Query strings are ignored: `/compare?take=…` is still the
    * compare page.
    */
-  isCurrent(path: string): boolean {
+  isCurrent(page: { path: string; exact: boolean }): boolean {
     const here = this.url().split("?")[0];
-    return path === "/" ? here === "/" : here.startsWith(path);
+    return page.exact ? here === page.path : here.startsWith(page.path);
   }
 }
