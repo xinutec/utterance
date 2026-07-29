@@ -67,7 +67,25 @@ In rough order of how much each unlocks.
    - `hold` is the knob that decides how far past a boundary the mouth must go
      before the harmony follows — the one that decides whether a chord rings.
 
-   **Unheard as of 2026-07-28.** Built, tested, and not yet listened to.
+   **Heard against the field mapping, 2026-07-29, by both listeners: neither
+   wins.** Pippijn and Michiel, on `what I need vocal 3` at `hold = 0.9` with the
+   consonant lattice — "they both sound a bit like music, they are both fun, we
+   like them."
+
+   That is an answer and not a failure to decide. It settles the question the
+   Tonnetz was built to ask — *is a held harmony better than a continuously
+   sliding one* — with **no**, or at least not by enough to prefer one. Both stay,
+   which the "mappings are alternatives" decision already provides for; what
+   changes is that nobody should spend more time choosing between them.
+
+   It also carries the first positive result about the project's output rather
+   than its machinery: two listeners, one of whom did not build it, find the
+   derived music musical and enjoyable. Every measurement before this was about
+   whether a mechanism worked.
+
+   The consequence for planning is a redirection. Effort belongs in what both
+   mappings lack — nothing operates above the phrase, and there is still no
+   meter — rather than in refining either one.
 3. **Meter from stress hierarchy.** Nested strong/weak grouping from syllable
    prominence. Still blocked on stress measurement — but no longer on the
    critical path, because the field mapping needs no rhythm at all. It went from
@@ -86,8 +104,33 @@ In rough order of how much each unlocks.
   stress hierarchy, which carries a cue flux does not.
 - **No formant continuity tracking.** Assignment is per-frame, constrained by
   anatomical range. Where a formant drops out of the fit its slot is nulled
-  rather than filled with the one above — correct, but lossy. A Viterbi pass
-  across frames would recover many of those frames.
+  rather than filled with the one above — correct, but lossy.
+
+  **A Viterbi pass was written, measured and reverted** (2026-07-29). Scoring
+  whole assignments across frames — movement in octaves, plus a cost per empty
+  slot — is the obvious fix, and the case for it is real: slot ranges overlap
+  heavily, so a resonance at 900 Hz is a legal F1 *and* a legal F2, and one frame
+  alone cannot tell which.
+
+  On the real fixture it made things worse rather than better. Against the
+  per-frame rule it filled **fewer** slots, not more — F1 701 → 660 frames, F3
+  566 → 538 — while moving F2's 95th percentile from 2324 Hz to 2864, which is
+  it taking a resonance the old rule called F3. Raising the empty-slot cost
+  recovered F2 and then plateaued, leaving F1 and F3 still short: a structural
+  result rather than a tuning one.
+
+  It passed on synthetic vowels, and that is the lesson worth keeping. A
+  synthesised vowel does not move, so continuity always wins there and the test
+  could not fail. **The property was checked against signals that could not
+  falsify it.**
+
+  **The blocker is the same one meter has: there is no ground truth.** Nobody has
+  marked where the formants really are in a real take, so the only available
+  score is *how many slots got filled* — and filling slots is precisely what the
+  per-frame rule already refuses to do when it cannot be sure, on the grounds
+  that a plausible number in the wrong place is undetectable downstream.
+  Optimising the proxy would undo the reason the current rule exists. This needs
+  labelled material before it can be attempted again.
 - **Vowel-space landmarks are generic.** The reference positions drawn on the
   plot are population values for an adult speaker, not this speaker's. The
   calibration take is exactly what would fix that, and mapping (2) will need it
@@ -288,6 +331,24 @@ source, plus the one that most shapes daily work.
   statistics of the whole take where it can, staying frame-local, so real-time
   remains reachable later. The speaker profile is not a violation: it is measured
   once per person and then fixed, not recomputed per take.
+
+- **Freedom is a feature** (Pippijn, 2026-07-29). Said on hearing the Lattice
+  against the field mapping and liking both: they stay, and not merely because
+  neither won the comparison. Keeping alternatives is worth something in itself,
+  so a mapping is not on probation waiting to be beaten, and the weaker ones are
+  not kept only as instruments for judging the stronger.
+
+  This names a principle already running through the code rather than adding
+  one. Nothing clamps the `density` slider even where the lattice refuses past
+  it, because the limit moves per speaker and a silent stop would be a worse lie
+  than a refusal. Anything arguable is a parameter rather than a constant. A
+  published range is a promise about every position on it. All three are the same
+  instinct: the person listening gets to go where they want, and the software's
+  job is to say what happened rather than to prevent it.
+
+  **What it rules out**, so it is a decision and not a sentiment: converging on
+  one blessed mapping, removing a knob because the default is better than its
+  ends, and narrowing a range to the part that currently sounds good.
 
 - **Mappings are alternatives, not a pipeline** (2026-07-28). `compose` emits
   notes and no field; `field` and `tonnetz` each emit a field and no notes; all
