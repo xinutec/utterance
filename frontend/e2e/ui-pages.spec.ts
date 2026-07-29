@@ -561,6 +561,38 @@ test("label — a mark that was never made is not offered", async ({ page }) => 
   await expect(page.locator(".tally")).not.toContainText("a second");
 });
 
+test("label — a rate is not claimed from too few marks", async ({ page }) => {
+  // Two marks are one interval, not a speaking rate. Reported as one, it read
+  // "1.6 a second — outside the rate of ordinary speech" and told somebody their
+  // careful work was wrong. Found by Pippijn on the first real session.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) =>
+    r.fulfill({ json: { syllables: [{ atS: 0.49 }, { atS: 1.1 }] } }),
+  );
+  await page.goto("/label");
+  await page.locator("app-label-chart canvas").waitFor();
+
+  await expect(page.locator(".tally")).toContainText("2 marked");
+  await expect(page.locator(".tally")).not.toContainText("a second");
+});
+
+test("label — the rate ignores the pauses between phrases", async ({ page }) => {
+  // A take is mostly silence, so marks-per-elapsed-second counts every pause as
+  // slow speaking: 56 marks over 46s reads 1.2/s for a flawless session. The
+  // median gap describes the speaking instead. Here: eight marks at 0.25s, then
+  // a three-second pause and two more — 4/s, well inside ordinary speech.
+  const syllables = [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 4.75, 5.0].map((atS) => ({
+    atS,
+  }));
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables } }));
+  await page.goto("/label");
+  await page.locator("app-label-chart canvas").waitFor();
+
+  await expect(page.locator(".tally")).toContainText("4.0 a second");
+  await expect(page.locator(".tally")).not.toContainText("outside");
+});
+
 test("the menu reaches every page @ phone", async ({ page }) => {
   // Four destinations behind one button. The failure worth guarding is not that
   // the menu opens but that a link inside it still navigates — a menu item that

@@ -110,18 +110,30 @@ export class Label implements OnInit, OnDestroy {
     return id ? this.api.audioUrl(id) : null;
   });
 
+  /** Fewest marks before a rate says anything about a session. */
+  private static readonly ENOUGH = 8;
+
   /**
-   * Syllables a second across the marked span.
+   * How fast the marked syllables come, from the *median* gap between them.
    *
-   * Shown because it is the cheapest check that a session went right: running
-   * speech is three to eight a second, and a rate outside that means taps were
-   * missed or doubled long before anything downstream could notice.
+   * **Median, not marks-per-elapsed-second.** A take is mostly silence — the
+   * speech one is 28% voiced — so dividing by the span counts every pause as
+   * slow speaking and reports about 1.2/s for a flawless session. The middle gap
+   * ignores the pauses and describes the speaking, which is what the number is
+   * for: three to eight a second is ordinary, and anything outside it means taps
+   * were missed or doubled.
+   *
+   * Absent until there are enough marks to have a middle at all. Two marks are
+   * one interval, and calling that a rate told somebody their careful work was
+   * wrong.
    */
   readonly rate = computed(() => {
     const marks = this.syllables();
-    if (marks.length < 2) return null;
-    const span = marks[marks.length - 1].atS - marks[0].atS;
-    return span > 0 ? (marks.length - 1) / span : null;
+    if (marks.length < Label.ENOUGH) return null;
+    const gaps = marks.slice(1).map((mark, i) => mark.atS - marks[i].atS);
+    gaps.sort((a, b) => a - b);
+    const median = gaps[Math.floor(gaps.length / 2)];
+    return median > 0 ? 1 / median : null;
   });
 
   constructor() {
