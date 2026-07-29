@@ -8,7 +8,13 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * Tests live in e2e/ (outside src/), so the unit runner ignores them.
  */
-const PORT = 4293;
+// Unique across the fleet. Every app's harness sets `reuseExistingServer: true`,
+// so two apps sharing a port silently attach to each OTHER's server: the second
+// run serves the first app's bundle, every locator times out, and when the first
+// run ends its server dies and the rest fail ERR_CONNECTION_REFUSED. This was
+// 4293, which is recall's, and it made recall's e2e fail 8/8 whenever the two ran
+// at once — invisible in isolation, where both pass in ~3s.
+const PORT = 4292;
 
 export default defineConfig({
   testDir: "./e2e",
