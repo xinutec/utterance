@@ -786,3 +786,61 @@ test("label — the chart magnifies, because a syllable is two pixels otherwise"
   await expect(page.locator("app-label-chart .scale")).toHaveText("200 px/s");
   expect(await extent()).toBeGreaterThan(before);
 });
+
+test("label — the take can be slowed to place a consonant", async ({ page }) => {
+  // A consonant onset at a quarter speed is four times as wide in time, which
+  // is the difference between hearing where a syllable starts and hearing that
+  // it started. Asked for after a real session.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) => r.fulfill({ json: { syllables: [] } }));
+  await page.goto("/label");
+  await page.getByRole("button", { name: "Mark a syllable" }).waitFor();
+
+  // A single-selection `mat-button-toggle-group` is a radiogroup, so its
+  // members are radios rather than buttons.
+  await page.getByRole("radio", { name: "0.25×" }).click();
+  expect(
+    await page.locator("app-label audio").evaluate((el: HTMLAudioElement) => el.playbackRate),
+  ).toBe(0.25);
+});
+
+test("label — a drag keeps hold of the mark it grabbed", async ({ page }) => {
+  // **Reported from a real session**: "when I move the bar around, after a
+  // second or so, it no longer moves". The drag held an array *index*, the
+  // autosave answered with the stored list sorted, and after a mark crossed its
+  // neighbour that index addressed the other one — so the rest of the gesture
+  // moved a mark somewhere off screen while the bar under the finger sat still.
+  //
+  // Two things keep it honest now: the mark is identified by where it is rather
+  // than by its place in an array, and no write goes out until the hand lets go.
+  await mockApi(page);
+  await page.route("**/api/recordings/*/labels", (r) =>
+    r.request().method() === "GET"
+      ? r.fulfill({ json: { syllables: [{ atS: 0.5 }, { atS: 1.0 }] } })
+      : // What the store really does — sort. An echo-verbatim mock hides this.
+        r.fulfill({
+          json: {
+            syllables: [...JSON.parse(r.request().postData() ?? "{}").syllables].sort(
+              (a: { atS: number }, b: { atS: number }) => a.atS - b.atS,
+            ),
+          },
+        }),
+  );
+  await page.goto("/label");
+  const canvas = page.locator("app-label-chart canvas");
+  await canvas.waitFor();
+  const box = (await canvas.boundingBox())!;
+  const y = box.y + box.height / 2;
+
+  // Grab the mark at 1.0s and drag it left past the one at 0.5s.
+  await page.mouse.move(box.x + 100, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 20, y, { steps: 5 });
+  // Long enough that the old code would have saved, and been answered sorted.
+  await page.waitForTimeout(2200);
+  // Keep going: the same mark must move, not the one that was its neighbour.
+  await page.mouse.move(box.x + 300, y, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(page.locator(".marks li")).toHaveText([/0\.50s/, /3\.00s/]);
+});

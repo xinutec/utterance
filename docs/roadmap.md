@@ -97,6 +97,22 @@ In rough order of how much each unlocks.
 
 ## Known gaps, with their cost
 
+- **Labelling is parked, and nothing may be made to depend on it**
+  (Pippijn, 2026-07-29). `/label` exists and works — tap, then place each mark
+  against the level curve, at up to 400 px/s, playable down to a quarter speed.
+  It is not to be asked for again until somebody volunteers it.
+
+  **The ask was misjudged.** It was put as ten minutes of tapping; placing a
+  consonant onset precisely is slow, skilled work, and even a ten-second stretch
+  is thirty or forty careful judgements. The person it was asked of spent hours
+  finding defects in the tool instead — a chart that painted itself invisible, a
+  rate that called a correct session wrong, a drag that let go of its mark.
+
+  So the two gaps below stay open, and that is the correct state rather than a
+  problem to route around. Do not substitute a worse ground truth: pre-placing
+  marks from the detector, or scoring a tracker on how many slots it fills,
+  would each produce a number that agrees with itself and means nothing.
+
 - **Onsets mean "the spectrum changed", not "a syllable began."** Spectral flux
   cannot separate the two; a continuously glided vowel demonstrates it. Threshold
   tuning needs speech with syllables labelled by ear, which no one has produced

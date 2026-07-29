@@ -13,6 +13,7 @@ import {
 import { ActivatedRoute, Router } from "@angular/router";
 import { DecimalPipe } from "@angular/common";
 import { MatButtonModule } from "@angular/material/button";
+import { MatButtonToggleModule } from "@angular/material/button-toggle";
 import { MatCardModule } from "@angular/material/card";
 import { MatFormFieldModule } from "@angular/material/form-field";
 import { MatIconModule } from "@angular/material/icon";
@@ -58,6 +59,7 @@ const AUTOSAVE_MS = 1500;
     Help,
     LabelChart,
     MatButtonModule,
+    MatButtonToggleModule,
     MatCardModule,
     MatFormFieldModule,
     MatIconModule,
@@ -83,6 +85,26 @@ export class Label implements OnInit, OnDestroy {
 
   /** Where the player is, so a mark lands where the ear was. */
   readonly playhead = signal(0);
+
+  /**
+   * How fast the take plays back.
+   *
+   * A consonant onset at a quarter speed is four times as wide in time, which
+   * is the difference between hearing *where* a syllable starts and hearing
+   * *that* it started. Pitch goes with it — the browser does not preserve it at
+   * these rates and should not, since what is being listened for is an edge
+   * rather than a note.
+   */
+  readonly speed = signal(1);
+
+  /** The rates offered. A quarter is where a plosive stops being an instant. */
+  readonly speeds = [0.25, 0.5, 1] as const;
+
+  setSpeed(rate: number): void {
+    this.speed.set(rate);
+    const player = this.player()?.nativeElement;
+    if (player) player.playbackRate = rate;
+  }
 
   /**
    * The take's own measurements, for the level curve marks are placed against.
@@ -210,6 +232,20 @@ export class Label implements OnInit, OnDestroy {
     this.touched();
   }
 
+  /**
+   * True while a mark is being dragged.
+   *
+   * Saving waits for the hand to let go. A write mid-drag answers with the
+   * stored list *sorted*, and the reordering arriving under a gesture in
+   * progress is how a drag started moving the wrong mark.
+   */
+  private editing = false;
+
+  onEditing(editing: boolean): void {
+    this.editing = editing;
+    if (!editing) this.touched();
+  }
+
   remove(at: number): void {
     this.syllables.update((marks) => marks.filter((m) => m.atS !== at));
     this.touched();
@@ -249,6 +285,7 @@ export class Label implements OnInit, OnDestroy {
   private touched(): void {
     this.saved.set(false);
     if (this.pending) clearTimeout(this.pending);
+    if (this.editing) return;
     this.pending = setTimeout(() => this.write(), AUTOSAVE_MS);
   }
 

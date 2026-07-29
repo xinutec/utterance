@@ -60,13 +60,31 @@ export class LabelChart {
   readonly playhead = input(0);
   /** Asked for when somebody clicks the chart's background. */
   readonly seek = output<number>();
+  /**
+   * True while a mark is being dragged.
+   *
+   * So the page can hold its autosave until the hand lets go: a write mid-drag
+   * comes back with the list reordered, which is the churn this component
+   * should not have to survive in the first place.
+   */
+  readonly editing = output<boolean>();
 
   readonly zoom = signal(2);
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
   private readonly scrollRef = viewChild.required<ElementRef<HTMLElement>>("scroller");
 
-  /** Index of the mark being dragged, or null. */
-  private dragging: number | null = null;
+  /**
+   * Where the mark being dragged currently sits, in seconds, or null.
+   *
+   * **Its position, not its index.** An index is a place in an array somebody
+   * else owns: the autosave answers with the stored list *sorted*, so dragging a
+   * mark past its neighbour and pausing left the index pointing at the other
+   * mark — and the rest of the gesture moved that one instead, usually off
+   * screen, while the bar under the finger sat still. Reported from a real
+   * session: "when I move the bar around, after a second or so, it no longer
+   * moves". A position survives reordering, because it *is* the identity.
+   */
+  private draggingAt: number | null = null;
 
   /** The playhead position the view last scrolled to follow. */
   private lastFollowed = -1;
@@ -123,15 +141,14 @@ export class LabelChart {
 
   /** The mark nearest a position, if one is close enough to have been meant. */
   private markAt(seconds: number): number | null {
-    const marks = this.syllables();
-    let best: { index: number; distance: number } | null = null;
-    marks.forEach((mark, index) => {
+    let best: { at: number; distance: number } | null = null;
+    for (const mark of this.syllables()) {
       const distance = Math.abs(mark.atS - seconds) * this.pixelsPerSecond;
-      if (distance <= GRAB_PX && (!best || distance < best.distance)) {
-        best = { index, distance };
+      if (distance <= GRAB_PX && (best === null || distance < best.distance)) {
+        best = { at: mark.atS, distance };
       }
-    });
-    return best === null ? null : (best as { index: number }).index;
+    }
+    return best === null ? null : best.at;
   }
 
   onPointerDown(event: PointerEvent): void {
@@ -140,8 +157,9 @@ export class LabelChart {
     if (existing !== null) {
       // Grab it. Whether this turns out to be a drag or a click to remove is
       // decided on release, by whether it moved.
-      this.dragging = existing;
+      this.draggingAt = existing;
       this.movedWhileDragging = false;
+      this.editing.emit(true);
       this.canvasRef().nativeElement.setPointerCapture(event.pointerId);
       return;
     }
@@ -153,19 +171,22 @@ export class LabelChart {
   private movedWhileDragging = false;
 
   onPointerMove(event: PointerEvent): void {
-    if (this.dragging === null) return;
+    const from = this.draggingAt;
+    if (from === null) return;
     const at = this.secondsAt(event.clientX);
     this.movedWhileDragging = true;
     this.syllables.update((marks) =>
-      marks.map((mark, i) => (i === this.dragging ? { atS: at } : mark)),
+      marks.map((mark) => (mark.atS === from ? { atS: at } : mark)),
     );
+    this.draggingAt = at;
   }
 
   onPointerUp(event: PointerEvent): void {
-    if (this.dragging === null) return;
-    const index = this.dragging;
-    this.dragging = null;
+    const at = this.draggingAt;
+    if (at === null) return;
+    this.draggingAt = null;
     this.canvasRef().nativeElement.releasePointerCapture(event.pointerId);
+    this.editing.emit(false);
 
     if (this.movedWhileDragging) {
       // A drag can carry a mark past its neighbour; the order is the store's
@@ -175,7 +196,7 @@ export class LabelChart {
     }
     // Pressed and released without moving: remove it. Placing and removing are
     // the two operations, and both are one gesture on the thing itself.
-    this.syllables.update((marks) => marks.filter((_, i) => i !== index));
+    this.syllables.update((marks) => marks.filter((mark) => mark.atS !== at));
   }
 
   private draw(): void {
@@ -261,7 +282,7 @@ export class LabelChart {
     const moved = this.playhead() !== this.lastFollowed;
     this.lastFollowed = this.playhead();
     const scroller = this.scrollRef().nativeElement;
-    if (moved && this.dragging === null && (head < 0 || head > width)) {
+    if (moved && this.draggingAt === null && (head < 0 || head > width)) {
       scroller.scrollLeft = Math.max(
         0,
         this.playhead() * this.pixelsPerSecond - scroller.clientWidth / 2,
