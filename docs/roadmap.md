@@ -450,25 +450,42 @@ source, plus the one that most shapes daily work.
   `src/bin/authority.rs`, on `vowel-ah`, across both continuous mappings and on
   five axes rather than one.
 
-  **The headline is that `bind` was never a weak knob.** The old figure — 18
-  cents, the smallest in the table — was how far it moves the *pitch* of the
-  **field** mapping, and pitch travel is the wrong ruler for a knob whose whole
-  effect is whether partials lock or beat. On the **Tonnetz** it moves pitch by
-  **1168 cents**, because the lattice's axes are themselves derived from the
-  scale: retuning does not shift the degrees along a fixed geometry, it rebuilds
-  the geometry the vowel walks on.
+  **Read the maximum and the median together, or the table lies twice.** Both
+  columns below are worst-case *and* typical, because a knob that mostly nudges
+  and occasionally re-registers a voice by an octave is doing two different
+  things and only one of them is what it is for.
 
-  | knob | field | tonnetz |
+  | knob | field (max / typical) | tonnetz (max / typical) |
   | --- | --- | --- |
-  | bind | 18¢ | **1168¢** |
-  | density | 1698¢ | *refused at its maximum* |
-  | spacing | 1818¢ | 3600¢ |
-  | reach | 1800¢ | 932¢, **−4.70s ring** |
-  | hold | — | 1088¢, **+4.01s ring** |
-  | drift | 1111¢ | 1111¢ |
-  | voicing | 814¢ | 0¢, 8% balance |
+  | bind | 18¢ / 2¢ | 1168¢ / **16¢** |
+  | density | 1698¢ / 1200¢ | *refused at its maximum* |
+  | spacing | 1818¢ / 1516¢ | 3600¢ / 1200¢ |
+  | reach | 1800¢ / 736¢ | 932¢ / 134¢, **−4.70s ring** |
+  | hold | — | 1088¢ / 0¢, **+4.01s ring** |
+  | drift | 1111¢ / 1067¢ | 1111¢ / 1067¢ |
+  | voicing | 814¢ / 302¢ | 0¢, 8% balance |
   | voices | 0¢, 100% roughness | 316¢, 100% roughness |
   | consonants | 100% noise | 100% noise |
+
+  **`bind` is louder on the Tonnetz than on the field, but not by the factor the
+  maximum suggests.** Its typical retuning is 16 cents against the field's 2 —
+  eight times as much, and consistent with the lattice's axes being derived from
+  the scale, so that retuning changes the geometry rather than sliding degrees
+  along a fixed one. The 1168 is rare: register in the Tonnetz comes from the
+  pitch class alone, each voice taking whichever octave falls nearest its
+  target, so a 16-cent shift can push a pitch class across that boundary and
+  send one voice an octave away.
+
+  **That rarity is a confound for the listening test rather than a result.** A
+  switch between `bind=0` and `bind=1` can differ at some moments by an octave
+  leap rather than by tuning, and an octave leap is the more noticeable of the
+  two. Sixteen cents is inaudible as pitch and audible only as beating between
+  partials that used to coincide, so the comparison has to be made in the middle
+  of a held chord and the leaps discounted.
+
+  *An earlier version of this entry led with "1168 cents" and called it the
+  headline. That was a maximum reported as though it were typical — the same
+  error as the held-chord fraction, made while documenting that error.*
 
   `hold` and `reach` are the two knobs that decide how long a chord rings, and
   they pull in opposite directions — more vowel reach means more cells crossed

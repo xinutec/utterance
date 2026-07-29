@@ -68,7 +68,15 @@ const SAMPLES: usize = 400;
 #[derive(Default, Clone, Copy)]
 struct Change {
     /// Widest pitch move of any voice, in cents.
+    ///
+    /// A maximum, so it says what the knob *can* do and not what it usually
+    /// does. Read beside [`Change::pitch_typical`], which is the median over
+    /// every voice and frame: the two differ by an order of magnitude wherever
+    /// a knob mostly nudges and occasionally re-registers a voice by an octave,
+    /// and those are different things to listen for.
     pitch_cents: f32,
+    /// Median pitch move across every voice and frame, in cents.
+    pitch_typical: f32,
     /// Change in chord roughness, as a fraction of the quieter setting's.
     roughness: f32,
     /// Change in how loudness sits across the voices, 0..1.
@@ -161,6 +169,22 @@ fn difference(a: &Field, b: &Field) -> Change {
         })
         .fold(0.0f32, f32::max);
 
+    let mut moves: Vec<f32> = at
+        .iter()
+        .flat_map(|&i| {
+            (0..voices).map(move |v| {
+                let (x, y) = (a.voices[v][i], b.voices[v][i]);
+                if x > 0.0 && y > 0.0 {
+                    1200.0 * (y / x).log2().abs()
+                } else {
+                    0.0
+                }
+            })
+        })
+        .collect();
+    moves.sort_by(f32::total_cmp);
+    let pitch_typical = moves.get(moves.len() / 2).copied().unwrap_or(0.0);
+
     let rough_a = mean(at.iter().map(|&i| roughness(a, i)));
     let rough_b = mean(at.iter().map(|&i| roughness(b, i)));
     let roughness = if rough_a.max(rough_b) > 0.0 {
@@ -188,6 +212,7 @@ fn difference(a: &Field, b: &Field) -> Change {
 
     Change {
         pitch_cents,
+        pitch_typical,
         roughness,
         balance,
         colour,
@@ -324,8 +349,8 @@ fn main() -> anyhow::Result<()> {
     for mapping in Continuous::ALL {
         println!("{}", mapping.name());
         println!(
-            "  {:<14} {:>9} {:>10} {:>8} {:>7} {:>7} {:>8}",
-            "knob", "pitch", "roughness", "balance", "colour", "noise", "ring"
+            "  {:<14} {:>9} {:>9} {:>10} {:>8} {:>7} {:>7} {:>8}",
+            "knob", "pitch", "typical", "roughness", "balance", "colour", "noise", "ring"
         );
 
         let mut silent = Vec::new();
@@ -369,9 +394,10 @@ fn main() -> anyhow::Result<()> {
 
         for (name, c) in &rows {
             println!(
-                "  {:<14} {:>8.0}¢ {:>9.0}% {:>7.0}% {:>6.0}% {:>6.0}% {:>+7.2}s  {}",
+                "  {:<14} {:>8.0}¢ {:>8.0}¢ {:>9.0}% {:>7.0}% {:>6.0}% {:>6.0}% {:>+7.2}s  {}",
                 name,
                 c.pitch_cents,
+                c.pitch_typical,
                 c.roughness * 100.0,
                 c.balance * 100.0,
                 c.colour * 100.0,
