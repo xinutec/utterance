@@ -28,16 +28,56 @@
   <mat-toolbar class="bar">
     <span class="title">utterance</span>
     <span class="subtitle">the voice as law-giver</span>
-    <nav class="nav">
+    <!--
+      Behind a menu rather than laid out along the bar. Four destinations is
+      already more than fits beside the title on a phone, and the app is used by
+      one person who knows where things are — a permanent row of labels costs
+      width on every page to save a click on the few occasions anyone moves.
+    -->
+    <button
+      matIconButton
+      class="menu"
+      type="button"
+      aria-label="Open the menu"
+      [matMenuTriggerFor]="menu"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
       <!--
-        `exact` on the studio link only: every route is a prefix of "", so without
-        it the studio would read as active on every page.
+        Which item is current comes from the component rather than from
+        `routerLinkActive`, so the highlight and what a screen reader announces
+        are the same fact — see `App.isCurrent`.
       -->
-      <a matButton routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Studio</a>
-      <a matButton routerLink="/calibrate" routerLinkActive="active">Calibrate</a>
-      <a matButton routerLink="/compare" routerLinkActive="active">Compare</a>
-      <a matButton routerLink="/label" routerLinkActive="active">Label</a>
-    </nav>
+      <a
+        mat-menu-item
+        routerLink="/"
+        [attr.aria-current]="isCurrent('/') ? 'page' : null"
+      >
+        Studio
+      </a>
+      <a
+        mat-menu-item
+        routerLink="/calibrate"
+        [attr.aria-current]="isCurrent('/calibrate') ? 'page' : null"
+      >
+        Calibrate
+      </a>
+      <a
+        mat-menu-item
+        routerLink="/compare"
+        [attr.aria-current]="isCurrent('/compare') ? 'page' : null"
+      >
+        Compare
+      </a>
+      <a
+        mat-menu-item
+        routerLink="/label"
+        [attr.aria-current]="isCurrent('/label') ? 'page' : null"
+      >
+        Label
+      </a>
+    </mat-menu>
   </mat-toolbar>
 
   <main>

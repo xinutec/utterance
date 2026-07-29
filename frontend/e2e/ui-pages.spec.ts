@@ -555,3 +555,40 @@ test("label — a mark that was never made is not offered", async ({ page }) => 
   await expect(page.locator(".tally")).toContainText("0 marked");
   await expect(page.locator(".tally")).not.toContainText("a second");
 });
+
+test("the menu reaches every page @ phone", async ({ page }) => {
+  // Four destinations behind one button. The failure worth guarding is not that
+  // the menu opens but that a link inside it still navigates — a menu item that
+  // looks right and goes nowhere is indistinguishable from a broken app, and no
+  // layout assertion can see it.
+  await mockApi(page);
+  await page.goto("/");
+
+  for (const [name, path] of [
+    ["Calibrate", "/calibrate"],
+    ["Compare", "/compare"],
+    ["Label", "/label"],
+    ["Studio", "/"],
+  ] as const) {
+    await page.getByRole("button", { name: "Open the menu" }).click();
+    await page.getByRole("menuitem", { name }).click();
+    await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}(\\?|$)`));
+  }
+});
+
+test("the menu says which page you are on", async ({ page }) => {
+  // Marked with aria-current rather than a class, so the thing a screen reader
+  // reads and the thing that is highlighted cannot drift apart.
+  await mockApi(page);
+  await page.goto("/compare");
+  await page.getByRole("button", { name: "Open the menu" }).click();
+
+  await expect(page.getByRole("menuitem", { name: "Compare" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByRole("menuitem", { name: "Studio" })).not.toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+});

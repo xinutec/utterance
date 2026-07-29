@@ -18,18 +18,12 @@
   white-space: nowrap;
 }
 
-.nav {
-  // Pushed to the trailing edge, and never squeezed: navigation outranks the
-  // tagline for space, which is why the tagline is the thing that ellipsises.
-  display: flex;
-  gap: 0.25rem;
+.menu {
+  // Pushed to the trailing edge and never squeezed: reaching another page
+  // outranks the tagline for space, which is why the tagline is the thing that
+  // ellipsises.
   margin-left: auto;
   flex: none;
-
-  .active {
-    background: var(--mat-sys-secondary-container);
-    color: var(--mat-sys-on-secondary-container);
-  }
 }
 
 .wall {
@@ -63,4 +57,11 @@
   form {
     margin: 0;
   }
+}
+
+// Which page you are on, taken from the same attribute a screen reader reads
+// rather than a class kept in step by hand.
+[mat-menu-item][aria-current="page"] {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
 }
