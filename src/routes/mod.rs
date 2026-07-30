@@ -1,6 +1,7 @@
 //! HTTP routing table.
 
 pub mod api;
+pub mod telemetry;
 
 use std::sync::Arc;
 
@@ -37,6 +38,7 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         .route("/recordings/{id}/score", get(api::score))
         .route("/voice", get(api::voice_summary))
         .route("/controls", get(api::controls))
+        .route("/telemetry", post(telemetry::record))
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES));
 
     // Applied to the API router alone, so the health check the cluster probes

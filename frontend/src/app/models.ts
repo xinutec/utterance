@@ -22,6 +22,7 @@ export type { Role } from "./generated/Role";
 export type { ScaleDegree } from "./generated/ScaleDegree";
 export type { ScoreView } from "./generated/ScoreView";
 export type { Source } from "./generated/Source";
+export type { TelemetryEvent } from "./generated/TelemetryEvent";
 export type { Texture } from "./generated/Texture";
 export type { Voiceprint } from "./generated/Voiceprint";
 export type { VoiceSummary } from "./generated/VoiceSummary";

@@ -10,6 +10,7 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { filter, map } from "rxjs";
 
 import { AuthState } from "./auth";
+import { Telemetry } from "./telemetry";
 
 @Component({
   selector: "app-root",
@@ -27,6 +28,16 @@ import { AuthState } from "./auth";
   ],
 })
 export class App {
+  /**
+   * The client activity trace, started here because this is the one component
+   * guaranteed to exist for the app's whole life.
+   *
+   * Wired in the shell rather than per page for the reason the service exists:
+   * a trace that each screen has to remember to join is a trace with holes in
+   * exactly the screens nobody thought about.
+   */
+  private readonly telemetry = inject(Telemetry);
+
   /**
    * Read by the template to decide whether there is an app to show.
    *
@@ -105,5 +116,11 @@ export class App {
   isCurrent(page: { path: string; exact: boolean }): boolean {
     const here = this.url().split("?")[0];
     return page.exact ? here === page.path : here.startsWith(page.path);
+  }
+
+  constructor() {
+    // After the field initialisers, so the router this subscribes to exists.
+    // Idempotent, so a shell recreated in a test does not stack listeners.
+    this.telemetry.init();
   }
 }
