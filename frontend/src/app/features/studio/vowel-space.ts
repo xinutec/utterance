@@ -9,7 +9,7 @@ import {
   viewChild,
 } from "@angular/core";
 
-import type { Voiceprint } from "../../models";
+import type { SpeakerCorner, Voiceprint } from "../../models";
 import { onColourSchemeChange, resolveThemeColours } from "./theme-colours";
 
 /**
@@ -30,6 +30,12 @@ const F2_RANGE = { min: 600, max: 3000 };
  * against, not a claim about where this speaker's vowels ought to sit. Every
  * vocal tract is a different size, so absolute positions shift; the *shape* is
  * what transfers.
+ *
+ * **Shown only until the speaker's own corners exist**, and labelled as generic
+ * while it is. Once the guided vowels have been recorded these are replaced by
+ * measurements of this mouth, because the two are numbers of the same kind: a
+ * dot at 280/2250 looks identical whether it came from a population table or
+ * from the person at the microphone, and only one of them is about them.
  */
 const LANDMARKS = [
   { label: "i (beet)", f1: 280, f2: 2250 },
@@ -38,6 +44,19 @@ const LANDMARKS = [
   { label: "ɔ (bought)", f1: 570, f2: 840 },
   { label: "u (boot)", f1: 300, f2: 870 },
 ] as const;
+
+/**
+ * What to call each measured corner on the chart.
+ *
+ * The sound the person was asked for, not the corner's technical name: they were
+ * told to say "ee", and "ee" is what makes the point on the picture recognisable
+ * as the thing they did.
+ */
+const CORNER_LABELS: Record<SpeakerCorner["corner"], string> = {
+  closeFront: "ee",
+  open: "ah",
+  closeBack: "oo",
+};
 
 /**
  * The speaker's path through vowel space.
@@ -60,6 +79,15 @@ const LANDMARKS = [
 export class VowelSpace implements AfterViewInit, OnDestroy {
   readonly voiceprint = input.required<Voiceprint>();
 
+  /**
+   * This speaker's own corners, from the guided vowels.
+   *
+   * Empty until those are recorded, and empty is not a failure — it is the state
+   * of a store whose owner has not done the calibration yet, and the plot says
+   * so rather than passing population values off as theirs.
+   */
+  readonly corners = input<readonly SpeakerCorner[]>([]);
+
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
   private observer?: ResizeObserver;
   private stopWatchingScheme?: () => void;
@@ -67,6 +95,9 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
   constructor() {
     effect(() => {
       const vp = this.voiceprint();
+      // Read so the effect re-runs when the corners arrive: they are fetched
+      // separately from the take, so they land after the first draw.
+      this.corners();
       if (this.observer) this.draw(vp);
     });
   }
@@ -117,7 +148,12 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
       pad.top + ((f1 - F1_RANGE.min) / (F1_RANGE.max - F1_RANGE.min)) * plot.height;
 
     this.drawAxes(ctx, muted, x, y, pad, plot);
-    this.drawLandmarks(ctx, muted, x, y);
+    const corners = this.corners();
+    if (corners.length > 0) {
+      this.drawCorners(ctx, ink, x, y, corners);
+    } else {
+      this.drawLandmarks(ctx, muted, x, y);
+    }
 
     // The trajectory, oldest to newest.
     const points = this.positions(vp);
@@ -201,6 +237,59 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
       ctx.beginPath();
       ctx.arc(x(mark.f2), y(mark.f1), 2, 0, Math.PI * 2);
       ctx.fill();
+    }
+    // Said once, because the difference between these and the speaker's own is
+    // invisible on the picture and decides how much the picture is worth.
+    ctx.fillText("typical adult positions — record the guided vowels for yours", x(F2_RANGE.max) + 4, y(F1_RANGE.max) - 4);
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * This speaker's measured corners, with the spread they were held to.
+   *
+   * The cross is the interquartile range on each axis, so a vowel that wandered
+   * is drawn as the region it wandered through rather than as a dot. A dot would
+   * claim the same precision for a held take and a smeared one, and the smeared
+   * one is exactly the case someone needs to see — it means the corner is soft
+   * and everything normalised against it inherits that.
+   *
+   * Drawn in the trajectory's own ink rather than muted: these are measurements
+   * of this person, not a reference grid to read them against.
+   */
+  private drawCorners(
+    ctx: CanvasRenderingContext2D,
+    ink: string,
+    x: (f2: number) => number,
+    y: (f1: number) => number,
+    corners: readonly SpeakerCorner[],
+  ): void {
+    ctx.strokeStyle = ink;
+    ctx.fillStyle = ink;
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.lineWidth = 1;
+
+    for (const corner of corners) {
+      const cx = x(corner.f2Hz);
+      const cy = y(corner.f1Hz);
+
+      // Half an interquartile range either side of centre, which is what the
+      // quartiles bound. Full-width arms would draw twice the spread measured.
+      const halfF2 = Math.abs(x(corner.f2Hz + corner.f2SpreadHz / 2) - cx);
+      const halfF1 = Math.abs(y(corner.f1Hz + corner.f1SpreadHz / 2) - cy);
+
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      ctx.moveTo(cx - halfF2, cy);
+      ctx.lineTo(cx + halfF2, cy);
+      ctx.moveTo(cx, cy - halfF1);
+      ctx.lineTo(cx, cy + halfF1);
+      ctx.stroke();
+
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillText(CORNER_LABELS[corner.corner], cx + 6, cy - 5);
     }
     ctx.globalAlpha = 1;
   }

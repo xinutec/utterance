@@ -160,10 +160,40 @@ In rough order of how much each unlocks.
   that a plausible number in the wrong place is undetectable downstream.
   Optimising the proxy would undo the reason the current rule exists. This needs
   labelled material before it can be attempted again.
-- **Vowel-space landmarks are generic.** The reference positions drawn on the
-  plot are population values for an adult speaker, not this speaker's. The
-  calibration take is exactly what would fix that, and mapping (2) will need it
-  done properly rather than as decoration.
+- **Vowel-space landmarks were generic; they are the speaker's own where the
+  guided vowels exist** (2026-07-30). The plot drew population positions for an
+  adult speaker. It now draws `ee`, `ah` and `oo` where *this* mouth put them,
+  measured from the corner takes, and falls back to the population grid — saying
+  on the chart that it is doing so — until those are recorded.
+
+  **The vowel's identity comes from the prompt, not from the audio.** The take
+  recorded against the *ee* step is this speaker's *ee* by construction, which is
+  the same argument the guided flow already rests on: a take per step makes the
+  label free and exact. Nothing here needs anybody to mark a recording by ear,
+  and it is the second time that principle has paid — the syllable count was
+  moved from the audio to the text on exactly the same reasoning.
+
+  Two details that are not incidental. The centre is a **median**: a corner take
+  is a mouth opening into a shape and closing again, so its first and last frames
+  are honest measurements of something that is not the vowel, and a mean is
+  dragged toward neutral in proportion to how far off they are — every corner
+  comes out less extreme than the speaker is. And the **spread is drawn beside
+  the point**, as the interquartile cross, because two takes can share a centre
+  while one was held still and the other wandered through half the space; a dot
+  claims a precision that the smeared case does not have, and the smeared case is
+  the one worth seeing.
+
+  `steady-ah` is held on *ah* and deliberately does **not** place the open
+  corner: it is recorded for its spectrum, at whatever shape holds a note
+  steadiest, and it is the longest take in the set — so counting it would let the
+  more casual *ah* win the corner by weight of evidence.
+
+  Served by `GET /api/speaker/corners` rather than folded into `/api/voice`,
+  because corners need no scale: a store whose takes are all too short to derive
+  one still has corners, and asking through the voice summary would refuse to
+  report them for a reason that has nothing to do with them.
+
+  Mapping (2) is the consumer this was actually for, and it can now ask.
 - **Analysis is no longer cheap.** Measuring partials runs a 2048-point FFT on
   every steady frame, so a fifteen-second take costs seconds rather than
   milliseconds. Acceptable because it runs once per recording and the result is
@@ -426,6 +456,15 @@ source, plus the one that most shapes daily work.
   - **A store with no calibration take refuses to render** and says to record
     the guided vowels. Deriving a voice from whatever is lying around is the
     failure above, reported as success.
+  - **The step ids are one list, in Rust** (2026-07-30). A calibration take
+    carries its step's id verbatim as its label, and the backend reads that label
+    to know which vowel a take is — so the ids had to agree across two languages
+    and did so only by convention. `CalibrationStep` in `src/calibration.rs` is
+    exported to TypeScript by ts-rs and `steps.ts` types its ids against it; a
+    rename that would once have quietly stopped a take being a vowel is now a
+    build error. The label is parsed by deserialising rather than by a `match` on
+    literals, so the spellings exist once rather than twice.
+
   - **A stored take can be told what it is for** (2026-07-30), by
     `PUT /api/recordings/{id}/role` and a button on its row in the take list.
 

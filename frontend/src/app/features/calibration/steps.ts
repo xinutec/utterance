@@ -13,7 +13,7 @@
  * usable material and the person is the one who heard the room.
  */
 
-import type { RecordingDetail } from "../../models";
+import type { CalibrationStep as StepId, RecordingDetail } from "../../models";
 
 /** What a take must look like to serve its step. */
 interface Requirements {
@@ -33,8 +33,17 @@ interface Requirements {
 
 /** One thing to record. */
 export interface CalibrationStep {
-  /** Stable id, used verbatim as the take's label so the audio is self-describing. */
-  readonly id: string;
+  /**
+   * Stable id, used verbatim as the take's label so the audio is self-describing.
+   *
+   * Typed against the backend's own list (`src/calibration.rs`, generated here
+   * by ts-rs) rather than as a string. The backend reads a take's label to know
+   * which vowel it is — that is where the speaker's own vowel corners come from
+   * — so a rename on either side would quietly stop a take being a vowel, with
+   * nothing failing and no measurement missing enough to notice. Now it does not
+   * compile.
+   */
+  readonly id: StepId;
   readonly title: string;
   /** The imperative, shown large. Everything a person needs if they read nothing else. */
   readonly instruction: string;

@@ -6,8 +6,10 @@ use axum::http::{StatusCode, header};
 use axum::response::IntoResponse;
 use axum::{Json, response::Response};
 use serde::{Deserialize, Serialize};
+use utterance_analysis::speaker::Corner;
 use utterance_analysis::voiceprint::Voiceprint;
 
+use crate::calibration::CalibrationStep;
 use crate::error::AppError;
 use crate::state::AppState;
 use crate::store::{RecordingMeta, Role};
@@ -373,6 +375,64 @@ pub struct VoiceSummary {
     /// script, under the same settings, before the player is pointed anywhere.
     /// The render refuses too; this is what makes the refusal legible.
     pub refusal: Option<String>,
+}
+
+/// Where one of this speaker's held vowels actually sat.
+///
+/// A wire type rather than `utterance_analysis::speaker::VowelCorner` re-exported,
+/// for the reason `ScaleDegree` is one: the analysis crate carries no
+/// serialisation for a UI. It also carries the step, so a chart can label the
+/// point with the vowel the person was asked for rather than with a corner's
+/// technical name — "ee" is what they said; "close front" is what it means.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakerCorner {
+    pub step: CalibrationStep,
+    pub corner: Corner,
+    pub f1_hz: f32,
+    pub f2_hz: f32,
+    /// Interquartile spread across the take, in Hz — how still the vowel was held.
+    pub f1_spread_hz: f32,
+    pub f2_spread_hz: f32,
+    /// Frames the centre was measured over.
+    pub frames: usize,
+}
+
+/// Where this speaker's vowel space actually has its corners.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakerCorners {
+    /// One per corner step recorded, front to back. Empty until they exist.
+    pub corners: Vec<SpeakerCorner>,
+}
+
+/// `GET /api/speaker/corners` — this speaker's own vowel corners.
+///
+/// **Not part of `/api/voice`**, though both read the calibration takes. A chart
+/// wants these on load and wants them whether or not a scale can be derived;
+/// folding them into the voice summary would make a picture of somebody's mouth
+/// depend on their takes being long enough to build a musical world out of.
+pub async fn speaker_corners(
+    State(app): State<AppState>,
+) -> Result<Json<SpeakerCorners>, AppError> {
+    Ok(Json(SpeakerCorners {
+        corners: voice::corners(&app.store)?
+            .into_iter()
+            .map(|c| SpeakerCorner {
+                step: c.step,
+                corner: c.corner,
+                f1_hz: c.measured.f1_hz,
+                f2_hz: c.measured.f2_hz,
+                f1_spread_hz: c.measured.f1_spread_hz,
+                f2_spread_hz: c.measured.f2_spread_hz,
+                frames: c.measured.frames,
+            })
+            .collect(),
+    }))
 }
 
 /// One control the UI should offer, as the browser sees it.

@@ -37,6 +37,7 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         .route("/recordings/{id}/render", get(api::render))
         .route("/recordings/{id}/score", get(api::score))
         .route("/voice", get(api::voice_summary))
+        .route("/speaker/corners", get(api::speaker_corners))
         .route("/controls", get(api::controls))
         .route("/telemetry", post(telemetry::record))
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES));

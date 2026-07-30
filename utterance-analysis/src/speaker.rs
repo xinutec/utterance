@@ -188,6 +188,90 @@ impl Brightness {
     }
 }
 
+/// Frames a held vowel needs before its centre is reported.
+///
+/// One second at the 10 ms hop, half what a *range* needs. A range is only as
+/// good as its tails, so it wants enough frames for the speaker to have reached
+/// their own extremes; a corner is one shape held still, and its centre is
+/// stable long before its edges are. The guided flow asks for two or three
+/// seconds and accepts one and a half, so this bar sits below what it accepts —
+/// a take the person was told was usable must not then be silently unused.
+const MIN_CORNER_FRAMES: usize = 100;
+
+/// One corner of the vowel quadrilateral, as a held vowel rather than as a name.
+///
+/// The three the guided calibration asks for, chosen because they are the
+/// extremes a tongue can reach and therefore the ones a person can produce
+/// deliberately: *ee* at the close front, *ah* open, *oo* at the close back.
+/// Which sound realises a corner is a fact about a language; where a corner
+/// *is* is a fact about a mouth, and only the second is measured here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
+pub enum Corner {
+    CloseFront,
+    Open,
+    CloseBack,
+}
+
+/// Where one speaker's held vowel actually sat, in Hz.
+///
+/// The centre is a median rather than a mean: a corner take begins and ends by
+/// gliding in and out of the shape, and those frames are real measurements of
+/// something that is not the vowel. A mean is moved by them in proportion to how
+/// far off they are, which is exactly backwards.
+///
+/// **The spread is reported because a single point would claim more than was
+/// measured.** Two takes can share a centre while one held still and the other
+/// wandered through half the vowel space, and a dot on a chart cannot tell them
+/// apart. Quartiles rather than the full extent, for the reason the percentiles
+/// above are trimmed: the glide frames are at the ends.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VowelCorner {
+    pub f1_hz: f32,
+    pub f2_hz: f32,
+    /// Interquartile spread of F1 across the take, in Hz.
+    pub f1_spread_hz: f32,
+    /// Interquartile spread of F2 across the take, in Hz.
+    pub f2_spread_hz: f32,
+    /// Frames the centre was measured over.
+    pub frames: usize,
+}
+
+/// Where one take's vowel sits, for a take that is one held vowel.
+///
+/// `None` when too few frames carried both formants — an absent corner is
+/// something a caller can show as "not recorded yet"; a corner measured from
+/// twenty frames is a number nobody can tell is wrong.
+///
+/// **Nothing here checks that the take really is one held vowel.** It cannot:
+/// the only evidence would be the spread, and refusing a wide one would throw
+/// away the case worth seeing — a person whose *ee* wanders is being told
+/// something true about their *ee*. The identity of the vowel comes from the
+/// step the take was recorded for, which is why this takes a voiceprint and not
+/// a name.
+pub fn corner(voiceprint: &Voiceprint) -> Option<VowelCorner> {
+    let pairs = voiceprint.formants.vowel_space();
+    if pairs.len() < MIN_CORNER_FRAMES {
+        return None;
+    }
+
+    let mut f1: Vec<f32> = pairs.iter().map(|(a, _)| *a).collect();
+    let mut f2: Vec<f32> = pairs.iter().map(|(_, b)| *b).collect();
+    sort(&mut f1);
+    sort(&mut f2);
+
+    Some(VowelCorner {
+        f1_hz: percentile(&f1, 0.5),
+        f2_hz: percentile(&f2, 0.5),
+        f1_spread_hz: percentile(&f1, 0.75) - percentile(&f1, 0.25),
+        f2_spread_hz: percentile(&f2, 0.75) - percentile(&f2, 0.25),
+        frames: pairs.len(),
+    })
+}
+
 /// The pitch range a speaker actually uses.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

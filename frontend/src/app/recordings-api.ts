@@ -10,6 +10,7 @@ import type {
   RecordingMeta,
   Role,
   ScoreView,
+  SpeakerCorners,
   TelemetryEvent,
   VoiceSummary,
 } from "./models";
@@ -172,6 +173,17 @@ export class RecordingsApi {
    */
   voice(query = ""): Observable<VoiceSummary> {
     return this.http.get<VoiceSummary>(`/api/voice${suffix(query)}`).pipe(catchError(rethrow));
+  }
+
+  /**
+   * Where this speaker's own vowel corners sit, from the guided vowels.
+   *
+   * Separate from `voice()` because it answers without deriving a scale: a store
+   * whose takes are all too short for one still has corners, and the vowel chart
+   * wants them on load rather than when somebody presses render.
+   */
+  speakerCorners(): Observable<SpeakerCorners> {
+    return this.http.get<SpeakerCorners>("/api/speaker/corners").pipe(catchError(rethrow));
   }
 
   /**

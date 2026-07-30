@@ -6,6 +6,7 @@
 //! `utterance-realisation` (mechanical) — see `docs/architecture.md`. It is the
 //! composition root, and the only crate that may depend on all three.
 
+pub mod calibration;
 pub mod config;
 pub mod error;
 pub mod http_trace;

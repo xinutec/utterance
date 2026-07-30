@@ -1495,3 +1495,163 @@ async fn a_role_set_on_an_unknown_take_is_a_404() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// A held vowel with the given formants, continuous rather than in bursts.
+///
+/// The corner steps ask for a sound to be held, so the fixture holds it: the
+/// burst pattern the other fixtures use is there to give onsets something to
+/// find, and here it would spend most of the take on silence carrying no
+/// formants at all.
+fn wav_fixture_held_vowel(secs: f32, f1: f32, f2: f32) -> Vec<u8> {
+    const RATE: u32 = 16_000;
+    const F0: f32 = 125.0;
+    let formant = |hz: f32, center: f32, bw: f32| 1.0 / (1.0 + ((hz - center) / bw).powi(2));
+
+    let harmonics: Vec<(f32, f32)> = (1..)
+        .map(|k| k as f32 * F0)
+        .take_while(|&hz| hz < 8_000.0)
+        .map(|hz| {
+            (
+                hz,
+                // Same shallow source as the moving-vowel fixture, for the same
+                // reason recorded there: a 1/k sum of sines is less of a voice
+                // than any voice, and the formant fit is what reads it.
+                (F0 / hz).sqrt()
+                    * (formant(hz, f1, 90.0)
+                        + 0.7 * formant(hz, f2, 110.0)
+                        + 0.3 * formant(hz, 2800.0, 160.0)),
+            )
+        })
+        .collect();
+
+    let total = (RATE as f32 * secs) as usize;
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: RATE,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut buf = std::io::Cursor::new(Vec::new());
+    {
+        let mut w = hound::WavWriter::new(&mut buf, spec).unwrap();
+        for i in 0..total {
+            let t = i as f32 / RATE as f32;
+            let s: f32 = harmonics
+                .iter()
+                .map(|&(hz, gain)| gain * (2.0 * std::f32::consts::PI * hz * t).sin())
+                .sum::<f32>()
+                * 0.3;
+            w.write_sample((s.clamp(-1.0, 1.0) * 32_767.0) as i16)
+                .unwrap();
+        }
+        w.finalize().unwrap();
+    }
+    buf.into_inner()
+}
+
+#[tokio::test]
+async fn the_speakers_own_vowel_corners_come_from_the_steps_they_recorded() {
+    let app = TestApp::new();
+    // Labelled as the guided flow labels them — the label is what says which
+    // vowel this is, and nothing in the audio is marked.
+    upload(&app, "vowel-ee", wav_fixture_held_vowel(3.0, 300.0, 2300.0)).await;
+    upload(&app, "vowel-ah", wav_fixture_held_vowel(3.0, 730.0, 1100.0)).await;
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/speaker/corners")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let corners = body["corners"].as_array().unwrap();
+    assert_eq!(corners.len(), 2, "{corners:?}");
+
+    // Front before open: the order the guided flow asks for them in.
+    assert_eq!(corners[0]["step"], "vowel-ee");
+    assert_eq!(corners[0]["corner"], "closeFront");
+    assert_eq!(corners[1]["step"], "vowel-ah");
+    assert_eq!(corners[1]["corner"], "open");
+
+    // The measurement, asserted as the relation between the two vowels rather
+    // than as absolute frequencies: what has to hold is that this speaker's *ee*
+    // comes out closer and fronter than their *ah*, which is the whole content
+    // of a vowel chart. Exact centres would be asserting the formant tracker's
+    // accuracy, which `formant_real.rs` is for.
+    let (ee_f1, ee_f2) = (
+        corners[0]["f1Hz"].as_f64().unwrap(),
+        corners[0]["f2Hz"].as_f64().unwrap(),
+    );
+    let (ah_f1, ah_f2) = (
+        corners[1]["f1Hz"].as_f64().unwrap(),
+        corners[1]["f2Hz"].as_f64().unwrap(),
+    );
+    assert!(ee_f1 < ah_f1, "ee F1 {ee_f1} should be below ah's {ah_f1}");
+    assert!(ee_f2 > ah_f2, "ee F2 {ee_f2} should be above ah's {ah_f2}");
+
+    // Held still, so the spread is a fraction of the distance between them.
+    let spread = corners[0]["f2SpreadHz"].as_f64().unwrap();
+    assert!(
+        spread < (ee_f2 - ah_f2) / 4.0,
+        "a held vowel reported a spread of {spread} Hz"
+    );
+    assert!(corners[0]["frames"].as_u64().unwrap() >= 100);
+}
+
+#[tokio::test]
+async fn a_take_that_names_no_step_places_no_corner() {
+    let app = TestApp::new();
+    // Marked as calibration, so it pools into the profile — but its label names
+    // no step, which is what an uploaded file looks like. It cannot claim to be
+    // a particular vowel, and a chart must not show it as one.
+    upload(
+        &app,
+        "some-recording.wav",
+        wav_fixture_held_vowel(3.0, 300.0, 2300.0),
+    )
+    .await;
+    // Material never defines the speaker at all, whatever it is called.
+    upload_material(&app, "vowel-oo", wav_fixture_held_vowel(3.0, 300.0, 870.0)).await;
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/speaker/corners")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["corners"].as_array().unwrap().len(), 0, "{body}");
+}
+
+#[tokio::test]
+async fn corners_are_reported_from_takes_too_short_to_derive_a_scale_from() {
+    let app = TestApp::new();
+    // Under MIN_CALIBRATION_FRAMES: no scale can be derived from this store, and
+    // /api/voice says so. The corners are still measured — which is the reason
+    // they are not a field on the voice summary.
+    upload(&app, "vowel-ee", wav_fixture_held_vowel(1.6, 300.0, 2300.0)).await;
+
+    let (status, _) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "the scale should be refused"
+    );
+
+    let (status, body) = send(
+        &app,
+        Request::get("/api/speaker/corners")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["corners"].as_array().unwrap().len(), 1, "{body}");
+}

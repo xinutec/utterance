@@ -8,11 +8,12 @@
 use std::collections::BTreeMap;
 
 use utterance_analysis::partials::Partials;
-use utterance_analysis::speaker::{self, SpeakerProfile};
+use utterance_analysis::speaker::{self, Corner, SpeakerProfile, VowelCorner};
 use utterance_analysis::voiceprint::Voiceprint;
 use utterance_mapping::tuning;
 use utterance_mapping::voice::{self, Voice};
 
+use crate::calibration::CalibrationStep;
 use crate::error::AppError;
 use crate::store::{RecordingMeta, Role, Store};
 
@@ -52,6 +53,68 @@ pub struct Calibrated {
     pub profile: SpeakerProfile,
     /// The take the scale and timbre were derived from.
     pub source: RecordingMeta,
+}
+
+/// One corner of the vowel space, and which step reached it.
+pub struct MeasuredCorner {
+    pub corner: Corner,
+    pub step: CalibrationStep,
+    pub measured: VowelCorner,
+}
+
+/// This speaker's own vowel corners, as far as they have recorded them.
+///
+/// **Separate from [`calibrate`] on purpose, though both read the calibration
+/// set.** Corners are measured from the guided vowels alone and need no scale,
+/// no palette and no tonic — so a store whose takes are all too short to derive
+/// a scale from still has corners, and asking through `calibrate` would refuse
+/// to report them for a reason that has nothing to do with them. It is also what
+/// a chart wants on load, where deriving a whole musical world would be work
+/// nobody asked for.
+///
+/// An empty list is ordinary: it means the guided vowels have not been recorded.
+pub fn corners(store: &Store) -> Result<Vec<MeasuredCorner>, AppError> {
+    let metas = store.list()?;
+    let stored: Vec<(RecordingMeta, Voiceprint)> = metas
+        .into_iter()
+        .filter_map(|m| store.voiceprint(&m.id).ok().map(|v| (m, v)))
+        .collect();
+    Ok(measure_corners(&calibration_set(stored)))
+}
+
+/// Measure every corner the calibration set has a take for.
+///
+/// **The vowel's identity comes from the step, not from the audio.** The take
+/// recorded against the *ee* prompt is this speaker's *ee* by construction —
+/// the same reasoning the guided flow already relies on, and the reason none of
+/// this needs anyone to mark a recording by ear.
+///
+/// A corner step whose take is too short to measure is simply absent: the
+/// calibration screen is where a thin take gets reported, and inventing a corner
+/// out of thirty frames here would put a point on the chart that no one could
+/// tell from a good one.
+fn measure_corners(takes: &[(RecordingMeta, Voiceprint)]) -> Vec<MeasuredCorner> {
+    let mut out: Vec<MeasuredCorner> = takes
+        .iter()
+        .filter_map(|(meta, voiceprint)| {
+            let step = CalibrationStep::from_label(&meta.label)?;
+            let corner = step.corner()?;
+            Some(MeasuredCorner {
+                corner,
+                step,
+                measured: speaker::corner(voiceprint)?,
+            })
+        })
+        .collect();
+    // Front, open, back: the order the guided flow asks for them in, and the
+    // order they are read round the chart. `calibration_set` yields takes keyed
+    // by label, so without this the corners would arrive alphabetically.
+    out.sort_by_key(|c| match c.corner {
+        Corner::CloseFront => 0,
+        Corner::Open => 1,
+        Corner::CloseBack => 2,
+    });
+    out
 }
 
 /// Build the current speaker's voice from everything in the store.

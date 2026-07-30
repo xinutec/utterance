@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from "@angular/core";
 
-import type { RecordingDetail, RecordingMeta, Role } from "./models";
+import type { RecordingDetail, RecordingMeta, Role, SpeakerCorner } from "./models";
 import { ApiError, RecordingsApi, type ApiFailure } from "./recordings-api";
 
 /**
@@ -17,6 +17,16 @@ export class RecordingsStore {
 
   readonly recordings = signal<readonly RecordingMeta[]>([]);
   readonly selected = signal<RecordingDetail | null>(null);
+
+  /**
+   * This speaker's own vowel corners, from the guided vowels.
+   *
+   * Application state beside the take list rather than something a chart fetches
+   * for itself: they describe the speaker, so they are the same for every take
+   * on screen and they change only when a calibration take does. Empty until the
+   * guided vowels have been recorded.
+   */
+  readonly corners = signal<readonly SpeakerCorner[]>([]);
   /** True while a request that the person is waiting on is in flight. */
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -32,6 +42,29 @@ export class RecordingsStore {
       error: (err: unknown) => {
         this.fail(err);
       },
+    });
+    this.refreshCorners();
+  }
+
+  /**
+   * Re-read the speaker's corners.
+   *
+   * Folded into `refresh` because every route that changes which takes define
+   * the speaker — recording one, deleting one, changing a role — already ends
+   * there. A corner list that kept describing a deleted take would be a claim
+   * about a mouth, sourced from nothing.
+   *
+   * A failure here leaves the corners as they were and does not raise the
+   * page's error: this is the chart's reference grid, and losing it is not worth
+   * covering the screen a take was just recorded onto. The chart falls back to
+   * generic positions and says so.
+   */
+  private refreshCorners(): void {
+    this.api.speakerCorners().subscribe({
+      next: (speaker) => {
+        this.corners.set(speaker.corners);
+      },
+      error: () => {},
     });
   }
 

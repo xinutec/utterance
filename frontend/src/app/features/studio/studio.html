@@ -162,7 +162,10 @@
         <mat-card-content>
           <app-voiceprint-chart [voiceprint]="detail.voiceprint"></app-voiceprint-chart>
           <h3 class="section">Vowel space</h3>
-          <app-vowel-space [voiceprint]="detail.voiceprint"></app-vowel-space>
+          <app-vowel-space
+            [voiceprint]="detail.voiceprint"
+            [corners]="store.corners()"
+          ></app-vowel-space>
 
           <h3 class="section">The recording</h3>
           <audio class="player" controls [src]="store.audioUrl(detail.meta.id)"></audio>

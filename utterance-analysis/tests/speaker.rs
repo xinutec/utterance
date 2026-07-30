@@ -316,3 +316,101 @@ fn no_brightness_is_reported_from_too_few_voiced_frames() {
     let vp = brightening_speaker(100);
     assert!(speaker::profile(&[&vp]).brightness.is_none());
 }
+
+// ---- one held vowel: where a corner of the space actually is ----------------
+
+/// A held vowel: `hold` frames parked on `(f1, f2)`, with `glide` frames on
+/// either side sweeping in from and back out to a neutral centre.
+///
+/// The glide is the point of the fixture. A corner take is a person opening
+/// their mouth into a shape and closing it again, so the first and last frames
+/// are real measurements of something that is not the vowel being asked for.
+fn held_vowel(f1: f32, f2: f32, hold: usize, glide: usize) -> Voiceprint {
+    let mut a: Vec<Option<f32>> = ramp(500.0, f1, glide);
+    let mut b: Vec<Option<f32>> = ramp(1500.0, f2, glide);
+    a.extend(std::iter::repeat_n(Some(f1), hold));
+    b.extend(std::iter::repeat_n(Some(f2), hold));
+    a.extend(ramp(f1, 500.0, glide));
+    b.extend(ramp(f2, 1500.0, glide));
+    let count = a.len();
+    voiceprint(a, b, vec![Some(120.0); count])
+}
+
+#[test]
+fn a_corner_is_where_the_vowel_was_held() {
+    // 300 frames of a close front vowel, 40 of gliding in and out of it.
+    let corner = speaker::corner(&held_vowel(280.0, 2300.0, 300, 40)).unwrap();
+    assert!(
+        (corner.f1_hz - 280.0).abs() < 5.0 && (corner.f2_hz - 2300.0).abs() < 5.0,
+        "held at (280, 2300), measured ({}, {})",
+        corner.f1_hz,
+        corner.f2_hz
+    );
+    assert_eq!(corner.frames, 380);
+}
+
+#[test]
+fn the_glide_does_not_drag_the_corner_toward_neutral() {
+    // The property the median is for. A mean over this fixture lands well short
+    // of the vowel: 80 glide frames average halfway to the neutral centre, so
+    // they pull F2 down by roughly (2300-1500)/2 * 80/380 ≈ 84 Hz — a tenth of
+    // the distance from ee to the middle of the chart, in the direction of
+    // making every corner look less extreme than the speaker actually is.
+    let vp = held_vowel(280.0, 2300.0, 300, 40);
+    let pairs = vp.formants.vowel_space();
+    let mean_f2: f32 = pairs.iter().map(|(_, b)| b).sum::<f32>() / pairs.len() as f32;
+    assert!(
+        mean_f2 < 2260.0,
+        "fixture is not exercising the difference: mean F2 is {mean_f2}"
+    );
+
+    let corner = speaker::corner(&vp).unwrap();
+    assert!(
+        corner.f2_hz > mean_f2 + 50.0,
+        "median {} should sit at the held value, well above the mean {mean_f2}",
+        corner.f2_hz
+    );
+}
+
+#[test]
+fn the_spread_says_whether_the_vowel_was_held_still() {
+    // Two takes with the same centre. A dot on a chart cannot tell them apart,
+    // which is why the spread is reported beside it.
+    let steady = speaker::corner(&held_vowel(280.0, 2300.0, 300, 40)).unwrap();
+    let wandering = speaker::corner(&voiceprint(
+        ramp(180.0, 380.0, 380),
+        ramp(2100.0, 2500.0, 380),
+        vec![Some(120.0); 380],
+    ))
+    .unwrap();
+
+    assert!(
+        (wandering.f1_hz - steady.f1_hz).abs() < 15.0,
+        "the fixtures are meant to share a centre: {} vs {}",
+        wandering.f1_hz,
+        steady.f1_hz
+    );
+    assert!(
+        wandering.f2_spread_hz > steady.f2_spread_hz * 4.0,
+        "a vowel that wandered 400 Hz reported a spread of {} against the held take's {}",
+        wandering.f2_spread_hz,
+        steady.f2_spread_hz
+    );
+}
+
+#[test]
+fn withholds_a_corner_it_cannot_measure() {
+    // Half a second. Same reasoning as the ranges above: an absent corner is a
+    // state the caller can show as "not recorded yet", and a corner measured
+    // over fifty frames is one nobody can tell is wrong.
+    assert!(speaker::corner(&held_vowel(280.0, 2300.0, 40, 5)).is_none());
+}
+
+#[test]
+fn a_frame_missing_either_formant_is_not_a_point_on_the_plane() {
+    // The corner is measured over the pairs, so a take whose F2 never resolved
+    // has no corner at all — rather than one placed by F1 alone.
+    let mut vp = held_vowel(280.0, 2300.0, 300, 40);
+    vp.formants.f2 = vec![None; vp.formants.f2.len()];
+    assert!(speaker::corner(&vp).is_none());
+}
