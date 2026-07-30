@@ -426,6 +426,31 @@ source, plus the one that most shapes daily work.
   - **A store with no calibration take refuses to render** and says to record
     the guided vowels. Deriving a voice from whatever is lying around is the
     failure above, reported as success.
+  - **A stored take can be told what it is for** (2026-07-30), by
+    `PUT /api/recordings/{id}/role` and a button on its row in the take list.
+
+    **This was missing and it broke the deployed app.** Role was settable only
+    at upload, and the note above — that every take stored before the
+    distinction existed reads back as material — was written as though it were a
+    safe backward-compatibility property. It is not: it means a store that
+    predated the field has *no* calibration take, so `/api/voice` answers 400
+    `no_calibration` and nothing on the studio page works. Every take on isis
+    was material, the guided vowels among them, with no way to say otherwise.
+
+    The remedy on offer was to record the vowels again — asking someone to redo
+    good work to satisfy a field they cannot see. And the same gap applies to
+    audio that arrives as a *file*: it never passes through the guided flow, so
+    before this it could never define the speaker at all.
+
+    Safe to expose because the role lives in the metadata and a voiceprint is a
+    pure function of the audio, so nothing here can reach a measurement.
+    `saying_what_a_take_is_for_does_not_touch_the_audio` asserts it.
+
+    *Found by Pippijn pressing the button, not by any check here. Worth
+    recording: the same 400 had appeared in front of me the day before, when
+    `dwell` refused to run on the local store, and I hand-marked takes as
+    calibration to get my measurements going. I worked around the defect and
+    never recognised it as one.*
 
 - **Recording is no longer tied to the Mac** (2026-07-29). `recorder.ts` gates on
   `navigator.mediaDevices`, which browsers define only in a secure context; that

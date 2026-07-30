@@ -106,6 +106,13 @@
       border-radius: 0.25rem;
       background: var(--mat-sys-error-container);
       color: var(--mat-sys-on-error-container);
+
+      // Defining the voice is a statement about the take, not a fault with it,
+      // so it must not borrow the colour that means "re-record this".
+      &.voice {
+        background: var(--mat-sys-primary-container);
+        color: var(--mat-sys-on-primary-container);
+      }
     }
   }
 }

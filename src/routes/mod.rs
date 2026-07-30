@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::http_trace;
@@ -32,6 +32,7 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         .route("/recordings", post(api::upload).get(api::list))
         .route("/recordings/{id}", get(api::detail).delete(api::delete))
         .route("/recordings/{id}/audio", get(api::audio))
+        .route("/recordings/{id}/role", put(api::put_role))
         .route("/recordings/{id}/render", get(api::render))
         .route("/recordings/{id}/score", get(api::score))
         .route("/voice", get(api::voice_summary))

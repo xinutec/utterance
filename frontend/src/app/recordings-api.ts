@@ -120,6 +120,21 @@ export class RecordingsApi {
       .pipe(catchError(rethrow));
   }
 
+  /**
+   * Say what an already-stored take is for.
+   *
+   * Separate from `upload` because the answer is not always known when the audio
+   * arrives — and until this existed it could never be changed afterwards, which
+   * meant a take could not *become* the calibration one. Every recording made
+   * before the distinction existed reads back as material, so a store that
+   * predated it held the guided vowels and could not use them.
+   */
+  setRole(id: string, role: Role): Observable<RecordingMeta> {
+    return this.http
+      .put<RecordingMeta>(`/api/recordings/${id}/role`, { role })
+      .pipe(catchError(rethrow));
+  }
+
   delete(id: string): Observable<Deleted> {
     return this.http.delete<Deleted>(`/api/recordings/${id}`).pipe(catchError(rethrow));
   }

@@ -1404,3 +1404,94 @@ async fn a_store_with_nothing_but_material_says_to_calibrate() {
         "the refusal does not name what is missing: {message}"
     );
 }
+
+#[tokio::test]
+async fn a_stored_take_can_be_told_what_it_is_for() {
+    // The gap this closes, and it was live rather than theoretical. Role could
+    // only be set while uploading, so a take could never *become* the
+    // calibration one — and every recording made before the distinction existed
+    // reads back as material. A store that predated it therefore held the guided
+    // vowels and refused to derive a voice from them, with no way to say what
+    // they were short of recording them again.
+    let app = TestApp::new();
+    let (_, body) = upload_material(&app, "vowel-ah", wav_fixture_moving_vowel(8.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+
+    // Refuses first, which is what makes the rest of this test mean anything.
+    let (status, _) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "a store of material derived a voice"
+    );
+
+    let (status, updated) = send(
+        &app,
+        Request::put(format!("/api/recordings/{id}/role"))
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"role":"calibration"}"#))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{updated}");
+    assert_eq!(updated["role"], "calibration");
+
+    let (status, _) = send(
+        &app,
+        Request::get("/api/voice").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the take was marked and still did not count"
+    );
+}
+
+#[tokio::test]
+async fn saying_what_a_take_is_for_does_not_touch_the_audio() {
+    // Why this is safe to expose at all: the role lives in the metadata, the
+    // voiceprint is a pure function of the audio, and neither the audio nor any
+    // measurement taken from it is a thing this endpoint can reach. A render is
+    // the sharpest test available — it runs the whole chain.
+    let app = TestApp::new();
+    let (_, body) = upload(&app, "vowel-ah", wav_fixture_moving_vowel(8.0)).await;
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+    let (_, _, before) = fetch(&app, &format!("/api/recordings/{id}/audio")).await;
+
+    for role in ["material", "calibration"] {
+        let (status, _) = send(
+            &app,
+            Request::put(format!("/api/recordings/{id}/role"))
+                .header("content-type", "application/json")
+                .body(Body::from(format!(r#"{{"role":"{role}"}}"#)))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    let (_, _, after) = fetch(&app, &format!("/api/recordings/{id}/audio")).await;
+    assert_eq!(
+        before, after,
+        "the audio changed when only the role was set"
+    );
+}
+
+#[tokio::test]
+async fn a_role_set_on_an_unknown_take_is_a_404() {
+    let app = TestApp::new();
+    let (status, _) = send(
+        &app,
+        Request::put("/api/recordings/deadbeefdeadbeef/role")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"role":"calibration"}"#))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

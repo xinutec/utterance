@@ -107,7 +107,31 @@
                     @if (take.clipped) {
                       <span class="badge">clipped</span>
                     }
+                    @if (take.role === "calibration") {
+                      <span class="badge voice">voice</span>
+                    }
                   </span>
+                </button>
+                <!--
+                  Which way this button goes is the take's current role, so one
+                  control both states the fact and changes it. A take that
+                  defines the voice says so on its row, because the alternative
+                  is a store where nothing visible explains why the music sounds
+                  the way it does.
+                -->
+                <button
+                  matIconButton
+                  type="button"
+                  [disabled]="store.busy()"
+                  [attr.aria-label]="
+                    (take.role === 'calibration' ? 'Stop using ' : 'Use ') + take.label + ' as the voice'
+                  "
+                  [matTooltip]="
+                    take.role === 'calibration' ? 'Stop using this as the voice' : 'Use this as the voice'
+                  "
+                  (click)="toggleRole(take, $event)"
+                >
+                  <mat-icon>{{ take.role === "calibration" ? "record_voice_over" : "voice_over_off" }}</mat-icon>
                 </button>
                 <button
                   matIconButton

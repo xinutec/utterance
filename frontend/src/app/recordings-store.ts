@@ -63,6 +63,29 @@ export class RecordingsStore {
     });
   }
 
+  /**
+   * Say whether a stored take defines the voice or is only material.
+   *
+   * Refreshes the list rather than patching the row in place: the role decides
+   * which takes the speaker is derived from, so changing it changes the scale,
+   * the vowel space and the tonic — and a list that quietly disagreed with the
+   * voice on screen would be worse than a reload.
+   */
+  setRole(meta: RecordingMeta, role: Role): void {
+    this.busy.set(true);
+    this.error.set(null);
+    this.api.setRole(meta.id, role).subscribe({
+      next: () => {
+        this.busy.set(false);
+        if (this.selected()?.meta.id === meta.id) this.select({ ...meta, role });
+        this.refresh();
+      },
+      error: (err: unknown) => {
+        this.fail(err);
+      },
+    });
+  }
+
   remove(meta: RecordingMeta): void {
     this.api.delete(meta.id).subscribe({
       next: () => {

@@ -126,4 +126,17 @@ export class Studio implements OnInit {
     event.stopPropagation();
     this.store.remove(meta);
   }
+
+  /**
+   * Turn a take into the voice, or stop it being one.
+   *
+   * On the row rather than behind the calibration flow, because the takes that
+   * need this are already recorded: everything stored before the distinction
+   * existed reads back as material, and audio that arrives as a file never
+   * passed through the guided steps at all.
+   */
+  toggleRole(meta: RecordingMeta, event: MouseEvent): void {
+    event.stopPropagation();
+    this.store.setRole(meta, meta.role === "calibration" ? "material" : "calibration");
+  }
 }

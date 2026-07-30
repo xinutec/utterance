@@ -219,6 +219,33 @@ impl Store {
         Ok(())
     }
 
+    /// Say what an already-stored take is for.
+    ///
+    /// **Why this has to exist, learned by breaking it.** Role was settable only
+    /// at upload, which quietly meant a take could never *become* the
+    /// calibration one. Two consequences, and both were live: every recording
+    /// made before the distinction existed reads back as material, so a store
+    /// that predated it had no calibration take at all and refused to derive a
+    /// voice — the guided vowels sitting in it, unusable, because nothing could
+    /// say what they were. And audio that arrives as a *file* rather than
+    /// through the guided flow could never define the speaker either, which is
+    /// how the second singer's takes arrive.
+    ///
+    /// The remedy on offer was to record the vowels again. That is asking
+    /// someone to redo good work to satisfy a field they cannot see.
+    ///
+    /// Rewrites the metadata alone. The audio is untouched and the voiceprint is
+    /// a pure function of it, so nothing here can invalidate a measurement —
+    /// which is exactly why this is safe to expose and why it does not need a
+    /// re-analysis behind it.
+    pub fn put_role(&self, id: &str, role: Role) -> Result<RecordingMeta, StoreError> {
+        let dir = self.checked_dir(id)?;
+        let mut meta = self.meta(id)?;
+        meta.role = role;
+        write_json(&dir.join(META), &meta)?;
+        Ok(meta)
+    }
+
     /// A single string field from the stored metadata, whatever else is wrong
     /// with it.
     fn stored_field(&self, id: &str, key: &str) -> Option<serde_json::Value> {

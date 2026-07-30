@@ -285,6 +285,29 @@ pub async fn audio(
     ))
 }
 
+/// Body of `PUT /api/recordings/{id}/role`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleBody {
+    pub role: Role,
+}
+
+/// `PUT /api/recordings/{id}/role` — say what an already-stored take is for.
+///
+/// A whole endpoint for one field, because the field decides whether a take
+/// shapes the speaker's sound world, and until this existed it could only be
+/// set while uploading. See [`Store::put_role`] for what that cost.
+///
+/// Idempotent, and a `PUT` rather than a `PATCH` for that reason: the body is
+/// the complete new value of the thing being addressed.
+pub async fn put_role(
+    State(app): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<RoleBody>,
+) -> Result<Json<RecordingMeta>, AppError> {
+    Ok(Json(app.store.put_role(&id, body.role)?))
+}
+
 /// `DELETE /api/recordings/{id}`.
 pub async fn delete(
     State(app): State<AppState>,
