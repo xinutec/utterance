@@ -1,9 +1,13 @@
 ---
 name: build
 
-# utterance (Rust workspace + Angular frontend) — gate on clippy and the test
-# suite, then build and push the single image xinutec/utterance:latest to Docker
-# Hub. The k8s manifests live in the home monorepo (xinutec/pippijn,
+# utterance (Rust workspace + Angular frontend) — gate on the Rust half (clippy,
+# tests, generated-type drift) and the frontend half (lint, unit tests, layout
+# harness), then build and push the single image xinutec/utterance:latest to
+# Docker Hub. Between them these are `scripts/verify.sh` minus the shared
+# dev-lint rules, which need a private sibling repo and stay local.
+#
+# The k8s manifests live in the home monorepo (xinutec/pippijn,
 # code/kubes/utterance/k8s); the image tag is the only contract between this
 # repo and the deploy.
 #
@@ -36,9 +40,56 @@ jobs:
       - run: rustup component add clippy
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The frontend's types are generated from the Rust wire types; fail if the
+      # committed output drifted from them. Does in CI what scripts/check-types.sh
+      # does locally, without the nix dev shell. Deleting the directory first so a
+      # type REMOVED from Rust shows up as a leftover file, and asking git for
+      # status rather than diff so an ADDED one (untracked) counts too — a plain
+      # `git diff --exit-code` is blind to both.
+      - run: rm -rf frontend/src/app/generated
+      - run: cargo test --workspace --features ts export_bindings
+      - name: generated types match the Rust types
+        run: |
+          if [ -n "$(git status --porcelain -- frontend/src/app/generated)" ]; then
+            echo "generated types drifted; run scripts/gen-types.sh and commit" >&2
+            git status --porcelain -- frontend/src/app/generated >&2
+            git diff -- frontend/src/app/generated >&2
+            exit 1
+          fi
+
+  # The other half of `scripts/verify.sh`. Until this existed CI ran clippy and
+  # the Rust tests and nothing else, so the frontend was gated only by the
+  # pre-commit hook on whichever machine did the commit — and a push with
+  # `--no-verify`, or from a checkout without the hook installed, went green
+  # having compiled no TypeScript at all.
+  #
+  # Not `scripts/verify.sh` itself, which would need nix in the runner and a
+  # token for the private dev-lint repo. Same split as messages and coach: the
+  # shared dev-lint rules stay local across the whole fleet, and this is the
+  # rest of the gate.
+  fe-verify:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      # Real-browser layout check: the harness serves the built bundle and
+      # asserts nothing overlaps or overflows at phone geometry. `ui-check`
+      # builds first, so there is no separate build step.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run ui-check
 
   image:
-    needs: verify
+    needs: [verify, fe-verify]
     runs-on: ubuntu-latest
     permissions:
       contents: read
