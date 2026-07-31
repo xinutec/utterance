@@ -327,8 +327,8 @@ fn main() -> anyhow::Result<()> {
         let mut rows: BTreeMap<&str, Change> = BTreeMap::new();
 
         for knob in KNOBS.iter().filter(|k| k.reaches(mapping)) {
-            let low = Params::default().with(knob, knob.min);
-            let high = Params::default().with(knob, knob.max);
+            let low = Params::default().with(knob.name, knob.min);
+            let high = Params::default().with(knob.name, knob.max);
 
             // **`density` acts on the calibration, not on the composition**, so
             // a sweep holding one derived voice fixed measured it at exactly
@@ -358,9 +358,9 @@ fn main() -> anyhow::Result<()> {
                 change.ring_s = ring_s(&vp, &vb, high) - ring_s(&vp, &va, low);
             }
             if !change.audible() {
-                silent.push(knob.name);
+                silent.push(knob.name.name());
             }
-            rows.insert(knob.name, change);
+            rows.insert(knob.name.name(), change);
         }
 
         for (name, c) in &rows {

@@ -146,8 +146,8 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
 /// interpret.
 mod table {
     use utterance_mapping::params::{
-        ARTICULATION, BIND, CONSONANTS, DENSITY, DRIFT, HOLD, KNOBS, Params, REACH, SPACING,
-        VOICES, VOICING,
+        ARTICULATION, BIND, CONSONANTS, DENSITY, DRIFT, HOLD, KNOBS, KnobName, KnobQuery, Params,
+        REACH, SPACING, VOICES, VOICING,
     };
 
     #[test]
@@ -203,23 +203,23 @@ mod table {
         // asserts that *nothing else* moved, which is the half a spot check of
         // one field would miss.
         let d = Params::default();
-        assert_eq!(d.with(&BIND, 0.0), Params { bind: 0.0, ..d });
-        assert_eq!(d.with(&DENSITY, 0.4), Params { density: 0.4, ..d });
-        assert_eq!(d.with(&VOICES, 7.0), Params { voices: 7, ..d });
-        assert_eq!(d.with(&SPACING, 4.0), Params { spacing: 4, ..d });
-        assert_eq!(d.with(&DRIFT, 1.5), Params { drift: 1.5, ..d });
-        assert_eq!(d.with(&REACH, 2.5), Params { reach: 2.5, ..d });
-        assert_eq!(d.with(&HOLD, 0.9), Params { hold: 0.9, ..d });
-        assert_eq!(d.with(&VOICING, 0.1), Params { voicing: 0.1, ..d });
+        assert_eq!(d.with(BIND.name, 0.0), Params { bind: 0.0, ..d });
+        assert_eq!(d.with(DENSITY.name, 0.4), Params { density: 0.4, ..d });
+        assert_eq!(d.with(VOICES.name, 7.0), Params { voices: 7, ..d });
+        assert_eq!(d.with(SPACING.name, 4.0), Params { spacing: 4, ..d });
+        assert_eq!(d.with(DRIFT.name, 1.5), Params { drift: 1.5, ..d });
+        assert_eq!(d.with(REACH.name, 2.5), Params { reach: 2.5, ..d });
+        assert_eq!(d.with(HOLD.name, 0.9), Params { hold: 0.9, ..d });
+        assert_eq!(d.with(VOICING.name, 0.1), Params { voicing: 0.1, ..d });
         assert_eq!(
-            d.with(&ARTICULATION, 1.2),
+            d.with(ARTICULATION.name, 1.2),
             Params {
                 articulation: 1.2,
                 ..d
             }
         );
         assert_eq!(
-            d.with(&CONSONANTS, 0.0),
+            d.with(CONSONANTS.name, 0.0),
             Params {
                 consonants: 0.0,
                 ..d
@@ -229,18 +229,20 @@ mod table {
 
     #[test]
     fn every_published_knob_is_reachable_by_name() {
-        // `with` panics on a name it does not know, so this is what catches a
-        // knob added to the table and nowhere else. Swept to the end furthest
-        // from the default, because `bind` starts life *at* its maximum and
-        // "move it to max" would be no move at all.
-        for knob in &KNOBS {
+        // `with` used to panic on a name it did not know, and this is what
+        // caught a knob added to the table and nowhere else. It cannot happen
+        // now — the arms are generated from the same list as the table — so what
+        // is left to check is that each knob's field actually *moves*. Swept to
+        // the end furthest from the default, because `bind` starts life *at* its
+        // maximum and "move it to max" would be no move at all.
+        for knob in KNOBS {
             let far = if (knob.max - knob.default) >= (knob.default - knob.min) {
                 knob.max
             } else {
                 knob.min
             };
             assert_ne!(
-                Params::default().with(knob, far),
+                Params::default().with(knob.name, far),
                 Params::default(),
                 "{} does not move when set to {far}",
                 knob.name
@@ -253,9 +255,41 @@ mod table {
         // A caller sweeping the table has no reason to know each range, and a
         // value past the end must land at the end rather than somewhere the
         // mapping would clamp away later and differently.
-        for knob in &KNOBS {
-            let over = Params::default().with(knob, knob.max + 1000.0);
+        for knob in KNOBS {
+            let over = Params::default().with(knob.name, knob.max + 1000.0);
             assert_eq!(over, over.sane(), "{}", knob.name);
         }
+    }
+
+    /// [`KnobName::name`] and the serde attribute are one spelling.
+    ///
+    /// `name` comes from `stringify!` on the `Params` field and serde lowercases
+    /// the variant; the two agreeing is what lets a query parameter, a struct
+    /// field and a wire value all be the same word. `from_name` goes through the
+    /// derive, so a variant whose ident stopped matching its field stops parsing
+    /// here.
+    #[test]
+    fn name_round_trips_through_serde() {
+        for knob in KNOBS {
+            assert_eq!(
+                KnobName::from_name(knob.name.name()),
+                Some(knob.name),
+                "{:?} spells itself {:?}, which serde does not read back",
+                knob.name,
+                knob.name.name()
+            );
+        }
+        assert_eq!(KnobName::from_name("bnid"), None);
+    }
+
+    /// A query naming no knob leaves every one of them at its default.
+    ///
+    /// The generated `KnobQuery` is what the route deserialises, and it replaced
+    /// eleven hand-written `Option` fields plus eleven `unwrap_or` lines. Taking
+    /// none of them must still change nothing, which is the promise the module
+    /// header makes about the defaults.
+    #[test]
+    fn an_empty_query_is_the_defaults() {
+        assert_eq!(KnobQuery::default().params(), Params::default());
     }
 }

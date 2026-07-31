@@ -15,7 +15,7 @@ use crate::state::AppState;
 use crate::store::{RecordingMeta, Role};
 use crate::voice;
 use utterance_mapping::mapping::{Mapping, Material};
-use utterance_mapping::params::Params;
+use utterance_mapping::params::{Knob, KnobQuery};
 
 /// Serve audio so a browser can seek in it.
 ///
@@ -103,62 +103,6 @@ pub struct VoiceParams {
     /// is against the others.
     #[serde(default)]
     pub mapping: Option<String>,
-
-    /// How far the speaker's own scale is used, 0..1. See
-    /// `utterance_mapping::params::Params::bind`.
-    #[serde(default)]
-    pub bind: Option<f32>,
-    /// How deep a dip must be to count as a note.
-    #[serde(default)]
-    pub density: Option<f32>,
-    /// Voices sounding at once in the field.
-    #[serde(default)]
-    pub voices: Option<usize>,
-    /// Scale degrees between one field voice and the next.
-    #[serde(default)]
-    pub spacing: Option<usize>,
-    /// Octaves the field transposes across the speaker's pitch range.
-    #[serde(default)]
-    pub drift: Option<f32>,
-    /// How far the vowel moves the harmony.
-    #[serde(default)]
-    pub reach: Option<f32>,
-    /// How far past a boundary the mouth must go before the harmony follows.
-    #[serde(default)]
-    pub hold: Option<f32>,
-    /// Seconds the mouth must stay away before the harmony follows.
-    #[serde(default)]
-    pub settle: Option<f32>,
-    /// How far the third formant opens or clusters the chord.
-    #[serde(default)]
-    pub voicing: Option<f32>,
-    /// How much the rate of spectral change stirs the texture.
-    #[serde(default)]
-    pub articulation: Option<f32>,
-    /// Loudness of the consonants against the pitched material.
-    #[serde(default)]
-    pub consonants: Option<f32>,
-}
-
-impl VoiceParams {
-    /// The mapping knobs, defaulted where the caller said nothing.
-    fn params(&self) -> Params {
-        let base = Params::default();
-        Params {
-            bind: self.bind.unwrap_or(base.bind),
-            density: self.density.unwrap_or(base.density),
-            voices: self.voices.unwrap_or(base.voices),
-            spacing: self.spacing.unwrap_or(base.spacing),
-            drift: self.drift.unwrap_or(base.drift),
-            reach: self.reach.unwrap_or(base.reach),
-            hold: self.hold.unwrap_or(base.hold),
-            settle: self.settle.unwrap_or(base.settle),
-            voicing: self.voicing.unwrap_or(base.voicing),
-            articulation: self.articulation.unwrap_or(base.articulation),
-            consonants: self.consonants.unwrap_or(base.consonants),
-        }
-        .sane()
-    }
 }
 
 /// Query string of `POST /api/recordings`.
@@ -394,41 +338,6 @@ pub async fn speaker_corners(
     }))
 }
 
-/// One control the UI should offer, as the browser sees it.
-///
-/// A wire type rather than `utterance_mapping::params::Knob` re-exported, for the
-/// same reason `ScaleDegree` is one: the mapping crate carries no serialisation
-/// for a UI. The numbers are copied straight from the knob table, so the two
-/// cannot disagree about what a slider may offer.
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "camelCase")]
-pub struct Knob {
-    /// Query-parameter name. Sent back on a render exactly as it arrives here.
-    pub name: String,
-    pub label: String,
-    pub min: f32,
-    pub max: f32,
-    pub step: f32,
-    pub default: f32,
-    pub about: String,
-    /// Mappings this knob reaches. Empty means every one of them.
-    ///
-    /// Sent so the UI can put away a control the mapping being played does not
-    /// read. A slider that moves and changes nothing is the failure this whole
-    /// table exists to prevent, and one belonging to another mapping is that
-    /// failure with a longer explanation.
-    pub mappings: Vec<Mapping>,
-    /// Whether to offer this one before anybody asks for it.
-    ///
-    /// Sent so the UI can show a handful of controls rather than all ten at
-    /// equal weight. Which handful is a fact about the mapping — see
-    /// `utterance_mapping::params::Knob::primary` for the rule — so it travels
-    /// with the knob rather than being decided again in the browser.
-    pub primary: bool,
-}
-
 /// One mapping a render may ask for, described well enough to be offered.
 ///
 /// A wire type over [`Mapping`] rather than the enum alone, because a UI needs
@@ -468,20 +377,8 @@ pub struct Controls {
 /// offering values the mapping clamps away.
 pub async fn controls() -> Json<Controls> {
     Json(Controls {
-        knobs: utterance_mapping::params::KNOBS
-            .iter()
-            .map(|k| Knob {
-                name: k.name.to_string(),
-                label: k.label.to_string(),
-                min: k.min,
-                max: k.max,
-                step: k.step,
-                default: k.default,
-                about: k.about.to_string(),
-                mappings: k.mappings.to_vec(),
-                primary: k.primary,
-            })
-            .collect(),
+        // Forwarded, not copied. The table is the wire shape.
+        knobs: utterance_mapping::params::KNOBS.to_vec(),
         mappings: Mapping::ALL
             .iter()
             .map(|m| MappingChoice {
@@ -498,8 +395,9 @@ pub async fn controls() -> Json<Controls> {
 pub async fn voice_summary(
     State(app): State<AppState>,
     Query(params): Query<VoiceParams>,
+    Query(query): Query<KnobQuery>,
 ) -> Result<Json<VoiceSummary>, AppError> {
-    let knobs = params.params();
+    let knobs = query.params();
     // Before any work, and before the render would reach the same verdict. The
     // summary and the render have to agree about what was asked for, so a name
     // this refuses there cannot quietly succeed here.
@@ -593,8 +491,9 @@ pub async fn score(
     State(app): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<VoiceParams>,
+    Query(query): Query<KnobQuery>,
 ) -> Result<Json<ScoreView>, AppError> {
-    let (score, tuning) = build_score(&app, &id, &params)?;
+    let (score, tuning) = build_score(&app, &id, &params, &query)?;
 
     let (colour, breath, level, voices, gains, step_s) = match &score.field {
         Some(field) => {
@@ -690,9 +589,10 @@ pub async fn render(
     State(app): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<VoiceParams>,
+    Query(query): Query<KnobQuery>,
     headers: axum::http::HeaderMap,
 ) -> Result<Response, AppError> {
-    let (score, tuning) = build_score(&app, &id, &params)?;
+    let (score, tuning) = build_score(&app, &id, &params, &query)?;
     tracing::info!(
         "rendered {} as {} notes, {} consonants and {} field voices in a {}-degree scale",
         id,
@@ -720,6 +620,7 @@ fn build_score(
     app: &AppState,
     id: &str,
     params: &VoiceParams,
+    query: &KnobQuery,
 ) -> Result<
     (
         utterance_mapping::score::Score,
@@ -727,7 +628,7 @@ fn build_score(
     ),
     AppError,
 > {
-    let knobs = params.params();
+    let knobs = query.params();
     let calibrated =
         voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
     let voiceprint = app.store.voiceprint(id)?;

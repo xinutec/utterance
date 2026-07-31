@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { Knob } from "../../models";
+import type { Knob, KnobName } from "../../models";
 import { INITIAL_SETTINGS, withKnob, type MappingSettings } from "../studio/mapping-settings";
 import { differences } from "./compare-settings";
 
-const knob = (name: string, label: string, def: number): Knob => ({
+const knob = (name: KnobName, label: string, def: number): Knob => ({
   name,
   label,
   min: 0,

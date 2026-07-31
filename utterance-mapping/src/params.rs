@@ -15,6 +15,8 @@
 //! Defaults reproduce what the mapping did before it was parameterised, so
 //! taking none of them changes nothing.
 
+use serde::{Deserialize, Serialize};
+
 use crate::mapping::{CONTINUOUS, Mapping};
 use crate::tuning::{Degree, Tuning};
 
@@ -28,10 +30,22 @@ use crate::tuning::{Degree, Tuning};
 /// change. Declared once here, `Params::default`, `Params::sane` and the
 /// controls in the UI cannot disagree, and a knob added to this table appears
 /// in the UI without anyone editing the UI.
-#[derive(Clone, Copy, Debug)]
+///
+/// **This is the wire type as well.** `routes::api` used to hold a second
+/// `Knob`, field for field, differing only in `String` where this has
+/// `&'static str`, plus the loop in `controls` that copied one into the other.
+/// The stated reason was that the mapping crate carries no serialisation for a
+/// UI — true of a `Score`, which the API projects on the way out, and not true
+/// of this, which the API forwards unchanged. A copy that is required to be
+/// identical is not an abstraction boundary; it is a second place to forget.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "camelCase")]
 pub struct Knob {
-    /// Query-parameter name, which is also the field name on `Params`.
-    pub name: &'static str,
+    /// Which knob this is. Its `name` is the query parameter and the
+    /// `Params` field alike.
+    pub name: KnobName,
     /// What to call it in front of a person.
     pub label: &'static str,
     pub min: f32,
@@ -102,178 +116,224 @@ impl Knob {
     }
 }
 
-pub const BIND: Knob = Knob {
-    name: "bind",
-    label: "Bind to the voice",
-    min: 0.0,
-    max: 1.0,
-    step: 0.05,
-    default: 1.0,
-    about: "At 1 the notes are exactly where this voice's spectrum puts them. \
-            At 0 they snap to the twelve everyone else uses.",
-    mappings: &[],
-    primary: true,
-};
-
-pub const DENSITY: Knob = Knob {
-    name: "density",
-    label: "Scale density",
-    min: 0.0005,
-    max: 0.5,
-    step: 0.002,
-    default: crate::tuning::MIN_DEPTH,
-    about: "How firm a note has to be to count. Low gives a crowded microtonal \
-            set, high gives a handful of very stable intervals.",
-    mappings: &[],
-    primary: true,
-};
-
-pub const VOICES: Knob = Knob {
-    name: "voices",
-    label: "Voices",
-    min: 1.0,
-    max: 12.0,
-    step: 1.0,
-    default: 5.0,
-    about: "How many tones sound at once.",
-    mappings: CONTINUOUS,
-    primary: true,
-};
-
-pub const SPACING: Knob = Knob {
-    name: "spacing",
-    label: "Spacing",
-    min: 1.0,
-    max: 6.0,
-    step: 1.0,
-    default: 2.0,
-    about: "How far apart the voices sit. Scale degrees between one and the \
-            next in the field mapping, least air between them in the Tonnetz. \
-            1 is a cluster, higher is an open chord.",
-    mappings: CONTINUOUS,
-    primary: true,
-};
-
-pub const DRIFT: Knob = Knob {
-    name: "drift",
-    label: "Follow the pitch",
-    min: 0.0,
-    max: 2.0,
-    step: 0.05,
-    default: 0.25,
-    about: "How far the music transposes with the speaker's pitch. At 0 it sits \
-            still; near 1 it reads as a parallel melody.",
-    mappings: CONTINUOUS,
-    primary: false,
-};
-
-pub const REACH: Knob = Knob {
-    name: "reach",
-    label: "Follow the vowel",
-    min: 0.0,
-    max: 3.0,
-    step: 0.05,
-    default: 1.0,
-    about: "How far the vowel moves the harmony: octaves the root travels in \
-            the field mapping, cells of lattice crossed in the Tonnetz. This is \
-            the articulation showing up as harmony.",
-    mappings: CONTINUOUS,
-    primary: false,
-};
-
-pub const VOICING: Knob = Knob {
-    name: "voicing",
-    label: "Voicing",
-    min: 0.0,
-    max: 1.0,
-    step: 0.05,
-    default: 0.5,
-    about: "How much the shape of the mouth shows up in the chord. Lip rounding \
-            and tongue position move the third formant while leaving the vowel \
-            where it is: that opens or clusters the stack in the field mapping, \
-            and tips the weight between the chord's top and bottom in the \
-            Tonnetz.",
-    mappings: CONTINUOUS,
-    primary: false,
-};
-
-pub const ARTICULATION: Knob = Knob {
-    name: "articulation",
-    label: "Articulation",
-    min: 0.0,
-    max: 1.5,
-    step: 0.05,
-    default: 0.4,
-    about: "How much a moving mouth stirs the texture. A held vowel settles, a \
-            busy passage opens the upper voices — rhythm from how fast the \
-            spectrum is changing, without cutting anything into notes.",
-    mappings: CONTINUOUS,
-    primary: false,
-};
-
-pub const CONSONANTS: Knob = Knob {
-    name: "consonants",
-    label: "Consonants",
-    min: 0.0,
-    max: 2.0,
-    step: 0.05,
-    default: 1.0,
-    about: "How loud the unpitched material is against the tones. At 0 they are \
-            silent.",
-    mappings: &[],
-    primary: false,
-};
-
-pub const HOLD: Knob = Knob {
-    name: "hold",
-    label: "Hold the harmony",
-    min: 0.0,
-    max: 1.0,
-    step: 0.05,
-    default: 0.35,
-    about: "How far the mouth must move past a boundary before the chord \
-            changes. At 0 the harmony follows every wobble; higher makes it \
-            commit, so a chord rings long enough to hear what it is tuned to.",
-    mappings: &[Mapping::Tonnetz],
-    primary: true,
-};
-
-pub const SETTLE: Knob = Knob {
-    name: "settle",
-    label: "Settle",
-    min: 0.0,
-    max: 0.5,
-    step: 0.01,
-    default: 0.0,
-    about: "How long the mouth must stay in its new place before the chord \
-            follows, in seconds. At 0 it follows the moment it is allowed to; \
-            higher ignores a mouth that crosses a boundary and comes straight \
-            back.",
-    mappings: &[Mapping::Tonnetz],
-    primary: false,
-};
-
-/// Every knob, in the order a person should meet them.
+/// A value a knob can hold.
 ///
-/// Ordered by how much each one changes what you hear, so someone exploring
-/// from the top down hears something different at each step.
-pub const KNOBS: [Knob; 11] = [
-    BIND,
-    DENSITY,
-    VOICES,
-    SPACING,
-    DRIFT,
-    REACH,
-    HOLD,
-    SETTLE,
-    VOICING,
-    ARTICULATION,
-    CONSONANTS,
-];
+/// The knob table speaks `f32` — a slider's range is a range of numbers — while
+/// two of the fields it sets count things and are `usize`. Without this the
+/// conversion was written out at each site and written *differently*: `with`
+/// rounded, on the stated grounds that a slider stopping just under an integer
+/// should not silently mean the integer below, while `default` and `sane` cast,
+/// which truncates. One rule here, applied everywhere the macro generates.
+pub trait KnobValue: Copy {
+    fn from_knob(value: f32) -> Self;
+    fn to_knob(self) -> f32;
+}
 
-/// How the voice binds, and what it drives.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Params {
+impl KnobValue for f32 {
+    fn from_knob(value: f32) -> Self {
+        value
+    }
+    fn to_knob(self) -> f32 {
+        self
+    }
+}
+
+impl KnobValue for usize {
+    /// Rounded, not truncated: these count things, and a slider stopping just
+    /// under an integer would otherwise mean the one below it.
+    fn from_knob(value: f32) -> Self {
+        value.round().max(0.0) as usize
+    }
+    fn to_knob(self) -> f32 {
+        self as f32
+    }
+}
+
+/// Declare the knobs once.
+///
+/// **Why this is a macro and the alternative was not sustainable.** Every knob
+/// used to be written seven times: the `Knob` const, the `Params` field, the
+/// entry in `Default`, the clamp in `sane`, the arm in `with`, the query field
+/// on the route's `VoiceParams`, and the line in `VoiceParams::params`. Three of
+/// those seven the compiler did not check — the const, the `with` arm and the
+/// query field — because none of them is an exhaustive struct literal. What that
+/// bought was a knob published to the browser, drawn as a slider, and connected
+/// to nothing: the query field was missing, so the value never reached `Params`.
+/// A test caught that class, which is to say it was caught after being written
+/// rather than instead.
+///
+/// So one declaration generates all seven, and adding a knob is adding a line.
+/// The cost is honest and worth naming: fields declared here do not answer to
+/// grep, and jumping to `Params::bind` lands on this macro rather than on a
+/// field. At eleven knobs across seven sites that trade is clearly right; at
+/// three knobs it would not have been.
+///
+/// [`KnobName`] is generated too, which is what makes `with` total — it had a
+/// `panic!` for a name no knob has, the only one left in library code.
+macro_rules! knobs {
+    ($(
+        $(#[$field_doc:meta])*
+        $variant:ident $name:ident: $ty:ty = {
+            label: $label:expr,
+            min: $min:expr,
+            max: $max:expr,
+            step: $step:expr,
+            default: $default:expr,
+            about: $about:expr,
+            mappings: $mappings:expr,
+            primary: $primary:expr,
+        }
+    )*) => {
+        /// Which knob, as a value.
+        ///
+        /// Generated beside the table, so a name that is not a knob cannot be
+        /// spoken. It reaches the browser through `Knob::name`, so the settings
+        /// a listener shares are keyed by a union rather than by `string`.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+        #[cfg_attr(feature = "ts", ts(export))]
+        #[serde(rename_all = "lowercase")]
+        pub enum KnobName {
+            $( #[doc = $label] $variant, )*
+        }
+
+        impl KnobName {
+            /// The wire spelling, which is also the `Params` field name.
+            ///
+            /// From `stringify!` on the field itself rather than restated, so
+            /// this cannot drift from what it names. Serde lowercases the
+            /// variant to the same string, and `name_round_trips_through_serde`
+            /// in `tests/params.rs` holds the two together.
+            pub fn name(self) -> &'static str {
+                match self {
+                    $( KnobName::$variant => stringify!($name), )*
+                }
+            }
+
+            /// The wire spelling read back, or `None` for a name no knob has.
+            pub fn from_name(name: &str) -> Option<Self> {
+                use serde::de::value::StrDeserializer;
+                use serde::Deserialize;
+                Self::deserialize(StrDeserializer::<serde::de::value::Error>::new(name)).ok()
+            }
+        }
+
+        impl std::fmt::Display for KnobName {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(self.name())
+            }
+        }
+
+        $(
+            #[doc = $about]
+            pub const $variant: Knob = Knob {
+                name: KnobName::$variant,
+                label: $label,
+                min: $min,
+                max: $max,
+                step: $step,
+                default: $default,
+                about: $about,
+                mappings: $mappings,
+                primary: $primary,
+            };
+        )*
+
+        /// Every knob, in the order a person should meet them.
+        ///
+        /// Ordered by how much each one changes what you hear, so someone
+        /// exploring from the top down hears something different at each step.
+        /// A slice rather than a sized array: the length used to be written by
+        /// hand beside the list, and it is not a fact anybody should have to
+        /// maintain.
+        pub const KNOBS: &[Knob] = &[ $( $variant, )* ];
+
+        /// How the voice binds, and what it drives.
+        #[derive(Clone, Copy, Debug, PartialEq)]
+        pub struct Params {
+            $( $(#[$field_doc])* pub $name: $ty, )*
+        }
+
+        impl Default for Params {
+            fn default() -> Self {
+                Params { $( $name: <$ty as KnobValue>::from_knob($variant.default), )* }
+            }
+        }
+
+        impl Params {
+            /// Clamp everything into a range that produces sound rather than an
+            /// error.
+            ///
+            /// Called once where the values arrive rather than checked at each
+            /// use: a knob that arrives out of range is someone exploring, not a
+            /// bug, and the useful response is the nearest thing that works.
+            pub fn sane(self) -> Self {
+                Params {
+                    $( $name: <$ty as KnobValue>::from_knob(
+                        $variant.clamped(self.$name.to_knob())
+                    ), )*
+                }
+            }
+
+            /// The same parameters with one knob moved, chosen by name.
+            ///
+            /// The table promises that a knob's name is the field it sets, and
+            /// this is what acts on the promise — so a sweep, a test or the
+            /// route can set a knob generically instead of keeping its own copy
+            /// of the mapping from name to field.
+            ///
+            /// Total, since [`KnobName`] cannot name a knob that does not exist.
+            /// It used to take a `&str` and `panic!` on anything unrecognised,
+            /// because the alternative was returning the parameters unchanged —
+            /// a silent no-op that reports a knob as doing nothing when what
+            /// happened is that nobody set it.
+            pub fn with(self, knob: KnobName, value: f32) -> Self {
+                match knob {
+                    $( KnobName::$variant => Params {
+                        $name: <$ty as KnobValue>::from_knob($variant.clamped(value)),
+                        ..self
+                    }, )*
+                }
+            }
+
+            /// What this knob is currently set to, on the table's `f32` scale.
+            pub fn get(&self, knob: KnobName) -> f32 {
+                match knob {
+                    $( KnobName::$variant => self.$name.to_knob(), )*
+                }
+            }
+        }
+
+        /// The knobs as a query string accepts them: each one absent or given.
+        ///
+        /// Generated from the same list as `Params`, which is the whole point.
+        /// This was eleven hand-written `Option` fields on the route's
+        /// `VoiceParams` plus eleven `unwrap_or` lines beside them, and nothing
+        /// but a test tied either list to the knob table.
+        ///
+        /// Its own extractor rather than part of `VoiceParams`, because
+        /// `serde_urlencoded` cannot flatten: a nested struct would have to be
+        /// deserialised through `deserialize_any`, and every value in a query
+        /// string is a string, so the numbers would not parse.
+        #[derive(Debug, Default, Deserialize)]
+        pub struct KnobQuery {
+            $( #[serde(default)] pub $name: Option<f32>, )*
+        }
+
+        impl KnobQuery {
+            /// The knobs, defaulted where the caller said nothing, then clamped.
+            pub fn params(&self) -> Params {
+                let mut params = Params::default();
+                $( if let Some(value) = self.$name {
+                    params = params.with(KnobName::$variant, value);
+                } )*
+                params.sane()
+            }
+        }
+    };
+}
+
+knobs! {
     /// How far the speaker's own scale is used, 0..1.
     ///
     /// **The convention-to-speaker axis**, and the longest-standing open
@@ -284,37 +344,116 @@ pub struct Params {
     /// The reason it exists rather than being decided: nobody knows where on
     /// this axis the music is, and it is not a thing anyone can settle by
     /// argument. It converts a question into something you listen to.
-    pub bind: f32,
+    BIND bind: f32 = {
+        label: "Bind to the voice",
+        min: 0.0,
+        max: 1.0,
+        step: 0.05,
+        default: 1.0,
+        about: "At 1 the notes are exactly where this voice's spectrum puts them. \
+                At 0 they snap to the twelve everyone else uses.",
+        mappings: &[],
+        primary: true,
+    }
+
     /// How deep a dip in the roughness curve must be to count as a note.
     ///
     /// Raise it for a handful of very stable intervals, lower it for a dense
     /// microtonal set. The same speaker's *ah* gave eight degrees and their *ee*
     /// gave three, and part of that spread is this number rather than the voice.
-    pub density: f32,
+    DENSITY density: f32 = {
+        label: "Scale density",
+        min: 0.0005,
+        max: 0.5,
+        step: 0.002,
+        default: crate::tuning::MIN_DEPTH,
+        about: "How firm a note has to be to count. Low gives a crowded microtonal \
+                set, high gives a handful of very stable intervals.",
+        mappings: &[],
+        primary: true,
+    }
+
     /// How many voices sound at once in the field mapping.
-    pub voices: usize,
+    VOICES voices: usize = {
+        label: "Voices",
+        min: 1.0,
+        max: 12.0,
+        step: 1.0,
+        default: 5.0,
+        about: "How many tones sound at once.",
+        mappings: CONTINUOUS,
+        primary: true,
+    }
+
     /// Scale degrees between one field voice and the next.
-    pub spacing: usize,
+    SPACING spacing: usize = {
+        label: "Spacing",
+        min: 1.0,
+        max: 6.0,
+        step: 1.0,
+        default: 2.0,
+        about: "How far apart the voices sit. Scale degrees between one and the \
+                next in the field mapping, least air between them in the Tonnetz. \
+                1 is a cluster, higher is an open chord.",
+        mappings: CONTINUOUS,
+        primary: true,
+    }
+
     /// Octaves the whole field transposes across the speaker's pitch range.
     ///
     /// At 0 the prosody is discarded and the field sits still; at 1 it follows
     /// the speaker's pitch closely enough to read as a parallel melody, which is
     /// the naive mapping this project exists to avoid. The default is deliberately
     /// nearer the first.
-    pub drift: f32,
+    DRIFT drift: f32 = {
+        label: "Follow the pitch",
+        min: 0.0,
+        max: 2.0,
+        step: 0.05,
+        default: 0.25,
+        about: "How far the music transposes with the speaker's pitch. At 0 it sits \
+                still; near 1 it reads as a parallel melody.",
+        mappings: CONTINUOUS,
+        primary: false,
+    }
+
     /// How far the vowel moves the harmony.
     ///
     /// Octaves the root travels front to back in the field mapping; cells of
     /// lattice crossed in the Tonnetz one. The same quantity read onto two
     /// geometries, which is why it is one knob rather than two.
-    pub reach: f32,
+    REACH reach: f32 = {
+        label: "Follow the vowel",
+        min: 0.0,
+        max: 3.0,
+        step: 0.05,
+        default: 1.0,
+        about: "How far the vowel moves the harmony: octaves the root travels in \
+                the field mapping, cells of lattice crossed in the Tonnetz. This is \
+                the articulation showing up as harmony.",
+        mappings: CONTINUOUS,
+        primary: false,
+    }
+
     /// How far past a boundary the mouth must go before the harmony follows.
     ///
     /// Read only by the mappings that quantise their harmony, which today means
     /// the Tonnetz. It is the knob that decides whether a chord rings — and so
     /// the one that decides whether the derived tuning can be heard at all, the
     /// oldest open question in `docs/roadmap.md`.
-    pub hold: f32,
+    HOLD hold: f32 = {
+        label: "Hold the harmony",
+        min: 0.0,
+        max: 1.0,
+        step: 0.05,
+        default: 0.35,
+        about: "How far the mouth must move past a boundary before the chord \
+                changes. At 0 the harmony follows every wobble; higher makes it \
+                commit, so a chord rings long enough to hear what it is tuned to.",
+        mappings: &[Mapping::Tonnetz],
+        primary: true,
+    }
+
     /// How long the mouth must stay away before the harmony follows, in seconds.
     ///
     /// The other half of [`Self::hold`], and the half that reaches an artifact
@@ -327,135 +466,74 @@ pub struct Params {
     /// In seconds rather than frames because the frame rate is an analysis
     /// detail, and a knob whose meaning moved with the hop size would be a
     /// different knob on a different recording.
-    pub settle: f32,
+    SETTLE settle: f32 = {
+        label: "Settle",
+        min: 0.0,
+        max: 0.5,
+        step: 0.01,
+        default: 0.0,
+        about: "How long the mouth must stay in its new place before the chord \
+                follows, in seconds. At 0 it follows the moment it is allowed to; \
+                higher ignores a mouth that crosses a boundary and comes straight \
+                back.",
+        mappings: &[Mapping::Tonnetz],
+        primary: false,
+    }
+
     /// How far the third formant opens or clusters the chord.
     ///
     /// The dimension of articulation the vowel chart cannot see. F1 and F2 place
     /// a vowel; F3 separates mouth shapes that share a place — rounded from
     /// spread, retroflex from not — and it moves while the other two hold still.
     /// At 0 the voices are evenly stacked whatever the mouth is doing.
-    pub voicing: f32,
+    VOICING voicing: f32 = {
+        label: "Voicing",
+        min: 0.0,
+        max: 1.0,
+        step: 0.05,
+        default: 0.5,
+        about: "How much the shape of the mouth shows up in the chord. Lip rounding \
+                and tongue position move the third formant while leaving the vowel \
+                where it is: that opens or clusters the stack in the field mapping, \
+                and tips the weight between the chord's top and bottom in the \
+                Tonnetz.",
+        mappings: CONTINUOUS,
+        primary: false,
+    }
+
     /// How much the rate of spectral change stirs the texture.
     ///
     /// The field's only answer to rhythm that does not involve cutting anything
     /// into notes. Spectral flux says *the sound is changing now* without
     /// claiming a syllable began — which is exactly the weakness that makes it
     /// a bad onset detector and a good continuous stream.
-    pub articulation: f32,
+    ARTICULATION articulation: f32 = {
+        label: "Articulation",
+        min: 0.0,
+        max: 1.5,
+        step: 0.05,
+        default: 0.4,
+        about: "How much a moving mouth stirs the texture. A held vowel settles, a \
+                busy passage opens the upper voices — rhythm from how fast the \
+                spectrum is changing, without cutting anything into notes.",
+        mappings: CONTINUOUS,
+        primary: false,
+    }
+
     /// How loud the consonants are against the pitched material, 0..1.
     ///
     /// At 0 they are silent, which is what every version of this project did
     /// before they were measured at all.
-    pub consonants: f32,
-}
-
-impl Default for Params {
-    fn default() -> Self {
-        Params {
-            bind: BIND.default,
-            density: DENSITY.default,
-            voices: VOICES.default as usize,
-            spacing: SPACING.default as usize,
-            drift: DRIFT.default,
-            reach: REACH.default,
-            hold: HOLD.default,
-            settle: SETTLE.default,
-            voicing: VOICING.default,
-            articulation: ARTICULATION.default,
-            consonants: CONSONANTS.default,
-        }
-    }
-}
-
-impl Params {
-    /// Clamp everything into a range that produces sound rather than an error.
-    ///
-    /// Called once where the values arrive rather than checked at each use: a
-    /// knob that arrives out of range is someone exploring, not a bug, and the
-    /// useful response is the nearest thing that works.
-    pub fn sane(self) -> Self {
-        Params {
-            bind: BIND.clamped(self.bind),
-            density: DENSITY.clamped(self.density),
-            voices: VOICES.clamped(self.voices as f32) as usize,
-            spacing: SPACING.clamped(self.spacing as f32) as usize,
-            drift: DRIFT.clamped(self.drift),
-            reach: REACH.clamped(self.reach),
-            hold: HOLD.clamped(self.hold),
-            settle: SETTLE.clamped(self.settle),
-            voicing: VOICING.clamped(self.voicing),
-            articulation: ARTICULATION.clamped(self.articulation),
-            consonants: CONSONANTS.clamped(self.consonants),
-        }
-    }
-
-    /// The same parameters with one knob moved, chosen by name.
-    ///
-    /// The table promises that a knob's `name` is the field it sets, and until
-    /// now nothing could act on that promise: the HTTP route spells out all ten
-    /// by hand, so anything else wanting to sweep the knobs generically — a
-    /// measurement, a test — had to keep its own copy of the mapping from name
-    /// to field. A second copy of the knob table is the thing this module
-    /// exists to prevent.
-    ///
-    /// **Panics on a name that is not in [`KNOBS`]**, deliberately. The
-    /// alternative is returning the parameters unchanged, which is a silent
-    /// no-op — a sweep that reports a knob as doing nothing when what actually
-    /// happened is that nobody set it. `every_knob_can_be_set_by_its_own_name`
-    /// walks the table so a knob added without a line here fails a test rather
-    /// than a listener.
-    pub fn with(self, knob: &Knob, value: f32) -> Self {
-        let value = knob.clamped(value);
-        match knob.name {
-            "bind" => Params {
-                bind: value,
-                ..self
-            },
-            "density" => Params {
-                density: value,
-                ..self
-            },
-            // Rounded rather than truncated: these count things, and a slider
-            // stopping just under an integer would otherwise silently mean the
-            // one below.
-            "voices" => Params {
-                voices: value.round() as usize,
-                ..self
-            },
-            "spacing" => Params {
-                spacing: value.round() as usize,
-                ..self
-            },
-            "drift" => Params {
-                drift: value,
-                ..self
-            },
-            "reach" => Params {
-                reach: value,
-                ..self
-            },
-            "hold" => Params {
-                hold: value,
-                ..self
-            },
-            "settle" => Params {
-                settle: value,
-                ..self
-            },
-            "voicing" => Params {
-                voicing: value,
-                ..self
-            },
-            "articulation" => Params {
-                articulation: value,
-                ..self
-            },
-            "consonants" => Params {
-                consonants: value,
-                ..self
-            },
-            other => panic!("no such knob: {other}"),
-        }
+    CONSONANTS consonants: f32 = {
+        label: "Consonants",
+        min: 0.0,
+        max: 2.0,
+        step: 0.05,
+        default: 1.0,
+        about: "How loud the unpitched material is against the tones. At 0 they are \
+                silent.",
+        mappings: &[],
+        primary: false,
     }
 }
 

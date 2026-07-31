@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Knob, MappingChoice } from "../../models";
+import type { Knob, KnobName, MappingChoice } from "../../models";
 import {
   INITIAL_SETTINGS,
   knobValue,
@@ -10,7 +10,7 @@ import {
   type MappingSettings,
 } from "./mapping-settings";
 
-const knob = (name: string, value: number): Knob => ({
+const knob = (name: KnobName, value: number): Knob => ({
   name,
   label: name,
   min: 0,

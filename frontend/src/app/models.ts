@@ -15,6 +15,7 @@ export type { Events } from "./generated/Events";
 export type { Formants } from "./generated/Formants";
 export type { FrameGrid } from "./generated/FrameGrid";
 export type { Knob } from "./generated/Knob";
+export type { KnobName } from "./generated/KnobName";
 export type { Mapping } from "./generated/Mapping";
 export type { MappingChoice } from "./generated/MappingChoice";
 export type { Material } from "./generated/Material";

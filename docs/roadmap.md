@@ -484,6 +484,28 @@ source, plus the one that most shapes daily work.
     string; `parseSettings` now drops what the backend did not publish, which is
     what its comment had claimed all along.
 
+  - **A knob is declared once** (2026-07-31). `knobs!` in
+    `utterance-mapping/src/params.rs` generates the `Knob` const, the `Params`
+    field, `Default`, `sane`, `with`, `KnobName`, and the `KnobQuery` the route
+    deserialises. Each of those was written by hand, so `reach` appeared seven
+    times; three of the seven — the const, the `with` arm and the route's query
+    field — were not exhaustive struct literals and so were checked by no
+    compiler, only by a test. What that arrangement bought was a knob published
+    to the browser, drawn as a slider, and wired to nothing.
+
+    `params::Knob` is now the wire type as well. `routes::api` held a second
+    `Knob`, field for field, differing only in `String` where the table has
+    `&'static str`, plus the loop that copied one into the other — justified at
+    the time by the rule that the mapping crate carries no serialisation for a
+    UI. That rule is right for a `Score`, which the API projects on the way out,
+    and wrong for a type the API forwards unchanged.
+
+    Two things fell out. `with` is total, so the last `panic!` in library code
+    is gone — `KnobName` cannot name a knob that does not exist. And the `f32`
+    the table speaks converts to the `usize` two fields hold through one
+    `KnobValue` impl, where it had been written three times and *differently*:
+    `with` rounded and `default`/`sane` truncated.
+
   - **Error codes are an enum, and the browser reads the list** (2026-07-31).
     `ErrorCode` in `src/error.rs` is the whole set — the API's nine and
     `webauth`'s five, which were separate lists of literals — and `ErrorBody`

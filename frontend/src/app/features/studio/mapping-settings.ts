@@ -7,7 +7,7 @@
  * hands over a link rather than a description.
  */
 
-import type { Knob, Mapping, MappingChoice } from "../../models";
+import type { Knob, KnobName, Mapping, MappingChoice } from "../../models";
 
 /** Every choice a render depends on, beyond which take is being rendered. */
 export interface MappingSettings {
@@ -29,8 +29,13 @@ export interface MappingSettings {
    * and, more usefully, keeps it honest: a link with nothing but `bind=0` in it
    * says exactly what was changed, where a link carrying all seven values makes
    * the interesting one impossible to spot.
+   *
+   * `Partial<Record<KnobName, …>>` rather than `Record<string, …>`: the names
+   * are generated from the Rust knob table, so a key this backend never
+   * published cannot be written here. Partial because absent means *at its
+   * default*, which is the whole point of the shape.
    */
-  readonly knobs: Readonly<Record<string, number>>;
+  readonly knobs: Readonly<Partial<Record<KnobName, number>>>;
 }
 
 /** Where a listener starts: the default mapping, the backend's calibration. */
@@ -91,7 +96,7 @@ export function parseSettings(
     .map((name) => name.trim())
     .filter((name): name is Mapping => served.has(name));
 
-  const chosen: Record<string, number> = {};
+  const chosen: Partial<Record<KnobName, number>> = {};
   for (const knob of knobs) {
     const raw = params.get(knob.name);
     if (raw === null) continue;
