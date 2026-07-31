@@ -14,6 +14,7 @@ use crate::error::AppError;
 use crate::state::AppState;
 use crate::store::{RecordingMeta, Role};
 use crate::voice;
+use utterance_mapping::mapping::{Mapping, Material};
 use utterance_mapping::params::Params;
 
 /// Serve audio so a browser can seek in it.
@@ -83,48 +84,6 @@ fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
 
     (start <= end && start < total).then_some((start, end))
 }
-
-/// The mappings a render may ask for.
-///
-/// Name, label, the material it makes, and what it does — in one table because
-/// the render route validates against it and the UI offers it, and a UI listing
-/// a mapping the route rejects is worse than no UI at all. Adding a mapping
-/// means adding a row and a branch in `build_score`, and the compiler will not
-/// remind you about the second.
-///
-/// **The third column is what a mapping competes for.** A score carries one
-/// continuous field and one list of events, so two mappings making the same
-/// material cannot both be heard — asking for both is refused rather than
-/// silently resolved, since whichever lost would be a mapping someone asked for
-/// and did not hear. Naming the material here rather than writing the clash out
-/// as a rule means a fourth mapping inherits the answer.
-const MAPPINGS: [(&str, &str, &str, &str); 3] = [
-    (
-        "field",
-        "Field",
-        TEXTURE,
-        "Every frame sounds. A continuous texture that moves with the voice \
-         rather than a sequence of notes.",
-    ),
-    (
-        "tonnetz",
-        "Lattice",
-        TEXTURE,
-        "The same texture, with the vowel walking a harmonic lattice built from \
-         the speaker's own consonances. Chords hold while the mouth holds, and \
-         change by keeping two voices and stepping one.",
-    ),
-    (
-        "notes",
-        "Notes",
-        "events",
-        "Discrete events at onsets. Closer to a melody, and the weaker of the \
-         two — kept because comparing them is how either gets judged.",
-    ),
-];
-
-/// The continuously sounding material. Named because two mappings make it.
-const TEXTURE: &str = "texture";
 
 /// Query string of the endpoints that need a speaker's musical world.
 #[derive(Debug, Deserialize)]
@@ -460,7 +419,7 @@ pub struct Knob {
     /// read. A slider that moves and changes nothing is the failure this whole
     /// table exists to prevent, and one belonging to another mapping is that
     /// failure with a longer explanation.
-    pub mappings: Vec<String>,
+    pub mappings: Vec<Mapping>,
     /// Whether to offer this one before anybody asks for it.
     ///
     /// Sent so the UI can show a handful of controls rather than all ten at
@@ -470,19 +429,24 @@ pub struct Knob {
     pub primary: bool,
 }
 
-/// One mapping a render may ask for.
+/// One mapping a render may ask for, described well enough to be offered.
+///
+/// A wire type over [`Mapping`] rather than the enum alone, because a UI needs
+/// the label and the blurb beside the name and a bare variant carries neither.
+/// The name itself is the enum, so the browser reads `"field" | "tonnetz" |
+/// "notes"` and a mapping this backend does not serve cannot be named there.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct MappingChoice {
-    pub name: String,
+    pub name: Mapping,
     pub label: String,
     /// The material this mapping makes. Two of a kind cannot sound together.
     ///
     /// Sent so the UI can turn one off when the other is chosen, rather than
     /// letting someone select a combination the render route refuses.
-    pub makes: String,
+    pub makes: Material,
     pub about: String,
 }
 
@@ -514,17 +478,17 @@ pub async fn controls() -> Json<Controls> {
                 step: k.step,
                 default: k.default,
                 about: k.about.to_string(),
-                mappings: k.mappings.iter().map(|m| (*m).to_string()).collect(),
+                mappings: k.mappings.to_vec(),
                 primary: k.primary,
             })
             .collect(),
-        mappings: MAPPINGS
+        mappings: Mapping::ALL
             .iter()
-            .map(|(name, label, makes, about)| MappingChoice {
-                name: (*name).to_string(),
-                label: (*label).to_string(),
-                makes: (*makes).to_string(),
-                about: (*about).to_string(),
+            .map(|m| MappingChoice {
+                name: *m,
+                label: m.label().to_string(),
+                makes: m.makes(),
+                about: m.about().to_string(),
             })
             .collect(),
     })
@@ -536,6 +500,10 @@ pub async fn voice_summary(
     Query(params): Query<VoiceParams>,
 ) -> Result<Json<VoiceSummary>, AppError> {
     let knobs = params.params();
+    // Before any work, and before the render would reach the same verdict. The
+    // summary and the render have to agree about what was asked for, so a name
+    // this refuses there cannot quietly succeed here.
+    let chosen = chosen_mappings(&params)?;
     let calibrated =
         voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
 
@@ -569,7 +537,7 @@ pub async fn voice_summary(
         // the knob is. Asking of the bound scale would refuse settings that play
         // perfectly well, and explain the refusal by naming a knob that is not
         // the cause.
-        refusal: refusal(&calibrated.voice.tuning, &mapping_names(&params)),
+        refusal: refusal(&calibrated.voice.tuning, &chosen),
     }))
 }
 
@@ -764,33 +732,20 @@ fn build_score(
         voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
     let voiceprint = app.store.voiceprint(id)?;
 
-    let names = mapping_names(params);
-    if let Some(unknown) = names
-        .iter()
-        .find(|n| !MAPPINGS.iter().any(|(known, ..)| known == *n))
-    {
-        let known: Vec<&str> = MAPPINGS.iter().map(|(name, ..)| *name).collect();
-        return Err(AppError::BadRequest(format!(
-            "no mapping called {unknown} — try {}, or several at once",
-            known.join(", ")
-        )));
-    }
-    if names.is_empty() {
-        return Err(AppError::BadRequest("no mapping asked for".into()));
-    }
+    let chosen = chosen_mappings(params)?;
+
     // Two mappings making the same material cannot both be heard. Refused
     // rather than silently resolved: whichever one lost would be a mapping
     // someone asked for and did not hear, and the whole reason to keep more
     // than one is that they are compared.
-    for (name, _, makes, _) in MAPPINGS {
-        let rivals: Vec<&str> = MAPPINGS
+    // `r != mapping` because asking for the same one twice is redundant rather
+    // than contradictory, and rendering it once is what a listener meant.
+    for (i, mapping) in chosen.iter().enumerate() {
+        if let Some(rival) = chosen[i + 1..]
             .iter()
-            .filter(|(other, _, theirs, _)| *theirs == makes && *other != name)
-            .map(|(other, ..)| *other)
-            .collect();
-        if names.contains(&name)
-            && let Some(rival) = rivals.iter().find(|r| names.contains(r))
+            .find(|r| *r != mapping && r.makes() == mapping.makes())
         {
+            let (name, rival, makes) = (mapping.name(), rival.name(), mapping.makes().name());
             return Err(AppError::BadRequest(format!(
                 "{name} and {rival} are two ways of making the same {makes} — ask for one"
             )));
@@ -801,24 +756,26 @@ fn build_score(
     // Refused before anything is rendered. A mapping that cannot be applied
     // still produces a score — one with no field in it — and that renders to
     // consonants over silence, which is indistinguishable from a broken build.
-    if let Some(why) = refusal(&calibrated.voice.tuning, &names) {
+    if let Some(why) = refusal(&calibrated.voice.tuning, &chosen) {
         return Err(AppError::Unplayable(why));
     }
 
     // Built by starting from one mapping and lifting the other's material into
     // it. Both carry the consonants, so taking them from the first and leaving
     // the second's behind is what stops the noise layer being played twice.
-    let continuous = names.contains(&"field") || names.contains(&"tonnetz");
-    let mut score = if names.contains(&"tonnetz") {
-        utterance_mapping::tonnetz::score_with(&voiceprint, &calibrated.voice, knobs)
-    } else if names.contains(&"field") {
-        utterance_mapping::field::score_with(&voiceprint, &calibrated.voice, knobs)
-    } else {
-        utterance_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs)
-    };
-    if continuous && names.contains(&"notes") {
-        score.events =
-            utterance_mapping::compose::compose_with(&voiceprint, &calibrated.voice, knobs).events;
+    //
+    // Asked by material rather than by name, so a fourth texture mapping is
+    // heard here without this function learning it exists. The clash check above
+    // has already refused two of a material, so `find` is the only one.
+    let texture = chosen.iter().find(|m| m.makes() == Material::Texture);
+    let mut score =
+        texture
+            .unwrap_or(&Mapping::Notes)
+            .score_with(&voiceprint, &calibrated.voice, knobs);
+    if texture.is_some() && chosen.contains(&Mapping::Notes) {
+        score.events = Mapping::Notes
+            .score_with(&voiceprint, &calibrated.voice, knobs)
+            .events;
     }
 
     Ok((score, tuning))
@@ -829,14 +786,34 @@ fn build_score(
 /// Trimmed and emptied of blanks, so `field,` and `field, notes` mean what they
 /// look like. Shared by the render and the voice summary, which have to agree
 /// about what was asked for or the summary will describe a different render.
-fn mapping_names(params: &VoiceParams) -> Vec<&str> {
-    params
+///
+/// A name no mapping has is refused rather than dropped: someone who asked for
+/// `feild` wants to be told, and silently rendering the default is how they end
+/// up describing a mapping they never heard.
+fn chosen_mappings(params: &VoiceParams) -> Result<Vec<Mapping>, AppError> {
+    let asked: Vec<&str> = params
         .mapping
         .as_deref()
-        .unwrap_or("field")
+        .unwrap_or(Mapping::Field.name())
         .split(',')
         .map(str::trim)
         .filter(|n| !n.is_empty())
+        .collect();
+
+    if asked.is_empty() {
+        return Err(AppError::BadRequest("no mapping asked for".into()));
+    }
+    asked
+        .into_iter()
+        .map(|name| {
+            Mapping::from_name(name).ok_or_else(|| {
+                let known: Vec<&str> = Mapping::ALL.iter().map(|m| m.name()).collect();
+                AppError::BadRequest(format!(
+                    "no mapping called {name} — try {}, or several at once",
+                    known.join(", ")
+                ))
+            })
+        })
         .collect()
 }
 
@@ -846,14 +823,11 @@ fn mapping_names(params: &VoiceParams) -> Vec<&str> {
 /// *shape* from the scale rather than a list of degrees: two intervals that
 /// point different ways. Everything else works with whatever degrees it is
 /// given, down to a scale of the tonic and the octave.
-fn refusal(tuning: &utterance_mapping::tuning::Tuning, names: &[&str]) -> Option<String> {
-    if !names.contains(&"tonnetz") {
+fn refusal(tuning: &utterance_mapping::tuning::Tuning, chosen: &[Mapping]) -> Option<String> {
+    if !chosen.contains(&Mapping::Tonnetz) {
         return None;
     }
-    let label = MAPPINGS
-        .iter()
-        .find(|(name, ..)| *name == "tonnetz")
-        .map_or("tonnetz", |(_, label, ..)| *label);
+    let label = Mapping::Tonnetz.label();
     utterance_mapping::lattice::Lattice::from_tuning(tuning)
         .err()
         .map(|no_plane| format!("{label} cannot be played in this scale: {no_plane}"))

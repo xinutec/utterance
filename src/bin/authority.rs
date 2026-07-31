@@ -42,10 +42,11 @@ use utterance::store::Store;
 use utterance::voice;
 use utterance_analysis::voiceprint::Voiceprint;
 use utterance_mapping::dissonance::{self, Component};
-use utterance_mapping::params::{KNOBS, Knob, Params};
-use utterance_mapping::score::{Field, NoiseEvent, Score};
+use utterance_mapping::mapping::{CONTINUOUS, Mapping};
+use utterance_mapping::params::{KNOBS, Params};
+use utterance_mapping::score::{Field, NoiseEvent};
+use utterance_mapping::tonnetz;
 use utterance_mapping::voice::Voice;
-use utterance_mapping::{field, tonnetz};
 
 /// Harmonics per voice when estimating how rough the chord is.
 ///
@@ -263,42 +264,14 @@ fn ring_s(vp: &Voiceprint, voice: &Voice, params: Params) -> f32 {
     runs.get(runs.len() / 2).copied().unwrap_or(0.0)
 }
 
-/// A mapping that sounds a continuous field, and so has knobs worth sweeping.
+/// Whether a mapping quantises its harmony, and so has a ring worth timing.
 ///
-/// An enum rather than the name as a string, so that "which mappings can this
-/// measure" is answered by the type and not by a `panic!` reachable at runtime.
-/// The name is what the knob table and the wire speak, so it is produced here
-/// rather than parsed here — there is one direction of conversion and it cannot
-/// fail.
-#[derive(Clone, Copy)]
-enum Continuous {
-    Field,
-    Tonnetz,
-}
-
-impl Continuous {
-    /// Every one of them, for sweeping.
-    const ALL: [Continuous; 2] = [Continuous::Field, Continuous::Tonnetz];
-
-    /// What the knob table and the render URL call this mapping.
-    fn name(self) -> &'static str {
-        match self {
-            Continuous::Field => "field",
-            Continuous::Tonnetz => "tonnetz",
-        }
-    }
-
-    /// Whether it quantises its harmony, and so has a ring worth timing.
-    fn holds_a_chord(self) -> bool {
-        matches!(self, Continuous::Tonnetz)
-    }
-
-    fn score(self, vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
-        match self {
-            Continuous::Field => field::score_with(vp, voice, params),
-            Continuous::Tonnetz => tonnetz::score_with(vp, voice, params),
-        }
-    }
+/// The only thing this measurement needs to know about a mapping that the
+/// mapping crate does not already say. It kept a whole local enum to hold it —
+/// three variants' worth of name and dispatch restated to carry one predicate —
+/// until `Mapping` existed to be asked instead.
+fn holds_a_chord(mapping: Mapping) -> bool {
+    matches!(mapping, Mapping::Tonnetz)
 }
 
 /// The speaker's voice as it would be derived at these settings.
@@ -311,11 +284,6 @@ fn voice_at(store: &Store, params: Params) -> anyhow::Result<Voice> {
     Ok(voice::calibrate_with(store, None, params.density)
         .map_err(|e| anyhow::anyhow!("{e}"))?
         .voice)
-}
-
-/// Whether a knob claims to reach a mapping. An empty claim means all of them.
-fn reaches(knob: &Knob, mapping: &str) -> bool {
-    knob.mappings.is_empty() || knob.mappings.contains(&mapping)
 }
 
 fn main() -> anyhow::Result<()> {
@@ -346,7 +314,7 @@ fn main() -> anyhow::Result<()> {
         calibrated.source.label,
     );
 
-    for mapping in Continuous::ALL {
+    for mapping in CONTINUOUS.iter().copied() {
         println!("{}", mapping.name());
         println!(
             "  {:<14} {:>9} {:>9} {:>10} {:>8} {:>7} {:>7} {:>8}",
@@ -358,7 +326,7 @@ fn main() -> anyhow::Result<()> {
         // how it was written, which is not a fact about the measurement.
         let mut rows: BTreeMap<&str, Change> = BTreeMap::new();
 
-        for knob in KNOBS.iter().filter(|k| reaches(k, mapping.name())) {
+        for knob in KNOBS.iter().filter(|k| k.reaches(mapping)) {
             let low = Params::default().with(knob, knob.min);
             let high = Params::default().with(knob, knob.max);
 
@@ -372,7 +340,10 @@ fn main() -> anyhow::Result<()> {
                 continue;
             };
 
-            let (lo, hi) = (mapping.score(&vp, &va, low), mapping.score(&vp, &vb, high));
+            let (lo, hi) = (
+                mapping.score_with(&vp, &va, low),
+                mapping.score_with(&vp, &vb, high),
+            );
             let (Some(a), Some(b)) = (&lo.field, &hi.field) else {
                 // A refusal is a real answer — see `Lattice::from_tuning` — and
                 // the honest report is that this end of the range has no sound
@@ -383,7 +354,7 @@ fn main() -> anyhow::Result<()> {
 
             let mut change = difference(a, b);
             change.noise = noise_change(&lo.noise, &hi.noise);
-            if mapping.holds_a_chord() {
+            if holds_a_chord(mapping) {
                 change.ring_s = ring_s(&vp, &vb, high) - ring_s(&vp, &va, low);
             }
             if !change.audible() {

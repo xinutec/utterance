@@ -6,6 +6,7 @@ import { catchError } from "rxjs/operators";
 import type {
   Controls,
   Deleted,
+  ErrorCode,
   RecordingDetail,
   RecordingMeta,
   Role,
@@ -26,8 +27,8 @@ import type {
  */
 export type ApiFailure =
   | { readonly kind: "offline"; readonly message: string }
-  | { readonly kind: "rejected"; readonly code: string; readonly message: string }
-  | { readonly kind: "server"; readonly code: string; readonly message: string }
+  | { readonly kind: "rejected"; readonly code: ErrorCode; readonly message: string }
+  | { readonly kind: "server"; readonly code: ErrorCode; readonly message: string }
   | { readonly kind: "unknown"; readonly message: string };
 
 /** The error every method in this service rejects with. */
@@ -37,8 +38,16 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 
-  /** Stable code where the backend supplied one, otherwise the failure kind. */
-  get code(): string {
+  /**
+   * Stable code where the backend supplied one, otherwise the failure kind.
+   *
+   * Not `string`: a caller comparing this against a code that no longer exists
+   * — or never did — is the failure the generated union is here to catch, and
+   * widening to `string` at this one accessor would hand that back. It was
+   * `string`, and `err.code === "unplayable"` in the compare page was checked
+   * by nothing at all.
+   */
+  get code(): ErrorCode | "offline" | "unknown" {
     return "code" in this.failure ? this.failure.code : this.failure.kind;
   }
 }
@@ -61,6 +70,50 @@ function stringField(value: unknown, key: string): string | null {
 }
 
 /**
+ * Every code the backend can send, as values and not only as a type.
+ *
+ * `Record<ErrorCode, true>` is the point of the shape: the compiler rejects a
+ * missing key and an extra one alike, so a code added in `src/error.rs` and
+ * regenerated into `ErrorCode` fails the build here until somebody decides what
+ * the page does about it. A plain `string[]` would have accepted both mistakes
+ * silently, which is the arrangement this replaces.
+ */
+const CODES: Readonly<Record<ErrorCode, true>> = {
+  audio_undecodable: true,
+  audio_empty: true,
+  audio_too_short: true,
+  not_found: true,
+  record_corrupt: true,
+  storage_io: true,
+  bad_request: true,
+  unplayable: true,
+  no_calibration: true,
+  not_authenticated: true,
+  not_permitted: true,
+  bad_login_state: true,
+  no_authorization_code: true,
+  sign_in_failed: true,
+};
+
+/**
+ * The `code` of an error body, only if it is one this backend defines.
+ *
+ * A predicate rather than a cast, so the narrowing is earned: `error.error` is
+ * whatever came back on the wire, and an ingress 502 or a proxy's JSON can carry
+ * a `code` that means nothing here. Anything unrecognised is classified
+ * `unknown` below and explained by its message, which is all that can honestly
+ * be said about it.
+ */
+function errorCode(value: unknown): ErrorCode | null {
+  const field = stringField(value, "code");
+  return field !== null && isCode(field) ? field : null;
+}
+
+function isCode(value: string): value is ErrorCode {
+  return Object.hasOwn(CODES, value);
+}
+
+/**
  * Turn anything thrown by HttpClient into an {@link ApiFailure}.
  *
  * Exported so it can be tested directly, and so a future caller outside this
@@ -80,7 +133,7 @@ export function classifyApiError(error: unknown): ApiFailure {
     return { kind: "offline", message: "the backend is not responding" };
   }
 
-  const code = stringField(error.error, "code");
+  const code = errorCode(error.error);
   const message = stringField(error.error, "message") ?? error.message;
 
   if (code === null) {

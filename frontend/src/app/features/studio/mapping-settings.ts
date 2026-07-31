@@ -7,12 +7,19 @@
  * hands over a link rather than a description.
  */
 
-import type { Knob } from "../../models";
+import type { Knob, Mapping, MappingChoice } from "../../models";
 
 /** Every choice a render depends on, beyond which take is being rendered. */
 export interface MappingSettings {
-  /** Mappings to hear, by name. Never empty — silence is not a choice. */
-  readonly mapping: readonly string[];
+  /**
+   * Mappings to hear. Never empty — silence is not a choice.
+   *
+   * The generated union rather than `string[]`, so a name this backend does not
+   * serve cannot be written here at all. It could: this was `readonly string[]`
+   * while the backend's own table was a list of `&str`, and the two agreed only
+   * by everyone remembering to keep them agreeing.
+   */
+  readonly mapping: readonly Mapping[];
   /** Take the scale comes from, or `null` to let the backend choose. */
   readonly calibration: string | null;
   /**
@@ -68,14 +75,21 @@ export function settingsQuery(settings: MappingSettings, knobs: readonly Knob[])
 export function parseSettings(
   query: string,
   knobs: readonly Knob[],
+  offered: readonly MappingChoice[],
   fallback: MappingSettings = INITIAL_SETTINGS,
 ): MappingSettings {
   const params = new URLSearchParams(query);
 
+  // Kept only if the backend published it. The comment below has always said a
+  // typo should play the default, and until the names were a type this did not
+  // do that — an unknown name went through untouched and the render returned a
+  // 400, so a link with one bad character played nothing at all rather than
+  // playing the rest of what it asked for.
+  const served = new Set<string>(offered.map((m) => m.name));
   const mapping = (params.get("mapping") ?? "")
     .split(",")
     .map((name) => name.trim())
-    .filter((name) => name.length > 0);
+    .filter((name): name is Mapping => served.has(name));
 
   const chosen: Record<string, number> = {};
   for (const knob of knobs) {

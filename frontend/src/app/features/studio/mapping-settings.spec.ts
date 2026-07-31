@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { Knob } from "../../models";
+import type { Knob, MappingChoice } from "../../models";
 import {
   INITIAL_SETTINGS,
   knobValue,
@@ -25,6 +25,13 @@ const knob = (name: string, value: number): Knob => ({
 const BIND = knob("bind", 1);
 const DRIFT = knob("drift", 0.25);
 const KNOBS = [BIND, DRIFT];
+
+/** What the backend publishes, standing in for a live `/api/controls`. */
+const MAPPINGS: MappingChoice[] = [
+  { name: "field", label: "Field", makes: "texture", about: "" },
+  { name: "tonnetz", label: "Lattice", makes: "texture", about: "" },
+  { name: "notes", label: "Notes", makes: "events", about: "" },
+];
 
 describe("settingsQuery", () => {
   it("asks for the mapping and nothing else when nothing has been moved", () => {
@@ -90,7 +97,7 @@ describe("parseSettings", () => {
       calibration: "3c42eea98f207a41",
       knobs: { bind: 0, drift: 0.5 },
     };
-    expect(parseSettings(settingsQuery(settings, KNOBS), KNOBS)).toEqual(settings);
+    expect(parseSettings(settingsQuery(settings, KNOBS), KNOBS, MAPPINGS)).toEqual(settings);
   });
 
   it("leaves a link alone when it is opened and written straight back", () => {
@@ -98,35 +105,51 @@ describe("parseSettings", () => {
     // point. Without it, opening a shared link would rewrite the address bar
     // into a longer URL saying the same thing.
     const link = "mapping=tonnetz&bind=0";
-    expect(settingsQuery(parseSettings(link, KNOBS), KNOBS)).toBe(link);
+    expect(settingsQuery(parseSettings(link, KNOBS, MAPPINGS), KNOBS)).toBe(link);
   });
 
   it("drops a knob nobody published", () => {
     // A URL is input from outside. An unknown name means a stale link or a
     // typo, and passing it through would send the backend a parameter it
     // rejects — losing the whole comparison over one word.
-    const parsed = parseSettings("mapping=field&nonsense=3", KNOBS);
+    const parsed = parseSettings("mapping=field&nonsense=3", KNOBS, MAPPINGS);
     expect(parsed.knobs).toEqual({});
   });
 
   it("drops a value that is not a number", () => {
-    expect(parseSettings("mapping=field&bind=loud", KNOBS).knobs).toEqual({});
+    expect(parseSettings("mapping=field&bind=loud", KNOBS, MAPPINGS).knobs).toEqual({});
   });
 
   it("clamps a value outside the published range", () => {
     // Rather than dropping it: someone who wrote bind=5 meant the top of the
     // range, and a slider that cannot show what is playing is the failure the
     // knob table exists to prevent.
-    expect(parseSettings("mapping=field&bind=5", KNOBS).knobs).toEqual({ bind: 2 });
-    expect(parseSettings("mapping=field&drift=-1", KNOBS).knobs).toEqual({ drift: 0 });
+    expect(parseSettings("mapping=field&bind=5", KNOBS, MAPPINGS).knobs).toEqual({ bind: 2 });
+    expect(parseSettings("mapping=field&drift=-1", KNOBS, MAPPINGS).knobs).toEqual({ drift: 0 });
   });
 
   it("falls back to the default mapping rather than to silence", () => {
-    expect(parseSettings("", KNOBS).mapping).toEqual(INITIAL_SETTINGS.mapping);
-    expect(parseSettings("mapping=", KNOBS).mapping).toEqual(INITIAL_SETTINGS.mapping);
+    expect(parseSettings("", KNOBS, MAPPINGS).mapping).toEqual(INITIAL_SETTINGS.mapping);
+    expect(parseSettings("mapping=", KNOBS, MAPPINGS).mapping).toEqual(INITIAL_SETTINGS.mapping);
   });
 
   it("keeps several mappings", () => {
-    expect(parseSettings("mapping=field,compose", KNOBS).mapping).toEqual(["field", "compose"]);
+    expect(parseSettings("mapping=field,notes", KNOBS, MAPPINGS).mapping).toEqual([
+      "field",
+      "notes",
+    ]);
+  });
+
+  it("drops a mapping the backend does not serve, and keeps the rest", () => {
+    // This test used to assert the opposite, with `compose` — a name no mapping
+    // has ever had — passed straight through as though it were one. Nothing
+    // caught it, because both sides of the wire called a mapping a string. The
+    // render route answers such a link with a 400, so what a listener got for
+    // one bad character was no comparison at all rather than the half they
+    // could have heard.
+    expect(parseSettings("mapping=field,compose", KNOBS, MAPPINGS).mapping).toEqual(["field"]);
+    expect(parseSettings("mapping=compose", KNOBS, MAPPINGS).mapping).toEqual(
+      INITIAL_SETTINGS.mapping,
+    );
   });
 })

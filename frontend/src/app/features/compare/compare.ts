@@ -192,17 +192,21 @@ export class Compare implements OnInit {
 
     effect(() => {
       const knobs = this.controls.knobs();
+      // Both arrive in the one `/api/controls` response, so a non-empty knob
+      // list means the mappings are here too — and `parseSettings` needs them to
+      // tell a name this backend serves from one it does not.
+      const offered = this.controls.mappings();
       if (this.loaded() || knobs.length === 0) return;
 
       const take = params.get("take");
       if (take) this.recordingId.set(take);
       const a = params.get("a");
       const b = params.get("b");
-      if (a !== null) this.a.set(parseSettings(a, knobs));
+      if (a !== null) this.a.set(parseSettings(a, knobs, offered));
       // Only when `a` was given too: a link carrying one side and not the other
       // would silently keep this page's own default on the other, which is a
       // comparison nobody chose.
-      if (a !== null && b !== null) this.b.set(parseSettings(b, knobs, this.b()));
+      if (a !== null && b !== null) this.b.set(parseSettings(b, knobs, offered, this.b()));
       this.loaded.set(true);
     });
   }

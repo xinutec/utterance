@@ -34,6 +34,8 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+
+use crate::error::ErrorCode;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use hmac::{Hmac, KeyInit, Mac};
@@ -364,23 +366,23 @@ pub async fn gate(auth: Arc<WebAuth>, request: Request, next: Next) -> Response 
         // opaque failure. A status the script can read is what raises the wall.
         None => problem(
             StatusCode::UNAUTHORIZED,
-            "not_authenticated",
+            ErrorCode::NotAuthenticated,
             "sign in to continue",
         ),
         Some(session) if !auth.permits(&session.user_id) => problem(
             StatusCode::FORBIDDEN,
-            "not_permitted",
+            ErrorCode::NotPermitted,
             &format!("{} is not on the list for this app", session.user_id),
         ),
         Some(_) => next.run(request).await,
     }
 }
 
-fn problem(status: StatusCode, code: &str, message: &str) -> Response {
+fn problem(status: StatusCode, code: ErrorCode, message: &str) -> Response {
     (
         status,
         Json(crate::error::ErrorBody {
-            code: code.to_string(),
+            code,
             message: message.to_string(),
         }),
     )
@@ -515,7 +517,7 @@ pub fn routes<S: Clone + Send + Sync + 'static>(auth: Arc<WebAuth>) -> Router<S>
                         Some(session) => Json(session).into_response(),
                         None => problem(
                             StatusCode::UNAUTHORIZED,
-                            "not_authenticated",
+                            ErrorCode::NotAuthenticated,
                             "sign in to continue",
                         ),
                     }
@@ -533,14 +535,14 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
     else {
         return problem(
             StatusCode::FORBIDDEN,
-            "bad_login_state",
+            ErrorCode::BadLoginState,
             "that sign-in link has expired — start again",
         );
     };
     let Some(code) = query.code.filter(|c| !c.is_empty()) else {
         return problem(
             StatusCode::BAD_REQUEST,
-            "no_authorization_code",
+            ErrorCode::NoAuthorizationCode,
             "Nextcloud returned no authorization code",
         );
     };
@@ -553,7 +555,7 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
             tracing::error!("nextcloud sign-in failed: {why:#}");
             return problem(
                 StatusCode::BAD_GATEWAY,
-                "sign_in_failed",
+                ErrorCode::SignInFailed,
                 "could not complete the sign-in with Nextcloud",
             );
         }
@@ -561,7 +563,7 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
     if !auth.permits(&session.user_id) {
         return problem(
             StatusCode::FORBIDDEN,
-            "not_permitted",
+            ErrorCode::NotPermitted,
             &format!("{} is not on the list for this app", session.user_id),
         );
     }

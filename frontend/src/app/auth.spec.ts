@@ -14,9 +14,10 @@ import { throwError } from "rxjs";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { AuthState, authInterceptor } from "./auth";
+import type { ErrorCode } from "./models";
 
 /** An error shaped the way the backend really answers: a JSON `ErrorBody`. */
-function refusal(status: number, code: string, message: string): HttpErrorResponse {
+function refusal(status: number, code: ErrorCode, message: string): HttpErrorResponse {
   return new HttpErrorResponse({
     status,
     url: "/api/controls",

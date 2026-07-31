@@ -43,8 +43,8 @@ use rustfft::num_complex::Complex32;
 
 use utterance::store::Store;
 use utterance::voice;
+use utterance_mapping::mapping::{CONTINUOUS, Mapping};
 use utterance_mapping::params::Params;
-use utterance_mapping::{field, tonnetz};
 use utterance_realisation::synth::{self, RENDER_RATE};
 
 /// Samples per analysis window.
@@ -190,59 +190,40 @@ fn beating(samples: &[f32]) -> f32 {
     if weight > 0.0 { total / weight } else { 0.0 }
 }
 
-/// A mapping to measure, and whether `bind` is a fair test on it.
-#[derive(Clone, Copy)]
-enum Mapping {
-    /// Voices stacked at a fixed spacing in scale degrees, so retuning the
-    /// scale moves the *same* chord. The controlled experiment.
-    Field,
-    /// The vowel walks a lattice laid out on the speaker's own scale, with
-    /// `bind` applied to each sounding pitch afterwards. The chords, their
-    /// order and their durations are identical between settings, so this is a
-    /// controlled experiment too — which it was not until the axes stopped
-    /// following `bind`.
-    Tonnetz,
+/// Whether changing `bind` on this mapping leaves the chord's structure alone.
+///
+/// **This is the whole validity of the comparison.** The claim is that a derived
+/// scale makes partials lock where a tempered one makes them beat, which is a
+/// statement about one chord under two tunings. On the Tonnetz retuning also
+/// moves the lattice axes, so the two renders would be different chords and any
+/// difference in their beating confounded by that.
+///
+/// Matched exhaustively rather than defaulted to true: a mapping added to the
+/// crate has to answer this before it can be measured here, and answering wrong
+/// by omission is how a confounded comparison gets published as a result.
+fn holds_the_chord_still(mapping: Mapping) -> bool {
+    match mapping {
+        // Voices stacked at a fixed spacing in scale degrees, so retuning the
+        // scale moves the *same* chord. The controlled experiment.
+        Mapping::Field => true,
+        // True since `bind` moved from the lattice axes to the sounding pitch.
+        // Before that, retuning rebuilt the geometry and the two renders were
+        // different chord sequences.
+        Mapping::Tonnetz => true,
+        // Onsets, not a sustained chord. There are no partials held together
+        // long enough to beat, so the measurement has nothing to look at.
+        Mapping::Notes => false,
+    }
 }
 
-impl Mapping {
-    const ALL: [Mapping; 2] = [Mapping::Field, Mapping::Tonnetz];
-
-    fn name(self) -> &'static str {
-        match self {
-            Mapping::Field => "field",
-            Mapping::Tonnetz => "tonnetz",
-        }
-    }
-
-    /// Whether changing `bind` here leaves the chord's structure alone.
-    ///
-    /// **This is the whole validity of the comparison.** The claim is that a
-    /// derived scale makes partials lock where a tempered one makes them beat,
-    /// which is a statement about one chord under two tunings. On the Tonnetz
-    /// retuning also moves the lattice axes, so the two renders are different
-    /// chords and any difference in their beating is confounded by that.
-    fn holds_the_chord_still(self) -> bool {
-        match self {
-            Mapping::Field => true,
-            // True since `bind` moved from the lattice axes to the sounding
-            // pitch. Before that, retuning rebuilt the geometry and the two
-            // renders were different chord sequences.
-            Mapping::Tonnetz => true,
-        }
-    }
-
-    fn samples(
-        self,
-        vp: &utterance_analysis::voiceprint::Voiceprint,
-        voice: &utterance_mapping::voice::Voice,
-        params: Params,
-    ) -> Vec<f32> {
-        let score = match self {
-            Mapping::Field => field::score_with(vp, voice, params),
-            Mapping::Tonnetz => tonnetz::score_with(vp, voice, params),
-        };
-        synth::render(&score)
-    }
+/// The rendered audio of one mapping at these settings.
+fn samples(
+    mapping: Mapping,
+    vp: &utterance_analysis::voiceprint::Voiceprint,
+    voice: &utterance_mapping::voice::Voice,
+    params: Params,
+) -> Vec<f32> {
+    synth::render(&mapping.score_with(vp, voice, params))
 }
 
 fn main() -> anyhow::Result<()> {
@@ -296,7 +277,7 @@ fn main() -> anyhow::Result<()> {
         (lattice.a_cents - lattice.b_cents).abs(),
     );
 
-    let at = |mapping: Mapping, params: Params| beating(&mapping.samples(&vp, voice, params));
+    let at = |mapping: Mapping, params: Params| beating(&samples(mapping, &vp, voice, params));
     let with = |bind: f32| Params {
         bind,
         hold,
@@ -330,16 +311,19 @@ fn main() -> anyhow::Result<()> {
     }
     println!();
 
-    for mapping in Mapping::ALL {
+    // The continuous mappings only: this measures partials of a sustained chord
+    // beating against each other, and discrete onsets hold nothing long enough
+    // to have any.
+    for mapping in CONTINUOUS.iter().copied() {
         let (locked, tempered) = (at(mapping, with(1.0)), at(mapping, with(0.0)));
         let ratio = if locked > 0.0 { tempered / locked } else { 0.0 };
         println!(
             "  {:<8} bind=1 {locked:.4}   bind=0 {tempered:.4}   {ratio:.2}×",
             mapping.name()
         );
-        if !mapping.holds_the_chord_still() {
+        if !holds_the_chord_still(mapping) {
             println!(
-                "           (retuning also moves this mapping's lattice axes, so the\n                 \x20           two renders are different chords — not a test of tuning)"
+                "           (retuning also changes what this mapping plays, so the\n                 \x20           two renders are different chords — not a test of tuning)"
             );
         }
     }

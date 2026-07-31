@@ -22,6 +22,7 @@ pub mod compose;
 pub mod dissonance;
 pub mod field;
 pub mod lattice;
+pub mod mapping;
 pub mod params;
 pub mod score;
 pub mod streams;

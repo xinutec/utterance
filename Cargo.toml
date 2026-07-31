@@ -11,7 +11,7 @@ members = ["utterance-analysis", "utterance-mapping", "utterance-realisation"]
 # voiceprint types in utterance-analysis — so `cargo test --features ts
 # export_bindings` emits the frontend TypeScript (see scripts/gen-types.sh).
 # Off by default: normal builds carry no ts-rs at all.
-ts = ["dep:ts-rs", "utterance-analysis/ts"]
+ts = ["dep:ts-rs", "utterance-analysis/ts", "utterance-mapping/ts"]
 
 [dependencies]
 utterance-analysis = { path = "utterance-analysis" }

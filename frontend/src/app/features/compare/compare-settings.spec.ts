@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Knob } from "../../models";
-import { INITIAL_SETTINGS, withKnob } from "../studio/mapping-settings";
+import { INITIAL_SETTINGS, withKnob, type MappingSettings } from "../studio/mapping-settings";
 import { differences } from "./compare-settings";
 
 const knob = (name: string, label: string, def: number): Knob => ({
@@ -44,7 +44,7 @@ describe("differences", () => {
   it("names the mapping when the two sides hear different ones", () => {
     // The largest difference the page can express, and the one it used to
     // report as "nothing differs".
-    const b = { ...INITIAL_SETTINGS, mapping: ["tonnetz"] };
+    const b: MappingSettings = { ...INITIAL_SETTINGS, mapping: ["tonnetz"] };
     expect(differences(INITIAL_SETTINGS, b, KNOBS)).toEqual([
       { label: "Mapping", name: "mapping", a: "field", b: "tonnetz" },
     ]);

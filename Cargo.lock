@@ -1911,6 +1911,7 @@ name = "utterance-mapping"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "ts-rs",
  "utterance-analysis",
 ]
 

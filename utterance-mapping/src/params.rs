@@ -15,15 +15,8 @@
 //! Defaults reproduce what the mapping did before it was parameterised, so
 //! taking none of them changes nothing.
 
+use crate::mapping::{CONTINUOUS, Mapping};
 use crate::tuning::{Degree, Tuning};
-
-/// Mappings that sound a continuous field, and so read the field knobs.
-///
-/// Named here rather than in the route because the knob table is what has to
-/// agree with them: a knob claiming a mapping that does not exist, or a mapping
-/// gaining a knob nobody told the UI about, are both caught by `tests/api.rs`
-/// only because the claim is written down somewhere.
-const CONTINUOUS: &[&str] = &["field", "tonnetz"];
 
 /// One knob, described well enough that a UI can offer it without being told.
 ///
@@ -48,7 +41,7 @@ pub struct Knob {
     pub default: f32,
     /// What moving it does, and what each end sounds like.
     pub about: &'static str,
-    /// Mappings this knob reaches, by name. Empty means every one of them.
+    /// Mappings this knob reaches. Empty means every one of them.
     ///
     /// **Why a knob has to say.** The table exists so that a control cannot be
     /// offered at a value the mapping clamps away — a slider that moves and
@@ -57,7 +50,12 @@ pub struct Knob {
     /// can be trusted to know which is the knob itself. `tests/api.rs` renders
     /// every knob against every mapping it claims and fails if the audio is
     /// unchanged, so a claim made here is a claim that is checked.
-    pub mappings: &'static [&'static str],
+    ///
+    /// [`Mapping`] rather than a name, so a knob cannot claim a mapping that
+    /// does not exist. It used to be able to: the claim was a `&'static str`
+    /// compared against another `&'static str`, and a typo here made a knob that
+    /// reached nothing and was therefore never shown.
+    pub mappings: &'static [Mapping],
     /// Whether to offer this one before anybody asks for it.
     ///
     /// **The rule: primary knobs decide what kind of piece this is, advanced
@@ -90,6 +88,17 @@ impl Knob {
     /// The nearest value this knob actually accepts.
     pub fn clamped(&self, value: f32) -> f32 {
         value.clamp(self.min, self.max)
+    }
+
+    /// Whether this knob does anything to the given mapping.
+    ///
+    /// Empty means every one of them, and reading that convention is the whole
+    /// of this function — which is why it is here and not written out again by
+    /// each caller. It had been: the measurement bin and the browser both
+    /// spelled out `is_empty() || contains(...)`, and a control shown beside a
+    /// mapping it cannot reach is a slider that moves and changes nothing.
+    pub fn reaches(&self, mapping: Mapping) -> bool {
+        self.mappings.is_empty() || self.mappings.contains(&mapping)
     }
 }
 
@@ -225,7 +234,7 @@ pub const HOLD: Knob = Knob {
     about: "How far the mouth must move past a boundary before the chord \
             changes. At 0 the harmony follows every wobble; higher makes it \
             commit, so a chord rings long enough to hear what it is tuned to.",
-    mappings: &["tonnetz"],
+    mappings: &[Mapping::Tonnetz],
     primary: true,
 };
 
@@ -240,7 +249,7 @@ pub const SETTLE: Knob = Knob {
             follows, in seconds. At 0 it follows the moment it is allowed to; \
             higher ignores a mouth that crosses a boundary and comes straight \
             back.",
-    mappings: &["tonnetz"],
+    mappings: &[Mapping::Tonnetz],
     primary: false,
 };
 

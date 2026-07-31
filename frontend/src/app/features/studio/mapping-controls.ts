@@ -8,7 +8,7 @@ import { MatSelectModule } from "@angular/material/select";
 import { MatSliderModule } from "@angular/material/slider";
 import { MatTooltipModule } from "@angular/material/tooltip";
 
-import type { Knob, MappingChoice } from "../../models";
+import type { Knob, Mapping, MappingChoice } from "../../models";
 import { RecordingsStore } from "../../recordings-store";
 import { knobValue, withKnob, type MappingSettings } from "./mapping-settings";
 
@@ -132,7 +132,7 @@ export class MappingControls {
    * mappings are rivals comes from `makes` in what the backend published, so a
    * fourth mapping needs no change here.
    */
-  setMappings(names: string[]): void {
+  setMappings(names: Mapping[]): void {
     if (names.length === 0) return;
     const before = this.settings().mapping;
     const added = names.filter((n) => !before.includes(n));
@@ -143,9 +143,9 @@ export class MappingControls {
   }
 
   /** Whether two mappings compete to be the same part of the score. */
-  private rivals(a: string, b: string): boolean {
+  private rivals(a: Mapping, b: Mapping): boolean {
     if (a === b) return false;
-    const makes = (name: string) => this.mappings().find((m) => m.name === name)?.makes;
+    const makes = (name: Mapping) => this.mappings().find((m) => m.name === name)?.makes;
     const theirs = makes(a);
     return theirs !== undefined && theirs === makes(b);
   }

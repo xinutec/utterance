@@ -465,6 +465,36 @@ source, plus the one that most shapes daily work.
     build error. The label is parsed by deserialising rather than by a `match` on
     literals, so the spellings exist once rather than twice.
 
+  - **A mapping is an enum, not a name** (2026-07-31). `Mapping` and `Material`
+    live in `utterance-mapping/src/mapping.rs`, carry their own label and blurb
+    the way `Knob` does, and dispatch to their score through
+    `Mapping::score_with`. What they replace is a four-column table of `&str` in
+    the route and a chain of `names.contains(&"tonnetz")` — an arrangement whose
+    own doc comment conceded that adding a mapping meant adding a row *and* a
+    branch, and that *the compiler will not remind you about the second*. It
+    does now: the match is exhaustive, `Knob::mappings` is `&[Mapping]` so a
+    knob cannot claim a mapping nobody serves, and the render picks its
+    continuous layer by asking `makes()` rather than by naming field or lattice,
+    so a fourth texture mapping needs no change in the route at all.
+
+    The browser reads the same union. `MappingSettings.mapping` was
+    `readonly string[]`, and the test covering it asserted that a link saying
+    `mapping=field,compose` kept `compose` — a name no mapping has ever had.
+    Nothing caught that, because both ends of the wire called a mapping a
+    string; `parseSettings` now drops what the backend did not publish, which is
+    what its comment had claimed all along.
+
+  - **Error codes are an enum, and the browser reads the list** (2026-07-31).
+    `ErrorCode` in `src/error.rs` is the whole set — the API's nine and
+    `webauth`'s five, which were separate lists of literals — and `ErrorBody`
+    carries it rather than a `String`. In the frontend `ApiFailure.code` and
+    `ApiError.code` are the generated union, so `err.code === "unplayable"` in
+    the compare page is checked against Rust instead of merely spelled
+    carefully. An unrecognised code on the wire is classified `unknown` rather
+    than asserted into the type: the bundle is served by the backend that
+    produces the codes, so the set is closed at deploy time and anything outside
+    it is a bug, not skew.
+
   - **A stored take can be told what it is for** (2026-07-30), by
     `PUT /api/recordings/{id}/role` and a button on its row in the take list.
 
