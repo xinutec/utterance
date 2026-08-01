@@ -76,17 +76,25 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v6
+      # Before setup-node, whose `cache: pnpm` shells out to `pnpm store path`.
+      # The major floats: pinning it would be a second version held level with
+      # the flake's by hand, and the lockfile is what has to match.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm test
       # Real-browser layout check: the harness serves the built bundle and
       # asserts nothing overlaps or overflows at phone geometry. `ui-check`
       # builds first, so there is no separate build step.
-      - run: npx playwright install --with-deps chromium
-      - run: npm run ui-check
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run ui-check
 
   image:
     needs: [verify, fe-verify]
@@ -106,6 +114,6 @@ jobs:
           push: true
           tags: xinutec/utterance:latest
           cache-from: type=registry,ref=xinutec/utterance:cache
-          # mode=max keeps the builder stages too — npm ci and the primed cargo
-          # dependency layer — which are the expensive ones.
+          # mode=max keeps the builder stages too — the pnpm install and the
+          # primed cargo dependency layer — which are the expensive ones.
           cache-to: type=registry,ref=xinutec/utterance:cache,mode=max

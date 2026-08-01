@@ -1,0 +1,13 @@
+# pnpm runs a dependency's install script only if it is listed here; npm runs
+# them all silently. Keeping that default means the list stays as short as the
+# build needs — these four fetch or compile a platform binary and do not work
+# without one.
+#
+# It is exactly what pnpm named as ignored on a bare install, not a list copied
+# from a sibling repo. @xinutec/ui-harness is deliberately absent: it is a git
+# dependency, but it has no install script, so it needs no entry here.
+allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true
+  lmdb: true
+  msgpackr-extract: true
