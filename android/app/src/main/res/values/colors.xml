@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive-icon background: the near-black navy the web icon already sits on
+         (frontend/public/favicon.svg), so the launcher and the app agree — and
+         distinct on the launcher from the other web apps. -->
+    <color name="ic_launcher_background">#0B1B2B</color>
+</resources>

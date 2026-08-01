@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A pitch contour — the same mark as the web app's frontend/public/favicon.svg,
+         and the one shape that says what the app is for.
+
+         The path is the web icon's verbatim; only the colour changes. The SVG strokes
+         it in #7cc4ff on the dark ground, but this drawable is also the <monochrome>
+         layer for themed icons, where a tinted stroke washes out — so it is white
+         here and the ground carries the colour.
+
+         The source viewBox is 0 0 32 32 and the adaptive-icon safe zone is the middle
+         72 of 108, so the group scales by 72/32 = 2.25 and is offset by
+         (108 - 32 * 2.25) / 2 = 18. -->
+    <group
+        android:scaleX="2.25"
+        android:scaleY="2.25"
+        android:translateX="18"
+        android:translateY="18">
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="2.5"
+            android:strokeLineCap="round"
+            android:pathData="M3,21 C 7,21, 8,11, 12,11 S 17,19, 21,19 S 26,8, 29,8" />
+    </group>
+</vector>
