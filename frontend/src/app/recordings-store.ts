@@ -37,7 +37,8 @@ export class RecordingsStore {
         this.recordings.set(list);
         // Open the newest take automatically: the common case is having just
         // recorded something and wanting to see it.
-        if (!this.selected() && list.length > 0) this.select(list[0]);
+        const [newest] = list;
+        if (!this.selected() && newest) this.select(newest);
       },
       error: (err: unknown) => {
         this.fail(err);

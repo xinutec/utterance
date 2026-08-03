@@ -33,8 +33,15 @@ export interface Panel {
 
 /** Pointwise absolute difference, stopping at the shorter of the two. */
 function apart(a: readonly number[], b: readonly number[]): number[] {
-  const n = Math.min(a.length, b.length);
-  return Array.from({ length: n }, (_, i) => Math.abs(a[i] - b[i]));
+  const out: number[] = [];
+  for (const [i, av] of a.entries()) {
+    const bv = b[i];
+    // Running off the end of `b` *is* the documented stopping condition, so it
+    // is the loop's exit rather than a length computed alongside it.
+    if (bv === undefined) break;
+    out.push(Math.abs(av - bv));
+  }
+  return out;
 }
 
 /** The interval between two frequencies, in cents. Zero where either is silent. */
@@ -47,7 +54,16 @@ function cents(from: number, to: number): number {
 function spread(score: ScoreView): number[] {
   const [low, high] = [score.voices.at(0), score.voices.at(-1)];
   if (!low || !high) return [];
-  return low.map((hz, i) => Math.log2(Math.max(high[i], 1) / Math.max(hz, 1)));
+  const out: number[] = [];
+  for (const [i, hz] of low.entries()) {
+    const top = high[i];
+    // The two voices are rendered from the same frame count, so this holds;
+    // stopping is still the right answer if one is ever shorter, because the
+    // alternative was `Math.max(undefined, 1)` — NaN, plotted as a gap.
+    if (top === undefined) break;
+    out.push(Math.log2(Math.max(top, 1) / Math.max(hz, 1)));
+  }
+  return out;
 }
 
 export const PANELS: readonly Panel[] = [
@@ -75,12 +91,20 @@ export const PANELS: readonly Panel[] = [
     traces: (s) => s.voices.map((v) => v.map((hz) => Math.log2(Math.max(hz, 1)))),
     difference: (a, b) => {
       const voices = Math.min(a.voices.length, b.voices.length);
-      if (voices === 0) return [];
-      const points = Math.min(a.voices[0].length, b.voices[0].length);
+      const [firstA, firstB] = [a.voices[0], b.voices[0]];
+      if (voices === 0 || !firstA || !firstB) return [];
+      const points = Math.min(firstA.length, firstB.length);
       // The widest gap across the voices at each moment: one voice moving is a
       // difference even if the others hold, and averaging would dilute it.
       return Array.from({ length: points }, (_, i) =>
-        Math.max(...Array.from({ length: voices }, (_, v) => cents(a.voices[v][i], b.voices[v][i]))),
+        Math.max(
+          ...Array.from({ length: voices }, (_, v) => {
+            const [av, bv] = [a.voices[v]?.[i], b.voices[v]?.[i]];
+            // `v` is below both voice counts and `i` below both lengths, so
+            // this is unreachable; 0 contributes nothing to a max of distances.
+            return av === undefined || bv === undefined ? 0 : cents(av, bv);
+          }),
+        ),
       );
     },
     unit: "cents",

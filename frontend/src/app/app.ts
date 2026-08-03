@@ -114,7 +114,7 @@ export class App {
    * compare page.
    */
   isCurrent(page: { path: string; exact: boolean }): boolean {
-    const here = this.url().split("?")[0];
+    const here = this.url().replace(/\?.*$/, "");
     return page.exact ? here === page.path : here.startsWith(page.path);
   }
 

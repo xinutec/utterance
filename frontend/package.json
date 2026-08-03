@@ -8,8 +8,9 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false",
-    "lint": "eslint src",
-    "ui-check": "ng build && playwright test"
+    "lint": "eslint src e2e playwright.config.ts",
+    "ui-check": "ng build && playwright test",
+    "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "dependencies": {
     "@angular/cdk": "^22.0.3",

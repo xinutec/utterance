@@ -2,6 +2,11 @@
   "compileOnSave": false,
   "compilerOptions": {
     "strict": true,
+    // `strict` alone types `xs[i]` as `T`, which is a lie in a codebase that is
+    // mostly arrays of frames, degrees and formant readings — an index off the
+    // end reads `undefined` and it propagates as `NaN` into a chart rather than
+    // failing anywhere near the mistake.
+    "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
     "noImplicitReturns": true,

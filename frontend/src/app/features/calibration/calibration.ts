@@ -36,7 +36,15 @@ export class Calibration implements OnInit {
   readonly captureError = signal<string | null>(null);
 
   readonly index = signal(0);
-  readonly step = computed(() => STEPS[this.index()]);
+  /**
+   * The step being shown.
+   *
+   * Falls back to the first step rather than being nullable: `index` is only
+   * moved by the next/back buttons, which are bounded, so an out-of-range value
+   * is a navigation bug — and showing step one is a better answer to that than
+   * a blank page with every binding guarded.
+   */
+  readonly step = computed(() => STEPS[this.index()] ?? STEPS[0]);
   readonly isLast = computed(() => this.index() === STEPS.length - 1);
 
   /** Step ids that already have at least one take, so the list can show progress. */

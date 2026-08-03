@@ -56,7 +56,10 @@ export interface CalibrationStep {
   readonly requirements: Requirements;
 }
 
-export const STEPS: readonly CalibrationStep[] = [
+// A non-empty tuple rather than `readonly CalibrationStep[]`: the calibration
+// flow has no meaning with no steps, and typing it this way is what lets
+// `STEPS[0]` be a step rather than possibly-undefined at every use.
+export const STEPS: readonly [CalibrationStep, ...CalibrationStep[]] = [
   {
     id: "steady-ah",
     title: "A steady note",
@@ -219,7 +222,12 @@ export function driftSemitones(hz: readonly (number | null)[]): number | null {
 /** Linear-interpolated percentile of an ascending array. */
 function percentile(sorted: readonly number[], p: number): number {
   const rank = p * (sorted.length - 1);
-  const lo = Math.floor(rank);
-  const hi = Math.ceil(rank);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (rank - lo);
+  const floor = Math.floor(rank);
+  const lo = sorted[floor];
+  const hi = sorted[Math.ceil(rank)];
+  // `driftSemitones` is the only caller and has already required 20 values, so
+  // this cannot fire today. NaN rather than 0 if a later caller skips that
+  // check: an empty track has no percentile, and 0 would be read as one.
+  if (lo === undefined || hi === undefined) return NaN;
+  return lo + (hi - lo) * (rank - floor);
 }

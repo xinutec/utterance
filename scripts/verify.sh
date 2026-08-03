@@ -63,7 +63,7 @@ nix develop -c bash -c '
   if [ ! -x frontend/node_modules/.bin/eslint ] || [ frontend/pnpm-lock.yaml -nt frontend/node_modules ]; then
     ( cd frontend && pnpm install --frozen-lockfile )
   fi
-  ( cd frontend && pnpm run lint && pnpm test && pnpm run ui-check )
+  ( cd frontend && pnpm run lint && pnpm run typecheck:e2e && pnpm test && pnpm run ui-check )
 '
 
 dev_lint_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/dev-lint"

@@ -28,13 +28,27 @@ function score(overrides: Partial<ScoreView> = {}): ScoreView {
   };
 }
 
+/**
+ * One voice of a fixture, or a failure naming the fixture.
+ *
+ * `ScoreView.voices` is a bare `number[][]` on the wire — the backend does not
+ * promise a voice count — so a spec reaching for voice 1 has to say what it
+ * expects. Throwing beats indexing blind: the old form would have quietly
+ * mapped over `undefined` had the fixture ever lost a voice.
+ */
+function voice(s: ScoreView, i: number): number[] {
+  const found = s.voices[i];
+  if (!found) throw new Error(`fixture has no voice ${i}`);
+  return found;
+}
+
 /** The same score with every voice above the root raised by `cents`. */
 function retuned(cents: number): ScoreView {
   const base = score();
   const ratio = 2 ** (cents / 1200);
   return {
     ...base,
-    voices: [base.voices[0], base.voices[1].map((hz) => hz * ratio), base.voices[2]],
+    voices: [voice(base, 0), voice(base, 1).map((hz) => hz * ratio), voice(base, 2)],
   };
 }
 
@@ -81,7 +95,7 @@ describe("mostDifferentAt", () => {
     // `bind` — and confidently offered second zero.
     const b = retuned(20);
     // ...and make the difference happen at one moment rather than throughout.
-    b.voices[1] = score().voices[1].map((hz, i) => (i === 60 ? hz * 2 ** (20 / 1200) : hz));
+    b.voices[1] = voice(score(), 1).map((hz, i) => (i === 60 ? hz * 2 ** (20 / 1200) : hz));
     expect(mostDifferentAt(score(), b)).toBeCloseTo(6, 5);
   });
 

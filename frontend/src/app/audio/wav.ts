@@ -42,8 +42,8 @@ export function encodeWav(samples: Float32Array, sampleRate: number): Blob {
   ascii(36, "data");
   view.setUint32(40, dataBytes, true);
 
-  for (let i = 0; i < samples.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]));
+  for (const [i, sample] of samples.entries()) {
+    const clamped = Math.max(-1, Math.min(1, sample));
     view.setInt16(HEADER_BYTES + i * 2, Math.round(clamped * INT16_MAX), true);
   }
 

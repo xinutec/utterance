@@ -406,7 +406,13 @@ for (const scheme of ["light", "dark"] as const) {
         };
 
         const background = getComputedStyle(document.body).backgroundColor;
-        const [br, bg, bb] = background.match(/\d+/g)!.map(Number);
+        const [br, bg, bb] = background.match(/\d+/g)?.map(Number) ?? [];
+        // Every contrast ratio below is measured against this, so a background
+        // that did not parse has to stop the check rather than default to
+        // black — against which light marks would pass comfortably.
+        if (br === undefined || bg === undefined || bb === undefined) {
+          throw new Error(`body background is not an rgb() colour: ${background}`);
+        }
         const backgroundLuminance = relativeLuminance(br, bg, bb);
 
         const ctx = canvas.getContext("2d")!;
@@ -415,15 +421,19 @@ for (const scheme of ["light", "dark"] as const) {
         // Solidly painted pixels only — antialiased glyph edges blend toward the
         // background by design and would drag the measurement down.
         const ratios: number[] = [];
+        // RGBA, so `data.length` is a multiple of four and all four reads at a
+        // stride-4 offset are in bounds; the `?? 0` is unreachable.
+        const at = (i: number): number => data[i] ?? 0;
         for (let i = 0; i < data.length; i += 4) {
-          if (data[i + 3] < 200) continue;
-          const l = relativeLuminance(data[i], data[i + 1], data[i + 2]);
+          if (at(i + 3) < 200) continue;
+          const l = relativeLuminance(at(i), at(i + 1), at(i + 2));
           const [hi, lo] = l > backgroundLuminance ? [l, backgroundLuminance] : [backgroundLuminance, l];
           ratios.push((hi + 0.05) / (lo + 0.05));
         }
         if (ratios.length === 0) return { painted: 0, best: 0 };
         ratios.sort((a, b) => a - b);
-        return { painted: ratios.length, best: ratios[Math.floor(ratios.length * 0.9)] };
+        // `ratios` is non-empty here, so the 90th-centile index is in bounds.
+        return { painted: ratios.length, best: ratios[Math.floor(ratios.length * 0.9)] ?? 0 };
       });
 
       expect(contrast.painted, `${selector} painted nothing at all`).toBeGreaterThan(200);

@@ -186,7 +186,10 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
     for (let i = 0; i < vp.frame.count; i++) {
       const f1 = vp.formants.f1[i];
       const f2 = vp.formants.f2[i];
-      if (f1 === null || f2 === null) continue;
+      // `null` is an unvoiced frame. `undefined` means `frame.count` outran the
+      // series — a malformed voiceprint rather than a silent moment, but there
+      // is nothing to plot either way.
+      if (f1 == null || f2 == null) continue;
       if (f1 < F1_RANGE.min || f1 > F1_RANGE.max) continue;
       if (f2 < F2_RANGE.min || f2 > F2_RANGE.max) continue;
       out.push({ f1, f2 });
