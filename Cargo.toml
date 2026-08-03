@@ -6,6 +6,53 @@ edition = "2024"
 [workspace]
 members = ["utterance-analysis", "utterance-mapping", "utterance-realisation"]
 
+# The lint policy lives here rather than in the two shell strings that used to
+# carry it (scripts/verify.sh and .github/workflows/build.yml both passed
+# `-D warnings` and nothing else). In a manifest it applies to a bare
+# `cargo clippy` in the shell as well as to the gate, so the editor, the
+# pre-commit hook and CI all see the same rules — and the rules themselves are
+# reviewable in a diff instead of being an argument list.
+[workspace.lints.rust]
+# There is no unsafe in this workspace and no reason for any to arrive: the
+# audio path is arrays of f32 and the server is axum. `forbid` rather than
+# `deny` so it cannot be switched off locally by an `#[allow]` — the point is
+# that adding unsafe has to be a visible edit to this file.
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+# Numeric conversion between sample indices, frame counts and Hz is what this
+# workspace *is* — `(seconds * rate) as usize`, `i as f32 / rate`. Roughly a
+# hundred sites, every one deliberate and none of them near a precision limit
+# (a 32-bit float holds a sample index exactly to 16.7M, which is six minutes
+# at 48 kHz; takes are seconds long). Denying these would buy `try_from`
+# ceremony and `#[allow]` noise, not safety.
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+cast_lossless = "allow"
+
+# Every site is an `assert_eq!` in a test, where comparing exactly is the
+# property under test: that a knob value survives a round trip through the
+# query string, that a default is preserved, that a degree table is reproduced
+# bit for bit. Library code compares floats through explicit epsilons.
+float_cmp = "allow"
+
+# These crates are a workspace-internal split, not a published API — nothing
+# outside this repo calls them, so the ~50 `#[must_use]` attributes and ~14
+# `# Errors` sections these ask for would document a boundary that does not
+# exist. The API that *is* public is the HTTP one, and that is documented at
+# the handlers.
+must_use_candidate = "allow"
+return_self_not_must_use = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[lints]
+workspace = true
+
 [features]
 # Turns on ts-rs across the workspace — this crate's wire types *and* the
 # voiceprint types in utterance-analysis — so `cargo test --features ts

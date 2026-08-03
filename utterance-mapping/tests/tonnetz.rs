@@ -275,11 +275,11 @@ fn the_mouth_shape_tips_the_chord_without_moving_it() {
     // pitch here moves in lattice steps, so a stream reaching the harmony would
     // be silent for most of its travel and then jump.
     let mut rounded = take(300);
-    for slot in rounded.formants.f3.iter_mut() {
+    for slot in &mut rounded.formants.f3 {
         *slot = Some(2100.0);
     }
     let mut spread = take(300);
-    for slot in spread.formants.f3.iter_mut() {
+    for slot in &mut spread.formants.f3 {
         *slot = Some(3100.0);
     }
 
@@ -299,11 +299,11 @@ fn the_mouth_shape_tips_the_chord_without_moving_it() {
 #[test]
 fn voicing_at_zero_ignores_the_third_formant() {
     let mut rounded = take(300);
-    for slot in rounded.formants.f3.iter_mut() {
+    for slot in &mut rounded.formants.f3 {
         *slot = Some(2100.0);
     }
     let mut spread = take(300);
-    for slot in spread.formants.f3.iter_mut() {
+    for slot in &mut spread.formants.f3 {
         *slot = Some(3100.0);
     }
 

@@ -197,15 +197,15 @@ fn main() -> anyhow::Result<()> {
     for (i, a) in pooled.iter().enumerate() {
         print!("{:<14}", a.name);
         for (j, b) in pooled.iter().enumerate() {
-            if j < i {
-                print!("{:>13}", "");
-            } else if i == j {
-                print!("{:>13}", "—");
-            } else {
-                match correlation(&a.values, &b.values) {
+            match j.cmp(&i) {
+                // Lower triangle left blank: correlation is symmetric, so
+                // printing it twice only makes the table harder to read across.
+                std::cmp::Ordering::Less => print!("{:>13}", ""),
+                std::cmp::Ordering::Equal => print!("{:>13}", "—"),
+                std::cmp::Ordering::Greater => match correlation(&a.values, &b.values) {
                     Some(r) => print!("{r:>13.2}"),
                     None => print!("{:>13}", "flat"),
-                }
+                },
             }
         }
         println!();

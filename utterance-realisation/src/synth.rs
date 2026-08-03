@@ -186,8 +186,8 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
             value += amplitude * (std::f32::consts::TAU * hz * t + phase[k]).sin();
         }
 
-        let noisy = breath_filter.step(noise.next_bipolar(), &mut breath_state);
-        *sample += (value * gain * pitched + noisy * breath) * envelope * event.amplitude;
+        let breath_sample = breath_filter.step(noise.next_bipolar(), &mut breath_state);
+        *sample += (value * gain * pitched + breath_sample * breath) * envelope * event.amplitude;
     }
 }
 

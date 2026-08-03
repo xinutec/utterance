@@ -38,9 +38,10 @@ async fn main() -> Result<()> {
         .with_context(|| format!("opening the recording store at {}", cfg.data_dir.display()))?;
 
     tracing::info!("recordings in {}", cfg.data_dir.display());
-    match &cfg.static_dir {
-        Some(dir) => tracing::info!("serving the frontend from {}", dir.display()),
-        None => tracing::info!("API only — run the frontend with `ng serve`"),
+    if let Some(dir) = &cfg.static_dir {
+        tracing::info!("serving the frontend from {}", dir.display());
+    } else {
+        tracing::info!("API only — run the frontend with `ng serve`");
     }
 
     let bind_addr = cfg.bind_addr.clone();

@@ -279,7 +279,7 @@ async fn who_am_i_answers_for_a_signed_in_user() {
 
 /// A moment far enough in the past that TTLs can be stepped over.
 fn a_moment() -> SystemTime {
-    SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000)
+    SystemTime::UNIX_EPOCH + Duration::from_hours(500_000)
 }
 
 fn session(user: &str) -> Session {
@@ -313,14 +313,14 @@ async fn a_cookie_stops_being_accepted_once_it_expires() {
     let auth = gate();
     let now = a_moment();
     let token = auth.issue_session(&session("pippijn"), now);
-    let a_week = Duration::from_secs(7 * 24 * 60 * 60);
+    let a_week = Duration::from_hours(168);
 
     assert!(
-        auth.read_session(&token, now + a_week - Duration::from_secs(60))
+        auth.read_session(&token, now + a_week - Duration::from_mins(1))
             .is_some()
     );
     assert_eq!(
-        auth.read_session(&token, now + a_week + Duration::from_secs(60)),
+        auth.read_session(&token, now + a_week + Duration::from_mins(1)),
         None
     );
 }

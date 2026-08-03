@@ -124,8 +124,7 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: crate::params::Param
         let start_s = frame as f32 * vp.frame.hop_s;
         let next_s = onsets
             .get(n + 1)
-            .map(|&f| f as f32 * vp.frame.hop_s)
-            .unwrap_or(vp.source.duration_s);
+            .map_or(vp.source.duration_s, |&f| f as f32 * vp.frame.hop_s);
         let duration_s = (next_s - start_s).clamp(MIN_NOTE_S, MAX_NOTE_S);
 
         // Colour tracks the vowel across the note rather than freezing it at the
@@ -138,9 +137,9 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: crate::params::Param
         let end_frame = (frame + (duration_s / vp.frame.hop_s) as usize)
             .min(vp.formants.f1.len().saturating_sub(1));
         let colour_from = front.clamp(0.0, 1.0);
-        let colour_to = vowel_near(vp, end_frame)
-            .map(|(a, b)| voice.space.normalise(a, b).1.clamp(0.0, 1.0))
-            .unwrap_or(colour_from);
+        let colour_to = vowel_near(vp, end_frame).map_or(colour_from, |(a, b)| {
+            voice.space.normalise(a, b).1.clamp(0.0, 1.0)
+        });
 
         events.push(Event {
             start_s,

@@ -57,9 +57,9 @@ const COOKIE_NAME: &str = "utterance_session";
 
 /// How long a sign-in lasts. Long, because the alternative is two people being
 /// asked to sign in again in the middle of listening to something.
-const SESSION_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const SESSION_TTL: Duration = Duration::from_hours(7 * 24);
 /// How long the round trip to Nextcloud and back may take.
-const STATE_TTL: Duration = Duration::from_secs(10 * 60);
+const STATE_TTL: Duration = Duration::from_mins(10);
 
 type HmacSha256 = Hmac<Sha256>;
 

@@ -76,9 +76,9 @@ fn wav_fixture_at(secs: f32, rate: u32, channels: u16) -> Vec<u8> {
 
     // Band-limited to 8 kHz whatever the sample rate: a real voice has next to
     // nothing above that, and it keeps the harmonic sum the same size at 48 kHz.
-    let harmonics: Vec<(f32, f32)> = (1..)
+    let ceiling = 8_000.0_f32.min(rate as f32 / 2.0);
+    let harmonics: Vec<(f32, f32)> = (1..(ceiling / F0).ceil() as u32)
         .map(|k| k as f32 * F0)
-        .take_while(|&hz| hz < 8_000.0_f32.min(rate as f32 / 2.0))
         .map(|hz| {
             (
                 hz,
@@ -426,9 +426,8 @@ fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
             } else {
                 (300.0, 2300.0, 3000.0)
             };
-            (1..)
+            (1..(8_000.0 / F0).ceil() as u32)
                 .map(|k| k as f32 * F0)
-                .take_while(|&hz| hz < 8_000.0)
                 .map(|hz| {
                     let gain = (F0 / hz).sqrt()
                         * (formant(hz, f1, 90.0)
@@ -1026,7 +1025,7 @@ fn ends_and_middle(knob: &Value) -> Vec<f32> {
         knob["step"].as_f64().unwrap() as f32,
     );
     let on_grid = |raw: f32| (min + ((raw - min) / step).round() * step).clamp(min, max);
-    let mut values = vec![min, on_grid((min + max) / 2.0), max];
+    let mut values = vec![min, on_grid(f32::midpoint(min, max)), max];
     values.dedup();
     values
 }
@@ -1113,8 +1112,8 @@ async fn every_published_mapping_can_be_rendered() {
                 .unwrap(),
         )
         .await;
-        let sounded = score["voices"].as_array().map(|v| v.len()).unwrap_or(0)
-            + score["events"].as_array().map(|n| n.len()).unwrap_or(0);
+        let sounded = score["voices"].as_array().map_or(0, std::vec::Vec::len)
+            + score["events"].as_array().map_or(0, std::vec::Vec::len);
         assert!(sounded > 0, "{name} sounded no pitched material: {score}");
     }
 }
@@ -1507,9 +1506,8 @@ fn wav_fixture_held_vowel(secs: f32, f1: f32, f2: f32) -> Vec<u8> {
     const F0: f32 = 125.0;
     let formant = |hz: f32, center: f32, bw: f32| 1.0 / (1.0 + ((hz - center) / bw).powi(2));
 
-    let harmonics: Vec<(f32, f32)> = (1..)
+    let harmonics: Vec<(f32, f32)> = (1..(8_000.0 / F0).ceil() as u32)
         .map(|k| k as f32 * F0)
-        .take_while(|&hz| hz < 8_000.0)
         .map(|hz| {
             (
                 hz,

@@ -174,7 +174,7 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
             .iter()
             .flatten()
             .map(|(_, a)| *a)
-            .fold(None, max_of)
+            .max_by(f32::total_cmp)
         else {
             continue;
         };
@@ -196,7 +196,7 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
     let peak = amplitudes
         .iter()
         .filter_map(|a| median(a))
-        .fold(None, max_of)
+        .max_by(f32::total_cmp)
         .unwrap_or(1.0);
 
     let partials = (1..=MAX_PARTIAL)
@@ -293,12 +293,4 @@ fn median(values: &[f32]) -> Option<f32> {
     let mut sorted = values.to_vec();
     sorted.sort_by(f32::total_cmp);
     Some(sorted[sorted.len() / 2])
-}
-
-/// Fold helper: the larger of an optional running maximum and a value.
-fn max_of(best: Option<f32>, value: f32) -> Option<f32> {
-    Some(match best {
-        Some(current) if current >= value => current,
-        _ => value,
-    })
 }

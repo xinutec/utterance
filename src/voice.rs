@@ -196,8 +196,7 @@ pub fn calibrate_with(
             .filter(|(_, v)| v.partials.frames_used >= MIN_CALIBRATION_FRAMES)
             .max_by_key(|(_, v)| {
                 let degrees = tuning::from_partials_with(&v.partials, min_depth)
-                    .map(|t| t.degrees.len())
-                    .unwrap_or(0);
+                    .map_or(0, |t| t.degrees.len());
                 (degrees, v.partials.frames_used)
             })
             .ok_or_else(|| {

@@ -125,16 +125,15 @@ fn main() -> anyhow::Result<()> {
     // The published range's ends and its middle, plus the default — the same
     // discipline the knob tests use, because a knob is judged by what it does
     // across its travel and not at the setting someone happened to leave it on.
-    let holds: Vec<f32> = match std::env::args().nth(1) {
-        Some(one) => vec![one.parse()?],
-        None => {
-            let mut set: BTreeSet<u32> = [0.0f32, 0.25, 0.5, 0.75, 0.9, 1.0]
-                .iter()
-                .map(|h| (h * 1000.0) as u32)
-                .collect();
-            set.insert((Params::default().hold * 1000.0) as u32);
-            set.into_iter().map(|h| h as f32 / 1000.0).collect()
-        }
+    let holds: Vec<f32> = if let Some(one) = std::env::args().nth(1) {
+        vec![one.parse()?]
+    } else {
+        let mut set: BTreeSet<u32> = [0.0f32, 0.25, 0.5, 0.75, 0.9, 1.0]
+            .iter()
+            .map(|h| (h * 1000.0) as u32)
+            .collect();
+        set.insert((Params::default().hold * 1000.0) as u32);
+        set.into_iter().map(|h| h as f32 / 1000.0).collect()
     };
 
     // The second knob that decides how long a chord rings, and the one the

@@ -5,7 +5,7 @@
 //! there looking hung, and then failed to bind because one was already running.
 //! Nothing about that says "this program has no options".
 
-use utterance::config::{Invocation, invocation};
+use utterance::config::{DEFAULT_BIND_ADDR, DEFAULT_DATA_DIR, Invocation, invocation};
 
 fn args(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| (*s).to_string()).collect()
@@ -38,19 +38,17 @@ fn the_help_quotes_the_defaults_the_code_actually_uses() {
     let Ok(Invocation::Print(text)) = invocation(args(&["--help"])) else {
         panic!("no help");
     };
-    unsafe {
-        std::env::remove_var("BIND_ADDR");
-        std::env::remove_var("DATA_DIR");
-    }
-    let defaults = utterance::config::Config::from_env();
+    // Against the constants themselves, not against `from_env`. Reading them
+    // back through `from_env` proved less: it answers with the environment when
+    // one is set, so the assertion held for a help text quoting nothing in
+    // particular as long as the matching variable happened to be exported.
     assert!(
-        text.contains(&defaults.bind_addr),
-        "help does not quote the real default address {}",
-        defaults.bind_addr
+        text.contains(DEFAULT_BIND_ADDR),
+        "help does not quote the real default address {DEFAULT_BIND_ADDR}"
     );
     assert!(
-        text.contains(&defaults.data_dir.display().to_string()),
-        "help does not quote the real default data directory"
+        text.contains(DEFAULT_DATA_DIR),
+        "help does not quote the real default data directory {DEFAULT_DATA_DIR}"
     );
 }
 

@@ -60,10 +60,16 @@ fn white_noise_is_flat_and_a_tone_is_not() {
     let noise = texture::track(&white(1.0));
     let tone = texture::track(&common::sine(440.0, ANALYSIS_RATE, 1.0));
 
-    let noisy = steady_median(&noise.flatness);
-    let tonal = steady_median(&tone.flatness);
-    assert!(noisy > 0.4, "white noise measured only {noisy:.3} flat");
-    assert!(tonal < 0.05, "a sine measured {tonal:.3} flat");
+    let noise_flatness = steady_median(&noise.flatness);
+    let tone_flatness = steady_median(&tone.flatness);
+    assert!(
+        noise_flatness > 0.4,
+        "white noise measured only {noise_flatness:.3} flat"
+    );
+    assert!(
+        tone_flatness < 0.05,
+        "a sine measured {tone_flatness:.3} flat"
+    );
 }
 
 #[test]

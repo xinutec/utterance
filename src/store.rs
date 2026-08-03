@@ -378,12 +378,17 @@ const META: &str = "meta.json";
 const ID_LEN: usize = 16;
 
 fn content_id(audio: &[u8]) -> String {
+    use std::fmt::Write as _;
     let digest = Sha256::digest(audio);
     digest
         .iter()
         .take(ID_LEN / 2)
-        .map(|b| format!("{b:02x}"))
-        .collect()
+        .fold(String::with_capacity(ID_LEN), |mut id, b| {
+            // Infallible: the only error `write!` can report here is the
+            // formatter's, and a String's never fails.
+            let _ = write!(id, "{b:02x}");
+            id
+        })
 }
 
 fn is_valid_id(id: &str) -> bool {

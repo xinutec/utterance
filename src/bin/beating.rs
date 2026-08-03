@@ -201,6 +201,14 @@ fn beating(samples: &[f32]) -> f32 {
 /// Matched exhaustively rather than defaulted to true: a mapping added to the
 /// crate has to answer this before it can be measured here, and answering wrong
 /// by omission is how a confounded comparison gets published as a result.
+#[expect(
+    clippy::match_same_arms,
+    reason = "Field and Tonnetz both answer true for unrelated reasons, and each \
+              arm's comment is the reason. Merging them into one `|` arm would \
+              leave a single comment covering two different arguments — and the \
+              Tonnetz one is a fact about a change that has already caught this \
+              measurement out once."
+)]
 fn holds_the_chord_still(mapping: Mapping) -> bool {
     match mapping {
         // Voices stacked at a fixed spacing in scale degrees, so retuning the

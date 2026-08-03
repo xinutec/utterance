@@ -156,10 +156,10 @@ fn his_prosody_transposes_the_whole_field() {
     // nothing read it at all.
     let mut low = take(600);
     let mut high = take(600);
-    for slot in high.pitch.hz.iter_mut() {
+    for slot in &mut high.pitch.hz {
         *slot = Some(200.0);
     }
-    for slot in low.pitch.hz.iter_mut() {
+    for slot in &mut low.pitch.hz {
         *slot = Some(100.0);
     }
 
@@ -176,10 +176,10 @@ fn his_prosody_transposes_the_whole_field() {
 fn the_vowel_walks_the_root_through_the_scale() {
     let mut back = take(600);
     let mut fronted = take(600);
-    for slot in fronted.formants.f2.iter_mut() {
+    for slot in &mut fronted.formants.f2 {
         *slot = Some(2350.0);
     }
-    for slot in back.formants.f2.iter_mut() {
+    for slot in &mut back.formants.f2 {
         *slot = Some(950.0);
     }
 
@@ -194,7 +194,7 @@ fn a_vowel_that_drops_out_holds_its_position() {
     // A held vowel is still that vowel while a consonant interrupts it. Falling
     // back to the middle of the space would make every consonant a lurch.
     let mut vp = take(400);
-    for slot in vp.formants.f2.iter_mut() {
+    for slot in &mut vp.formants.f2 {
         *slot = Some(2350.0);
     }
     for i in 200..240 {
@@ -320,11 +320,11 @@ fn the_third_formant_opens_and_clusters_the_chord() {
     // F2 — the same vowel throughout, by every measure the chart has — differing
     // only in the mouth shape behind it.
     let mut rounded = take(300);
-    for slot in rounded.formants.f3.iter_mut() {
+    for slot in &mut rounded.formants.f3 {
         *slot = Some(2100.0);
     }
     let mut spread = take(300);
-    for slot in spread.formants.f3.iter_mut() {
+    for slot in &mut spread.formants.f3 {
         *slot = Some(3100.0);
     }
 
@@ -347,11 +347,11 @@ fn the_third_formant_opens_and_clusters_the_chord() {
 #[test]
 fn voicing_at_zero_ignores_the_third_formant() {
     let mut rounded = take(300);
-    for slot in rounded.formants.f3.iter_mut() {
+    for slot in &mut rounded.formants.f3 {
         *slot = Some(2100.0);
     }
     let mut spread = take(300);
-    for slot in spread.formants.f3.iter_mut() {
+    for slot in &mut spread.formants.f3 {
         *slot = Some(3100.0);
     }
 
@@ -370,7 +370,7 @@ fn an_unmeasured_third_formant_leaves_the_chord_alone() {
     // No F3 range is a dimension nobody measured. The field must build exactly
     // the chord the other streams asked for rather than guess at this one.
     let mut vp = take(300);
-    for slot in vp.formants.f3.iter_mut() {
+    for slot in &mut vp.formants.f3 {
         *slot = Some(3100.0);
     }
 

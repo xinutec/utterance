@@ -563,7 +563,7 @@ fn reduce(values: &[f32]) -> Vec<f32> {
         .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), &v| {
             (lo.min(v), hi.max(v))
         });
-    let middle = (lo + hi) / 2.0;
+    let middle = f32::midpoint(lo, hi);
 
     values
         .chunks(step)
@@ -598,7 +598,10 @@ pub async fn render(
         id,
         score.events.len(),
         score.noise.len(),
-        score.field.as_ref().map(|f| f.voice_count()).unwrap_or(0),
+        score
+            .field
+            .as_ref()
+            .map_or(0, utterance_mapping::score::Field::voice_count),
         tuning.degrees.len(),
     );
 

@@ -9,3 +9,6 @@ edition = "2024"
 utterance-mapping = { path = "../utterance-mapping" }
 # WAV container only, the same one analysis decodes with.
 hound = "3.5.1"
+
+[lints]
+workspace = true

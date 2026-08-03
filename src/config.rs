@@ -6,8 +6,14 @@ use std::path::PathBuf;
 ///
 /// A usage message that lists a default the program does not use is worse than
 /// no usage message: it is believed.
-const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8181";
-const DEFAULT_DATA_DIR: &str = "data";
+///
+/// Public so `tests/cli.rs` can assert the help quotes these. It used to get at
+/// them by clearing `BIND_ADDR` and `DATA_DIR` and reading back `from_env` —
+/// which meant an `unsafe` block mutating process-global environment while the
+/// other tests in the binary ran on parallel threads, exactly the race edition
+/// 2024 made `remove_var` unsafe for.
+pub const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8181";
+pub const DEFAULT_DATA_DIR: &str = "data";
 
 #[derive(Clone, Debug)]
 pub struct Config {

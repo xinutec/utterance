@@ -67,9 +67,11 @@ fn harmonic_series(f0_hz: f32, ceiling: f32) -> Vec<(f32, f32)> {
     fn formant(hz: f32, center: f32, bandwidth: f32) -> f32 {
         1.0 / (1.0 + ((hz - center) / bandwidth).powi(2))
     }
-    (1..)
+    // The partial count up front rather than an unbounded `(1..)` stopped by a
+    // `take_while`: same series, but the end is arithmetic anyone can check
+    // instead of a property of the closure.
+    (1..(ceiling / f0_hz).ceil() as u32)
         .map(|k| k as f32 * f0_hz)
-        .take_while(|&hz| hz < ceiling)
         // -6 dB/octave glottal rolloff, then the vocal-tract envelope.
         .map(|hz| {
             (
