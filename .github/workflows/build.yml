@@ -37,7 +37,13 @@ jobs:
       # Without this the container re-downloads and recompiles the whole
       # dependency tree on every push, twice (clippy and test).
       - uses: Swatinem/rust-cache@v2
-      - run: rustup component add clippy
+      - run: rustup component add clippy rustfmt
+      # Formatting was checked by scripts/verify.sh and by nothing here, so it
+      # rode on whichever machine ran the pre-commit hook.
+      - run: cargo fmt --all --check
+      # The lint level lives in Cargo.toml's [workspace.lints] (pedantic, with
+      # the cast and internal-API families allowed there and reasoned about);
+      # `-D warnings` is what turns those warnings into a failure.
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       # The frontend's types are generated from the Rust wire types; fail if the
@@ -89,6 +95,12 @@ jobs:
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
+      # The e2e tree is not reached by the app's own tsconfigs, and Playwright
+      # transforms specs with esbuild, which strips types rather than checking
+      # them. Without this step the harness that measures how the app behaves on
+      # a phone is compiled by nothing in CI — it was gated only by the
+      # pre-commit hook, which a --no-verify push or a hookless checkout skips.
+      - run: pnpm run typecheck:e2e
       - run: pnpm test
       # Real-browser layout check: the harness serves the built bundle and
       # asserts nothing overlaps or overflows at phone geometry. `ui-check`

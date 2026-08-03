@@ -56,13 +56,16 @@ nix develop -c bash -c '
   # ng build (via ui-check) intermittently aborts at libuv/kqueue teardown on
   # macOS; NG_BUILD_MAX_WORKERS=1 lowers the rate. Harmless on Linux/CI.
   export NG_BUILD_MAX_WORKERS=1
-  # --frozen-lockfile is pnpm ci: install exactly pnpm-lock.yaml, or fail. The
-  # guard is not just a speed-up — a node_modules left behind by npm still has a
-  # working .bin, so verify would pass against packages the lockfile no longer
-  # describes.
-  if [ ! -x frontend/node_modules/.bin/eslint ] || [ frontend/pnpm-lock.yaml -nt frontend/node_modules ]; then
-    ( cd frontend && pnpm install --frozen-lockfile )
-  fi
+  # --frozen-lockfile is pnpm ci: install exactly pnpm-lock.yaml, or fail.
+  #
+  # Unconditionally, because deciding *whether* to install is the same question
+  # as installing — does node_modules match the lockfile — and pnpm answers it
+  # from its own install record while a shell test can only guess at it. The
+  # guard this replaces looked for an executable .bin/eslint, which a half-
+  # written tree has: a node_modules missing eslint-visitor-keys passed the
+  # check and then failed lint with a module-resolution error naming a package
+  # nobody had touched. 460ms when there is nothing to do.
+  ( cd frontend && pnpm install --frozen-lockfile )
   ( cd frontend && pnpm run lint && pnpm run typecheck:e2e && pnpm test && pnpm run ui-check )
 '
 
