@@ -50,6 +50,27 @@ export default tseslint.config(
     },
   },
   {
+    // The layout harness and the Playwright config. Named on the lint command
+    // once before without a matching block here, which linted nothing and
+    // warned on every run — a check that looked present and was not.
+    //
+    // No Angular rules: there are no components here, only Playwright specs and
+    // the config. Type-aware all the same, because the harness is the only gate
+    // that sees what a phone suffers, and one that quietly stopped asserting
+    // would look exactly like one that passes.
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
+    extends: [...tseslint.configs.recommendedTypeChecked, ...tseslint.configs.stylisticTypeChecked],
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      // Same reasoning as the specs above: `page.evaluate` hands back whatever
+      // the browser had, and a wrong shape fails the harness rather than
+      // reaching a user.
+      "@typescript-eslint/no-unsafe-type-assertion": "off",
+    },
+  },
+  {
     files: ["src/**/*.html"],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
   },

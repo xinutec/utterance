@@ -24,6 +24,7 @@ use utterance::config::Config;
 use utterance::routes;
 use utterance::state::AppState;
 use utterance::store::Store;
+use utterance::webauth;
 use utterance::webauth::{Session, WebAuth};
 
 struct TestApp {
@@ -445,4 +446,151 @@ async fn the_authorize_url_escapes_what_it_interpolates() {
         url.contains("redirect_uri=https%3A%2F%2Futterance.example%2Fauth%2Fcallback"),
         "{url}"
     );
+}
+
+// ---- reading the configuration ------------------------------------------
+//
+// `from_env` reads the process environment and so was unreachable from a test:
+// getting at it meant `set_var`, which is `unsafe` in edition 2024 because it
+// races every other thread in the binary, and these tests run in parallel.
+// `from_vars` takes the lookup instead, which puts the decisions below — is a
+// half-set configuration configured, which address does a call go to, who is on
+// the list — in reach without touching the process at all.
+
+/// A lookup over a fixed table, standing in for the environment.
+fn vars(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+    let owned: Vec<(String, String)> = pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect();
+    move |name| {
+        owned
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.clone())
+    }
+}
+
+/// The three that decide whether there is a gate at all.
+fn configured() -> Vec<(&'static str, &'static str)> {
+    vec![
+        (webauth::SESSION_SECRET_ENV, "s3cret"),
+        (webauth::CLIENT_ID_ENV, "client"),
+        (webauth::CLIENT_SECRET_ENV, "shh"),
+    ]
+}
+
+#[test]
+fn nothing_set_means_no_gate() {
+    assert!(WebAuth::from_vars(vars(&[])).is_none());
+}
+
+#[test]
+fn a_half_set_configuration_is_off_rather_than_open() {
+    // The module's central claim: a wall that can be bypassed is worse than no
+    // wall, because it is believed. Each of the three missing in turn, so this
+    // cannot pass by one of them being special.
+    for missing in 0..3 {
+        let mut set = configured();
+        let dropped = set.remove(missing);
+        assert!(
+            WebAuth::from_vars(vars(&set)).is_none(),
+            "a gate was built with {} missing",
+            dropped.0
+        );
+    }
+}
+
+#[test]
+fn an_empty_string_is_not_a_setting() {
+    // A variable exported as "" is how a secret arrives when the thing meant to
+    // fill it did not. Treated as set, it would build a gate whose sessions are
+    // signed with the empty key.
+    let mut set = configured();
+    set[0].1 = "";
+    assert!(WebAuth::from_vars(vars(&set)).is_none());
+}
+
+#[test]
+fn all_three_set_means_a_gate() {
+    assert!(WebAuth::from_vars(vars(&configured())).is_some());
+}
+
+#[test]
+fn a_trailing_slash_does_not_double_up_in_a_url() {
+    // `https://dash.example/` + `/index.php/...` is a path with `//` in it,
+    // which Nextcloud answers with a redirect the sign-in does not follow.
+    let mut set = configured();
+    set.push((webauth::NC_BASE_URL_ENV, "https://dash.example/"));
+    let auth = WebAuth::from_vars(vars(&set)).expect("configured");
+    assert_eq!(
+        auth.server_call("/ocs"),
+        ("https://dash.example/ocs".into(), None)
+    );
+}
+
+#[test]
+fn without_an_internal_url_calls_go_to_the_public_one() {
+    let mut set = configured();
+    set.push((webauth::NC_BASE_URL_ENV, "https://dash.example"));
+    let auth = WebAuth::from_vars(vars(&set)).expect("configured");
+    // No `Host` override, because there is only one address in play.
+    assert_eq!(
+        auth.server_call("/ocs"),
+        ("https://dash.example/ocs".into(), None)
+    );
+}
+
+#[test]
+fn an_internal_url_is_where_the_call_goes_and_the_public_one_is_the_host() {
+    // The failure this prevents cost the fleet's other Nextcloud gate an
+    // afternoon: in-cluster, the public name resolves to the node itself and the
+    // pod's own request hairpins.
+    let mut set = configured();
+    set.push((webauth::NC_BASE_URL_ENV, "https://dash.example"));
+    set.push((webauth::NC_INTERNAL_URL_ENV, "http://nextcloud.nc.svc/"));
+    let auth = WebAuth::from_vars(vars(&set)).expect("configured");
+    assert_eq!(
+        auth.server_call("/ocs"),
+        (
+            "http://nextcloud.nc.svc/ocs".into(),
+            Some("dash.example".into())
+        )
+    );
+}
+
+#[test]
+fn an_empty_internal_url_falls_back_rather_than_producing_a_hostless_call() {
+    // How the variable arrives when the manifest declares it and leaves it
+    // blank. Taken literally it would build the URL `/ocs` and open a
+    // connection to nowhere.
+    let mut set = configured();
+    set.push((webauth::NC_BASE_URL_ENV, "https://dash.example"));
+    set.push((webauth::NC_INTERNAL_URL_ENV, ""));
+    let auth = WebAuth::from_vars(vars(&set)).expect("configured");
+    assert_eq!(
+        auth.server_call("/ocs"),
+        ("https://dash.example/ocs".into(), None)
+    );
+}
+
+#[test]
+fn an_unset_allowlist_admits_any_nextcloud_user() {
+    let auth = WebAuth::from_vars(vars(&configured())).expect("configured");
+    assert!(auth.permits("anyone"));
+}
+
+#[test]
+fn the_allowlist_is_split_trimmed_and_stripped_of_blanks() {
+    // Written by hand into a k8s manifest, so spaces after the commas and a
+    // trailing one are what it actually looks like. A blank entry surviving
+    // would not admit anyone extra, but an untrimmed one silently refuses the
+    // person it names.
+    let mut set = configured();
+    set.push((webauth::ALLOWED_USERS_ENV, " pippijn, michiel ,, "));
+    let auth = WebAuth::from_vars(vars(&set)).expect("configured");
+    assert!(auth.permits("pippijn"));
+    assert!(auth.permits("michiel"));
+    assert!(!auth.permits(""));
+    assert!(!auth.permits("someone-else"));
 }

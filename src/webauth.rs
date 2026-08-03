@@ -45,10 +45,10 @@ use sha2::Sha256;
 pub const SESSION_SECRET_ENV: &str = "UTTERANCE_SESSION_SECRET";
 pub const CLIENT_ID_ENV: &str = "NC_CLIENT_ID";
 pub const CLIENT_SECRET_ENV: &str = "NC_CLIENT_SECRET";
-const NC_BASE_URL_ENV: &str = "NC_BASE_URL";
-const NC_INTERNAL_URL_ENV: &str = "NC_INTERNAL_URL";
-const REDIRECT_URI_ENV: &str = "NC_REDIRECT_URI";
-const ALLOWED_USERS_ENV: &str = "UTTERANCE_ALLOWED_USERS";
+pub const NC_BASE_URL_ENV: &str = "NC_BASE_URL";
+pub const NC_INTERNAL_URL_ENV: &str = "NC_INTERNAL_URL";
+pub const REDIRECT_URI_ENV: &str = "NC_REDIRECT_URI";
+pub const ALLOWED_USERS_ENV: &str = "UTTERANCE_ALLOWED_USERS";
 
 const DEFAULT_NC_BASE_URL: &str = "https://dash.xinutec.org";
 const DEFAULT_REDIRECT_URI: &str = "https://utterance.xinutec.org/auth/callback";
@@ -151,13 +151,22 @@ impl WebAuth {
 
     /// Read the environment, or `None` when sign-in is not configured.
     pub fn from_env() -> Option<Self> {
-        let secret = std::env::var(SESSION_SECRET_ENV)
-            .ok()
-            .filter(|s| !s.is_empty());
-        let client_id = std::env::var(CLIENT_ID_ENV).ok().filter(|s| !s.is_empty());
-        let client_secret = std::env::var(CLIENT_SECRET_ENV)
-            .ok()
-            .filter(|s| !s.is_empty());
+        Self::from_vars(|name| std::env::var(name).ok())
+    }
+
+    /// The same, over an arbitrary lookup rather than the process environment.
+    ///
+    /// Split out because everything below is real decisions — whether a partial
+    /// configuration counts as configured, which URL a call goes to, who is on
+    /// the list — and calling `std::env::var` inside them put every one of those
+    /// decisions out of reach of a test. The only way to reach them was
+    /// `set_var`, which edition 2024 made `unsafe` for good reason: it races
+    /// every other thread in the binary, and the tests run in parallel. The same
+    /// trap used to sit in `tests/cli.rs`.
+    pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Option<Self> {
+        let secret = var(SESSION_SECRET_ENV).filter(|s| !s.is_empty());
+        let client_id = var(CLIENT_ID_ENV).filter(|s| !s.is_empty());
+        let client_secret = var(CLIENT_SECRET_ENV).filter(|s| !s.is_empty());
 
         let present = [&secret, &client_id, &client_secret].map(Option::is_some);
         if !present.iter().any(|p| *p) {
@@ -177,11 +186,9 @@ impl WebAuth {
         }
 
         let trim_slash = |s: String| s.trim_end_matches('/').to_string();
-        let nc_base_url = trim_slash(
-            std::env::var(NC_BASE_URL_ENV).unwrap_or_else(|_| DEFAULT_NC_BASE_URL.to_string()),
-        );
-        let nc_internal_url = std::env::var(NC_INTERNAL_URL_ENV)
-            .ok()
+        let nc_base_url =
+            trim_slash(var(NC_BASE_URL_ENV).unwrap_or_else(|| DEFAULT_NC_BASE_URL.to_string()));
+        let nc_internal_url = var(NC_INTERNAL_URL_ENV)
             .map(trim_slash)
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| nc_base_url.clone());
@@ -192,9 +199,8 @@ impl WebAuth {
             client_secret: client_secret?,
             nc_base_url,
             nc_internal_url,
-            redirect_uri: std::env::var(REDIRECT_URI_ENV)
-                .unwrap_or_else(|_| DEFAULT_REDIRECT_URI.to_string()),
-            allowed_users: std::env::var(ALLOWED_USERS_ENV)
+            redirect_uri: var(REDIRECT_URI_ENV).unwrap_or_else(|| DEFAULT_REDIRECT_URI.to_string()),
+            allowed_users: var(ALLOWED_USERS_ENV)
                 .unwrap_or_default()
                 .split(',')
                 .map(str::trim)

@@ -72,6 +72,17 @@
             pkgs.clippy
             pkgs.nodejs_24 # Angular 22 frontend (frontend/)
             pkgs.pnpm # the frontend's installer; node ships npm too, ignore it
+
+            # scripts/coverage.sh. Not in the gate — a coverage threshold
+            # measures how much code a test touched, not whether it would notice
+            # the code being wrong, and gating on it rewards tests that execute
+            # rather than assert. It is here to be run when the question comes
+            # up, and to be reproducible when it is.
+            pkgs.cargo-llvm-cov
+            # llvm-profdata must match the LLVM rustc was built against or it
+            # cannot read the .profraw files. Pinned to the major rather than
+            # `pkgs.llvm`, which floats independently of the toolchain.
+            pkgs.llvmPackages_21.llvm
           ];
         };
       });
