@@ -75,7 +75,10 @@ export class Calibration implements OnInit {
           ? "microphone access was refused — allow it in the browser's site settings and try again"
           : err instanceof Error
             ? err.message
-            : String(err),
+            // Nothing left to narrow to. `String(err)` here is where
+            // "[object Object]" comes from, and a sentence is more use than a
+            // shape name the reader cannot act on.
+            : "the microphone could not be opened",
       );
     }
   }

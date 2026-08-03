@@ -14,7 +14,7 @@ import { MatProgressBarModule } from "@angular/material/progress-bar";
 
 import { ControlsStore } from "../../controls-store";
 import type { ScaleDegree, VoiceSummary } from "../../models";
-import { ApiError, RecordingsApi } from "../../recordings-api";
+import { ApiError, RecordingsApi, UNEXPLAINED } from "../../recordings-api";
 import { MappingControls } from "./mapping-controls";
 import { INITIAL_SETTINGS, settingsQuery, type MappingSettings } from "./mapping-settings";
 
@@ -171,7 +171,7 @@ export class DerivedMusic implements OnInit {
       },
       error: (err: unknown) => {
         this.loading.set(false);
-        this.error.set(err instanceof ApiError ? err.message : String(err));
+        this.error.set(err instanceof ApiError ? err.message : UNEXPLAINED);
       },
     });
   }

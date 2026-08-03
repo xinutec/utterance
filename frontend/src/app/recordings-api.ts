@@ -32,6 +32,15 @@ export type ApiFailure =
   | { readonly kind: "unknown"; readonly message: string };
 
 /** The error every method in this service rejects with. */
+/**
+ * What to say when nothing about a failure could be recognised.
+ *
+ * The last rung of every narrowing ladder. `String(err)` there reads
+ * "[object Object]" for anything that is not an `Error`, which is both useless
+ * and the one thing that makes a careful error path look broken.
+ */
+export const UNEXPLAINED = "the server did not say what went wrong";
+
 export class ApiError extends Error {
   constructor(readonly failure: ApiFailure) {
     super(failure.message);

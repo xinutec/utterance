@@ -23,7 +23,7 @@ import { ActivatedRoute, Router } from "@angular/router";
 
 import { ControlsStore } from "../../controls-store";
 import type { ScoreView } from "../../models";
-import { ApiError, RecordingsApi } from "../../recordings-api";
+import { ApiError, RecordingsApi, UNEXPLAINED } from "../../recordings-api";
 import { RecordingsStore } from "../../recordings-store";
 import { MappingControls } from "../studio/mapping-controls";
 import {
@@ -291,7 +291,7 @@ export class Compare implements OnInit {
         },
         error: (err: unknown) => {
           if (token !== this.scoreRequest) return;
-          const message = err instanceof ApiError ? err.message : String(err);
+          const message = err instanceof ApiError ? err.message : UNEXPLAINED;
           // A refusal is not a failure to retry: the settings and this
           // speaker's scale have no answer for each other, and the way out is
           // to move one of them.
