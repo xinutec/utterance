@@ -5,7 +5,7 @@ Was `scripts/verify.sh`. Three of its parts moved rather than disappeared.
 
 **The lock is now the runner's.** Thirty of the script's seventy-five lines were
 a `mkdir`-based mutex with a pid file and stale-lock detection, because two runs
-share the working tree: `check-types.sh` regenerates into
+share the working tree: the generated-types row regenerates into
 `frontend/src/app/generated` while the other run compares that directory to a
 snapshot, so the second reports drift that does not exist and leaves the loser's
 temp directory inside `generated/` for the next run to report as drift too. That
@@ -88,8 +88,8 @@ in  { name = "utterance"
         , timeout_s = 1800
         }
       , {-  The `ts` feature (which pulls ts-rs) stays off here on purpose —
-            normal builds must not carry it. `check-types.sh` below turns it on
-            for generation.
+            normal builds must not carry it. `scripts/gen-types.sh` below turns it
+            on for generation.
         -}
         G.Check::{
         , name = "tests"
@@ -102,7 +102,7 @@ in  { name = "utterance"
         -}
         G.Check::{
         , name = "generated types are current"
-        , argv = G.inDevShell [ "scripts/check-types.sh" ]
+        , argv = G.inDevShell [ "scripts/gen-types.sh", "--check" ]
         , timeout_s = 900
         }
       , G.Check::{
