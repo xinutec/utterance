@@ -39,17 +39,27 @@ had touched. 460 ms when there is nothing to do.
 
 The generated `gate.json` is committed; `the table matches its Dhall` re-renders
 and diffs it, so running the gate needs no `dhall`.
+
+**The vocabulary moved into the schema.** `inDevShell`, the clippy target
+directory, the Angular worker cap, and the `ng-build` / `dev-lint` /
+`check-table` rows were spelled out here and in a dozen other tables
+identically — the duplication the shared tools were built to remove, recreated
+one level up. They are `G.` values now. Two consequences the rendered JSON
+shows: every dev-shell row gains `--no-warn-dirty`, because a gate that prints
+"Git tree is dirty" on every row of every run has trained everyone to ignore a
+warning; and dev-lint is pinned to its committed HEAD rather than run out of its
+worktree, which is what stops a neighbour's half-finished edit failing this gate
+for a reason no commit anywhere explains.
+
 -}
 
 let G = ../dev-lint/gate/schema.dhall
-
-let inDevShell = \(argv : List Text) -> [ "nix", "develop", "--command" ] # argv
 
 in  { name = "utterance"
     , checks =
       [ G.Check::{
         , name = "formatting"
-        , argv = inDevShell [ "cargo", "fmt", "--all", "--check" ]
+        , argv = G.inDevShell [ "cargo", "fmt", "--all", "--check" ]
         , timeout_s = 180
         }
       , {-  Clippy gets its own target directory: clippy-driver and rustc
@@ -64,7 +74,7 @@ in  { name = "utterance"
         G.Check::{
         , name = "clippy"
         , argv =
-            inDevShell
+            G.inDevShell
               [ "cargo"
               , "clippy"
               , "--workspace"
@@ -74,8 +84,7 @@ in  { name = "utterance"
               , "warnings"
               ]
         , env =
-            toMap
-              { CARGO_TARGET_DIR = "/Users/pippijn/.cache/cargo/clippy-target" }
+            G.clippyTarget
         , timeout_s = 1800
         }
       , {-  The `ts` feature (which pulls ts-rs) stays off here on purpose —
@@ -84,7 +93,7 @@ in  { name = "utterance"
         -}
         G.Check::{
         , name = "tests"
-        , argv = inDevShell [ "cargo", "test", "--workspace" ]
+        , argv = G.inDevShell [ "cargo", "test", "--workspace" ]
         , timeout_s = 1800
         }
       , {-  Regenerate the frontend TS from the Rust types and fail on drift.
@@ -93,31 +102,31 @@ in  { name = "utterance"
         -}
         G.Check::{
         , name = "generated types are current"
-        , argv = inDevShell [ "scripts/check-types.sh" ]
+        , argv = G.inDevShell [ "scripts/check-types.sh" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend deps match the lockfile"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend lint"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "run", "lint" ]
+        , argv = G.inDevShell [ "pnpm", "run", "lint" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend typecheck (e2e)"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "run", "typecheck:e2e" ]
+        , argv = G.inDevShell [ "pnpm", "run", "typecheck:e2e" ]
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend unit tests"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "test" ]
+        , argv = G.inDevShell [ "pnpm", "test" ]
         , env = toMap { NG_BUILD_MAX_WORKERS = "1" }
         , timeout_s = 1800
         }
@@ -127,15 +136,10 @@ in  { name = "utterance"
         , name = "frontend build"
         , cwd = "frontend"
         , argv =
-              inDevShell [ "nix", "run", "../../dev-lint#ng-build", "--" ]
-            # [ "--expect"
-              , "dist/utterance-web/browser"
-              , "--"
-              , "pnpm"
-              , "exec"
-              , "ng"
-              , "build"
-              ]
+            G.ngBuild
+              "../../"
+              [ "dist/utterance-web/browser" ]
+              [ "pnpm", "exec", "ng", "build" ]
         , timeout_s = 1800
         }
       , {-  The L2 phone-width layout harness, serving the dist the build row
@@ -145,30 +149,10 @@ in  { name = "utterance"
         G.Check::{
         , name = "frontend ui-check (phone-width layout harness)"
         , cwd = "frontend"
-        , argv = inDevShell [ "pnpm", "run", "ui-check" ]
+        , argv = G.inDevShell [ "pnpm", "run", "ui-check" ]
         , timeout_s = 1800
         }
-      , G.Check::{
-        , name = "the table matches its Dhall"
-        , argv =
-            [ "nix"
-            , "run"
-            , "../dev-lint#gate"
-            , "--"
-            , "--check-table"
-            , "gate.dhall"
-            , "gate.json"
-            ]
-        , timeout_s = 120
-        }
-      , {-  Shared fleet rules over the whole repository. `nix run`, never
-            result/bin — a pinned build goes stale and silently misses rules
-            shipped since.
-        -}
-        G.Check::{
-        , name = "dev-lint"
-        , argv = [ "nix", "run", "../dev-lint", "--", "." ]
-        , timeout_s = 900
-        }
+      , G.checkTable "../dev-lint"
+      , G.devLint "../"
       ]
     }
