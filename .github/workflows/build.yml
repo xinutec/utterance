@@ -102,9 +102,19 @@ jobs:
       # pre-commit hook, which a --no-verify push or a hookless checkout skips.
       - run: pnpm run typecheck:e2e
       - run: pnpm test
-      # Real-browser layout check: the harness serves the built bundle and
-      # asserts nothing overlaps or overflows at phone geometry. `ui-check`
-      # builds first, so there is no separate build step.
+      # The harness serves the *built* bundle, and `ui-check` is `playwright
+      # test` alone — the gate table (gate.dhall) makes the build a row of its
+      # own so that a build failure is reported as one, rather than as a layout
+      # failure. So the build has to happen here too, or the static server has
+      # nothing to serve and the harness dies on `Timed out waiting 60000ms from
+      # config.webServer`, which is what it did for two commits.
+      #
+      # Plain `ng build`, not the `dev-lint#ng-build` wrapper the gate row uses:
+      # that needs nix and the private dev-lint repo, and the mtime assertion it
+      # adds guards a macOS-only kqueue abort that cannot happen on the runner.
+      - run: pnpm exec ng build
+      # Real-browser layout check: asserts nothing overlaps or overflows at
+      # phone geometry.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run ui-check
 
