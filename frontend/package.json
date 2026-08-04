@@ -9,7 +9,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test --watch=false",
     "lint": "eslint src e2e playwright.config.ts",
-    "ui-check": "ng build && playwright test",
+    "ui-check": "playwright test",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json"
   },
   "dependencies": {

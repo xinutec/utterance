@@ -69,8 +69,10 @@ re-derived automatically whenever the analyser moves on.
 ## Verifying
 
 ```sh
-scripts/verify.sh         # rust: fmt, clippy, tests · generated-type drift
-                          # frontend: eslint, unit tests, build + layout harness
+nix run ../dev-lint#gate -- . gate.json
+                          # rust: fmt, clippy, tests · generated-type drift
+                          # frontend: eslint, e2e typecheck, unit tests,
+                          #           build, layout harness
                           # plus the shared dev-lint rules
 scripts/setup-hooks.sh    # one-time per clone: pre-commit runs the above
 ```
