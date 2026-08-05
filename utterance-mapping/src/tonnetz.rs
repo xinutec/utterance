@@ -249,14 +249,25 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
             // whenever the set changes, and the common tones the geometry went
             // to such trouble to provide are then audible nowhere.
             let target = v as f32 * gap;
-            let mut cents = pc + 1200.0 * ((target - pc) / 1200.0).round();
+            let placed = pc + 1200.0 * ((target - pc) / 1200.0).round();
             // Two voices on one pitch are one voice twice as loud, which sounds
             // thinner than the voice count claims. This is the only place the
             // rest of the chord gets a say, and it is a floor rather than a
             // layout.
-            while cents < previous + MIN_SEPARATION_CENTS {
-                cents += 1200.0;
-            }
+            //
+            // Whole octaves up until it clears, counted rather than stepped. As a
+            // loop this terminated only because the floats happened to be finite,
+            // which is a precondition established three frames away — `previous`
+            // is [`f32::NEG_INFINITY`] for the first voice, and `gap` is capped
+            // above — and stated nowhere. Counting says the same thing with the
+            // bound in the arithmetic. Octaves either way, so a voice stays a
+            // whole number of them from its pitch class.
+            let floor = previous + MIN_SEPARATION_CENTS;
+            let cents = if placed < floor {
+                placed + 1200.0 * ((floor - placed) / 1200.0).ceil()
+            } else {
+                placed
+            };
             previous = cents;
             voices[v][i] = base * 2f32.powf(cents / 1200.0);
 

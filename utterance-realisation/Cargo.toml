@@ -12,3 +12,7 @@ hound = "3.5.1"
 
 [lints]
 workspace = true
+
+# See utterance-analysis for why this lives here rather than in a root-level list.
+[package.metadata.dev-lint]
+totality = true

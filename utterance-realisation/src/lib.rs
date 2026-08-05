@@ -16,5 +16,18 @@
 //! this crate ever starts making one, the split has failed and every aesthetic
 //! experiment starts costing a synthesiser rewrite.
 
+// See `utterance-analysis/src/lib.rs` for what this bar is and what is
+// deliberately left out of it.
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unreachable,
+    clippy::infinite_loop,
+    clippy::while_float
+)]
+
 pub mod synth;
 pub mod wav;

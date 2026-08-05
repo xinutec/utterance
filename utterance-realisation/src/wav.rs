@@ -9,6 +9,14 @@ use crate::synth::RENDER_RATE;
 /// Sixteen bits rather than float: this is for listening to, and every player
 /// and browser takes it without argument. The rounding it costs is far below
 /// anything audible in a render that was normalised to headroom.
+#[expect(
+    clippy::expect_used,
+    reason = "hound is fallible because it writes to an arbitrary io::Write, and \
+              this one is a Cursor over a Vec. There is no disk, no handle and no \
+              short write to fail on, so the three Results here are Ok by \
+              construction. Returning a Result instead would put an error case in \
+              every caller's path that no input can reach."
+)]
 pub fn encode(samples: &[f32]) -> Vec<u8> {
     let spec = hound::WavSpec {
         channels: 1,

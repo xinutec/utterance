@@ -25,3 +25,7 @@ ts-rs = { version = "12.0.1", features = ["serde-compat"], optional = true }
 
 [lints]
 workspace = true
+
+# See utterance-analysis for why this lives here rather than in a root-level list.
+[package.metadata.dev-lint]
+totality = true

@@ -18,6 +18,19 @@
 //! intonation), and that a derivation reads its input rather than restating its
 //! own assumptions. Never the taste.
 
+// See `utterance-analysis/src/lib.rs` for what this bar is and what is
+// deliberately left out of it.
+#![deny(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented,
+    clippy::unreachable,
+    clippy::infinite_loop,
+    clippy::while_float
+)]
+
 pub mod compose;
 pub mod dissonance;
 pub mod field;

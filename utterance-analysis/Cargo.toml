@@ -21,3 +21,10 @@ serde_json = "1.0.151"
 
 [lints]
 workspace = true
+
+# A designated pure core (docs/architecture.md), so DL-RUST-UNBOUNDED-LOOP holds
+# it to `for` over a bounded thing. Next to `[lints]` because it is the same
+# subject — this crate's static-analysis policy — and it travels with the crate
+# rather than sitting in a root-level list a rename could detach it from.
+[package.metadata.dev-lint]
+totality = true
