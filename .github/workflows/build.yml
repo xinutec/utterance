@@ -4,7 +4,7 @@ name: build
 # utterance (Rust workspace + Angular frontend) — gate on the Rust half (clippy,
 # tests, generated-type drift) and the frontend half (lint, unit tests, layout
 # harness), then build and push the single image xinutec/utterance:latest to
-# Docker Hub. Between them these are `scripts/verify.sh` minus the shared
+# Docker Hub. Between them these are the gate (`gate.dhall`) minus the shared
 # dev-lint rules, which need a private sibling repo and stay local.
 #
 # The k8s manifests live in the home monorepo (xinutec/pippijn,
@@ -38,7 +38,7 @@ jobs:
       # dependency tree on every push, twice (clippy and test).
       - uses: Swatinem/rust-cache@v2
       - run: rustup component add clippy rustfmt
-      # Formatting was checked by scripts/verify.sh and by nothing here, so it
+      # Formatting was checked by the local gate and by nothing here, so it
       # rode on whichever machine ran the pre-commit hook.
       - run: cargo fmt --all --check
       # The lint level lives in Cargo.toml's [workspace.lints] (pedantic, with
@@ -47,8 +47,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       # The frontend's types are generated from the Rust wire types; fail if the
-      # committed output drifted from them. Does in CI what scripts/check-types.sh
-      # does locally, without the nix dev shell. Deleting the directory first so a
+      # committed output drifted from them. Does in CI what `scripts/gen-types.sh
+      # --check` does locally, without the nix dev shell. Deleting the directory first so a
       # type REMOVED from Rust shows up as a leftover file, and asking git for
       # status rather than diff so an ADDED one (untracked) counts too — a plain
       # `git diff --exit-code` is blind to both.
@@ -63,13 +63,13 @@ jobs:
             exit 1
           fi
 
-  # The other half of `scripts/verify.sh`. Until this existed CI ran clippy and
+  # The other half of the gate. Until this existed CI ran clippy and
   # the Rust tests and nothing else, so the frontend was gated only by the
   # pre-commit hook on whichever machine did the commit — and a push with
   # `--no-verify`, or from a checkout without the hook installed, went green
   # having compiled no TypeScript at all.
   #
-  # Not `scripts/verify.sh` itself, which would need nix in the runner and a
+  # Not the gate itself, which would need nix in the runner and a
   # token for the private dev-lint repo. Same split as messages and coach: the
   # shared dev-lint rules stay local across the whole fleet, and this is the
   # rest of the gate.
