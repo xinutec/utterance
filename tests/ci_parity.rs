@@ -25,6 +25,20 @@
 //!
 //! This is a `cargo test` rather than a gate row of its own, so it runs in both
 //! places at once: in the gate, and in the CI it is checking.
+//!
+//! **`DL-GHA-GATE-PARITY` now asserts the coverage half fleet-wide, and this
+//! stays anyway.** That rule runs from dev-lint, which is one of the two rows a
+//! runner cannot run — so on GitHub it is not there, and a `--no-verify` push or
+//! a checkout without the hook would reach CI with nothing having checked the
+//! list. Same argument `fe-verify` is built on. What is genuinely only here is
+//! the pair the rule leaves to a repository on purpose: that no row is claimed
+//! twice, and that the covered rows run in table order.
+//!
+//! The waived rows are NOT listed here. They are the
+//! `# dev-lint: allow-gate-row-not-in-ci-<row>` markers in the workflow, read
+//! back below — one list, in the file whose prose already explains the split,
+//! checked from both directions rather than copied into a second place that can
+//! drift.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -32,24 +46,8 @@ use std::path::PathBuf;
 
 use saphyr::{LoadableYamlNode, Yaml};
 
-/// Gate rows the workflow deliberately does not run, each with its reason.
-///
-/// A reason is mandatory, and one that no longer names a row is itself a
-/// failure: a waiver outliving its subject reads as coverage.
-const NOT_IN_CI: &[(&str, &str)] = &[
-    (
-        "the table matches its Dhall",
-        "re-rendering needs dhall and the nix dev shell, and the runner has neither. \
-         The JSON is generated and committed, so what CI runs is the same table this \
-         row would check.",
-    ),
-    (
-        "dev-lint",
-        "needs nix in the runner and a token for the private sibling repo. Same split \
-         as messages and coach: the shared fleet rules stay local across the whole \
-         fleet, and CI is the rest of the gate.",
-    ),
-];
+/// The waiver marker whose tail names a gate row CI cannot run.
+const WAIVER: &str = "dev-lint: allow-gate-row-not-in-ci-";
 
 fn repo(path: &str) -> String {
     let full = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path);
@@ -135,57 +133,81 @@ fn claims() -> Vec<(String, String)> {
         .collect()
 }
 
+/// A row name as its waiver-token tail — the same lossy mapping
+/// `DL-GHA-GATE-PARITY` writes into the token it tells you to add.
+fn slug(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else if !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    out.trim_matches('-').to_string()
+}
+
+/// The row slugs the workflow waives, read off its own waiver markers.
+fn waived() -> Vec<String> {
+    repo(".github/workflows/build.yml")
+        .lines()
+        .filter_map(|l| l.split_once(WAIVER))
+        .map(|(_, tail)| {
+            tail.split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 #[test]
 fn every_gate_row_runs_in_ci_or_says_why_not() {
     let claimed: Vec<String> = claims().into_iter().map(|(row, _)| row).collect();
+    let waived = waived();
     let missing: Vec<String> = gate_rows()
         .into_iter()
-        .filter(|row| !claimed.contains(row) && !NOT_IN_CI.iter().any(|(w, _)| w == row))
+        .filter(|row| !claimed.contains(row) && !waived.contains(&slug(row)))
         .collect();
 
     assert!(
         missing.is_empty(),
         "these gate rows run nowhere in CI: {missing:?}\n\
          Add a step to .github/workflows/build.yml named exactly after the row, or \
-         add the row to NOT_IN_CI here with the reason it cannot run on a runner."
+         waive it there with `# {WAIVER}<row>` and the reason a runner cannot."
     );
 }
 
 #[test]
 fn no_waiver_outlives_its_row() {
+    // This is the half nothing else does. `DL-WAIVER-INEFFECTIVE` is the fleet's
+    // answer to a marker that suppresses nothing, but the audit only condemns a
+    // marker whose rule declared it ran, and the YAML engines do not declare —
+    // so both of these waivers come back "unaudited" rather than judged
+    // (measured 2026-08-07). Until that is closed this is the only thing that
+    // notices, and it would still be worth keeping afterwards, since dev-lint
+    // does not run on a runner at all.
     let rows = gate_rows();
-    let stale: Vec<&str> = NOT_IN_CI
-        .iter()
-        .map(|(row, _)| *row)
-        .filter(|row| !rows.iter().any(|r| r == row))
-        .collect();
-
-    assert!(
-        stale.is_empty(),
-        "NOT_IN_CI excuses rows the gate no longer has: {stale:?}\n\
-         The row was renamed or dropped; drop the excuse with it."
-    );
-
-    for (row, why) in NOT_IN_CI {
-        assert!(!why.trim().is_empty(), "`{row}` is waived with no reason");
-    }
-
-    // The other direction, which the check above cannot see: a row excused as
-    // unrunnable that CI turns out to run. Whoever got it working on a runner
-    // left the reason behind saying it cannot be done, and the next person reads
-    // that instead of the workflow.
     let claimed: Vec<String> = claims().into_iter().map(|(row, _)| row).collect();
-    let contradicted: Vec<&str> = NOT_IN_CI
-        .iter()
-        .map(|(row, _)| *row)
-        .filter(|row| claimed.iter().any(|c| c == row))
-        .collect();
 
-    assert!(
-        contradicted.is_empty(),
-        "NOT_IN_CI says these cannot run on a runner, and CI runs them: {contradicted:?}\n\
-         Drop the excuse — it is now the opposite of true."
-    );
+    for slug_written in waived() {
+        let row = rows.iter().find(|r| slug(r) == slug_written);
+        assert!(
+            row.is_some(),
+            "`{WAIVER}{slug_written}` excuses a row the gate no longer has.\n\
+             It was renamed or dropped; drop the excuse with it."
+        );
+        // The other direction: a row excused as unrunnable that CI turns out to
+        // run. Whoever got it working on a runner left behind a reason saying it
+        // cannot be done, and the next person reads that instead of the workflow.
+        let row = row.expect("checked just above");
+        assert!(
+            !claimed.contains(row),
+            "`{WAIVER}{slug_written}` says `{row}` cannot run on a runner, and CI \
+             runs it.\nDrop the excuse — it is now the opposite of true."
+        );
+    }
 }
 
 #[test]

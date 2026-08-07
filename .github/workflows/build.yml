@@ -11,11 +11,29 @@ name: build
 # code/kubes/utterance/k8s); the image tag is the only contract between this
 # repo and the deploy.
 #
+# dev-lint: gate-parity
+#
 # **Step names are load-bearing.** A step whose `name` matches a row of
-# `gate.dhall` exactly is that row, and `tests/ci_parity.rs` — which runs in the
-# gate and here — fails if a row is claimed by no step and not excused there.
-# That is what stops this file drifting behind the table one line at a time,
-# which it did three times in two days. Rename a row and you rename the step.
+# `gate.dhall` exactly is that row. `DL-GHA-GATE-PARITY` fails if a row is
+# claimed by no step and not waived below; `tests/ci_parity.rs` adds the two
+# things that rule deliberately leaves to a repository — that no row is claimed
+# twice, and that the covered rows run in table order, which matters here
+# because `frontend build` writes the `dist/` that `frontend ui-check` serves.
+# Between them that is what stops this file drifting behind the table one line
+# at a time, which it did three times in two days. Rename a row and you rename
+# the step.
+#
+# The two rows a runner cannot run, and why:
+#
+# dev-lint: allow-gate-row-not-in-ci-dev-lint
+#   needs nix in the runner and a token for the private sibling repo. Same
+#   split as messages and coach: the shared fleet rules stay local across the
+#   whole fleet, and CI is the rest of the gate.
+#
+# dev-lint: allow-gate-row-not-in-ci-the-table-matches-its-dhall
+#   re-rendering needs dhall and the nix dev shell, and the runner has neither.
+#   The JSON is generated and committed, so what CI runs is the same table that
+#   row would check.
 #
 # There is NO image automation on this fleet — no Flux, no Argo image
 # controller. The Deployment pins :latest, a fixed string, so a green build here
