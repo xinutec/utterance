@@ -97,3 +97,7 @@ tower = { version = "0.5.3", features = ["util"] }
 http-body-util = "0.1.4"
 # Builds real WAV bytes for upload fixtures rather than hand-rolled headers.
 hound = "3.5.1"
+# Reads `.github/workflows/build.yml` in `tests/ci_parity.rs`. The fleet's YAML
+# crate — dev-lint's k8s and GitHub Actions analysers parse with this one, so
+# there is one YAML reader across the tools and not two.
+saphyr = "0.0.9"

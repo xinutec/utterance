@@ -11,6 +11,12 @@ name: build
 # code/kubes/utterance/k8s); the image tag is the only contract between this
 # repo and the deploy.
 #
+# **Step names are load-bearing.** A step whose `name` matches a row of
+# `gate.dhall` exactly is that row, and `tests/ci_parity.rs` — which runs in the
+# gate and here — fails if a row is claimed by no step and not excused there.
+# That is what stops this file drifting behind the table one line at a time,
+# which it did three times in two days. Rename a row and you rename the step.
+#
 # There is NO image automation on this fleet — no Flux, no Argo image
 # controller. The Deployment pins :latest, a fixed string, so a green build here
 # changes nothing on the cluster by itself. Roll it out by hand afterwards; the
@@ -40,12 +46,15 @@ jobs:
       - run: rustup component add clippy rustfmt
       # Formatting was checked by the local gate and by nothing here, so it
       # rode on whichever machine ran the pre-commit hook.
-      - run: cargo fmt --all --check
+      - name: formatting
+        run: cargo fmt --all --check
       # The lint level lives in Cargo.toml's [workspace.lints] (pedantic, with
       # the cast and internal-API families allowed there and reasoned about);
       # `-D warnings` is what turns those warnings into a failure.
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: tests
+        run: cargo test --workspace
       # The frontend's types are generated from the Rust wire types; fail if the
       # committed output drifted from them. Does in CI what `scripts/gen-types.sh
       # --check` does locally, without the nix dev shell. Deleting the directory first so a
@@ -54,7 +63,7 @@ jobs:
       # `git diff --exit-code` is blind to both.
       - run: rm -rf frontend/src/app/generated
       - run: cargo test --workspace --features ts export_bindings
-      - name: generated types match the Rust types
+      - name: generated types are current
         run: |
           if [ -n "$(git status --porcelain -- frontend/src/app/generated)" ]; then
             echo "generated types drifted; run scripts/gen-types.sh and commit" >&2
@@ -93,15 +102,19 @@ jobs:
           node-version: 24
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run lint
+      - name: frontend deps match the lockfile
+        run: pnpm install --frozen-lockfile
+      - name: frontend lint
+        run: pnpm run lint
       # The e2e tree is not reached by the app's own tsconfigs, and Playwright
       # transforms specs with esbuild, which strips types rather than checking
       # them. Without this step the harness that measures how the app behaves on
       # a phone is compiled by nothing in CI — it was gated only by the
       # pre-commit hook, which a --no-verify push or a hookless checkout skips.
-      - run: pnpm run typecheck:e2e
-      - run: pnpm test
+      - name: frontend typecheck (e2e)
+        run: pnpm run typecheck:e2e
+      - name: frontend unit tests
+        run: pnpm test
       # The harness serves the *built* bundle, and `ui-check` is `playwright
       # test` alone — the gate table (gate.dhall) makes the build a row of its
       # own so that a build failure is reported as one, rather than as a layout
@@ -112,11 +125,13 @@ jobs:
       # Plain `ng build`, not the `dev-lint#ng-build` wrapper the gate row uses:
       # that needs nix and the private dev-lint repo, and the mtime assertion it
       # adds guards a macOS-only kqueue abort that cannot happen on the runner.
-      - run: pnpm exec ng build
+      - name: frontend build
+        run: pnpm exec ng build
       # Real-browser layout check: asserts nothing overlaps or overflows at
       # phone geometry.
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run ui-check
+      - name: frontend ui-check (phone-width layout harness)
+        run: pnpm run ui-check
 
   image:
     needs: [verify, fe-verify]
