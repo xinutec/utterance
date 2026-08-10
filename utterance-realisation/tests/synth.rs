@@ -666,10 +666,19 @@ fn a_partial_landing_exactly_on_nyquist_is_dropped() {
     // The boundary is closed for that reason and the test has to sit exactly on
     // it: 2205 Hz has its tenth partial at 22'050.0 with no rounding to argue
     // about, and `>=` against `>` is the whole difference.
+    //
+    // A field and not a note stream. The two renderers each carry their own
+    // Nyquist check, and only the field's accumulates phase across the whole
+    // piece — which is what makes a partial exactly at Nyquist audible rather
+    // than a run of exact zeros: the increment is pi as an f32, so the error
+    // compounds sample by sample and the alternation grows into the buffer.
     let mut spectrum = vec![0.0f32; 10];
     spectrum[0] = 1.0;
     spectrum[9] = 1.0;
-    let rendered = synth::render(&score(vec![note(0.0, 0.5, 2205.0)], 0.5, spectrum));
+    let rendered = synth::render(&Score {
+        field: Some(field(50, vec![vec![2205.0; 50]])),
+        ..score(Vec::new(), 0.5, spectrum)
+    });
 
     // Nyquist is the one frequency a correlation can measure exactly: it is
     // `+1, -1, +1, ...`, so this is a one-bin DFT with no window and no leakage.
