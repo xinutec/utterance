@@ -575,3 +575,35 @@ fn a_field_is_deterministic() {
     let s = field_score(field(100, vec![vec![220.0; 100], vec![330.0; 100]]), 1.0);
     assert_eq!(synth::render(&s), synth::render(&s));
 }
+
+#[test]
+fn an_event_that_outlasts_the_score_is_clipped_to_the_buffer() {
+    // The buffer is `score.duration_s` long and an event carries its own
+    // duration, so the two can disagree — and nothing upstream reconciles them.
+    // Both `sum_note` and `sum_noise` then index `out[start..end]`, which is an
+    // out-of-bounds slice unless `end` is clamped: a panic, in a crate that
+    // denies panics crate-wide and carries the totality opt-in.
+    //
+    // This is not a malformed score. A mapping that rounds a duration up, or a
+    // consonant measured on the take's last frame, produces one.
+    //
+    // Nothing in the repository covered it — measured 2026-08-07 by deleting the
+    // clamp: all 116 root-package tests passed, including the 43 in `tests/api.rs`
+    // that render real audio end to end. A clipped event still has to *sound*,
+    // which is the second assertion; returning early would satisfy the first.
+    let mut s = score(vec![note(0.40, 10.0, 220.0)], 0.5, vec![1.0]);
+    s.noise.push(noise_event(0.45, 10.0, 5000.0, 3000.0));
+
+    let rendered = synth::render(&s);
+
+    assert_eq!(
+        rendered.len(),
+        (0.5 * RENDER_RATE as f32).ceil() as usize,
+        "an overrunning event stretched the buffer past the score's duration"
+    );
+    let tail = &rendered[(0.46 * RENDER_RATE as f32) as usize..];
+    assert!(
+        tail.iter().any(|s| s.abs() > 1e-6),
+        "the clipped events fell silent instead of sounding up to the end"
+    );
+}

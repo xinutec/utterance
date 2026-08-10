@@ -231,8 +231,12 @@ fn the_voices_are_stacked_upward_and_never_double() {
     let f = tonnetz::compose_with(&vp, &voice(), still()).unwrap();
     let pitches: Vec<f32> = (0..f.voice_count()).map(|v| f.voices[v][150]).collect();
     for pair in pitches.windows(2) {
+        // The floor itself, not an approximation of it: `MIN_SEPARATION_CENTS`
+        // is 50, and 1.02 — the ratio this asked for until 2026-08-10 — is 34
+        // cents, which would accept a chord the mapping promises never to build.
+        // `no_two_voices_land_inside_the_separation_floor` owns the general case.
         assert!(
-            pair[1] > pair[0] * 1.02,
+            pair[1] > pair[0] * 2f32.powf(50.0 / 1200.0),
             "voices are not apart: {pitches:?}"
         );
     }
@@ -369,5 +373,69 @@ fn a_crowded_chord_stays_inside_the_range_a_person_hears() {
     assert!(
         highest < 120.0 * 16.0,
         "the top voice sounded at {highest} Hz over a 120 Hz tonic"
+    );
+}
+
+#[test]
+fn no_two_voices_land_inside_the_separation_floor() {
+    // `MIN_SEPARATION_CENTS` is 50 — a quarter tone, below which two tones are
+    // heard as one beating rather than as two notes, so a chord that puts a pair
+    // there is quietly a voice short. This is the guarantee the register loop
+    // exists to provide, and until 2026-08-10 nothing asserted it: the `ceil`
+    // that enforces it could be changed to `floor` — which places the voice
+    // BELOW the floor just computed, and was measured producing pairs 182 cents
+    // apart in the wrong order — and the whole suite still passed.
+    //
+    // That line was rewritten from a `while` loop to a closed form the same day
+    // the gap was found, so the property was never tested before OR after the
+    // rewrite, and "bit-identical to the loop" only ever said the two agreed.
+    //
+    // Swept across the entire knob domain rather than checked at the default,
+    // because whether a given chord crowds is an accident of where the lattice
+    // walk happens to go. Measured 2026-08-10: the clamp engages 5,765 times
+    // over this sweep, so it is the arithmetic being exercised and not the
+    // fixture being lucky.
+    const FLOOR_CENTS: f32 = 50.0;
+
+    let vp = swept(240);
+    let v = voice();
+    let mut closest = f32::INFINITY;
+
+    for voices in 2..=12 {
+        for spacing in 1..=6 {
+            let f = tonnetz::compose_with(
+                &vp,
+                &v,
+                Params {
+                    voices,
+                    spacing,
+                    ..still()
+                },
+            )
+            .expect("a field");
+
+            for i in 0..f.frames() {
+                for w in 1..f.voice_count() {
+                    let cents = 1200.0 * (f.voices[w][i] / f.voices[w - 1][i]).log2();
+                    assert!(
+                        cents >= FLOOR_CENTS - 0.01,
+                        "voices {} and {w} sit {cents:.1} cents apart at frame {i}, \
+                         with voices={voices} spacing={spacing} — the floor is {FLOOR_CENTS}",
+                        w - 1
+                    );
+                    closest = closest.min(cents);
+                }
+            }
+        }
+    }
+
+    // Non-vacuity. If the chords this sweep builds were all wide open the
+    // assertion above would hold for reasons having nothing to do with the
+    // floor. Measured 2026-08-10: the closest pair anywhere in the sweep is 70
+    // cents, so the chords do crowd right up against it.
+    assert!(
+        closest < 100.0,
+        "no pair in the whole sweep came within a semitone (closest {closest:.1} cents), \
+         so this proves nothing about the floor — the fixture has drifted to open chords"
     );
 }
