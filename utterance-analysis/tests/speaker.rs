@@ -7,7 +7,7 @@
 //! covers the same code against a recording.
 
 use utterance_analysis::partials::Partials;
-use utterance_analysis::speaker::{self, PROFILE_VERSION};
+use utterance_analysis::speaker::{self, Brightness, PROFILE_VERSION};
 use utterance_analysis::texture::Texture;
 use utterance_analysis::voiceprint::{Events, Formants, FrameGrid, Pitch, Source, Voiceprint};
 
@@ -413,4 +413,28 @@ fn a_frame_missing_either_formant_is_not_a_point_on_the_plane() {
     let mut vp = held_vowel(280.0, 2300.0, 300, 40);
     vp.formants.f2 = vec![None; vp.formants.f2.len()];
     assert!(speaker::corner(&vp).is_none());
+}
+
+#[test]
+fn a_brightness_range_that_runs_backwards_is_refused() {
+    // `place` divides by `high_hz - low_hz` without a guard, which is only sound
+    // because the constructor already refused the cases that make it wrong. An
+    // inverted range would not divide by zero — it would divide by a negative,
+    // and every brightness would come back mirrored: the darkest frame reported
+    // as the brightest, silently and for the whole take.
+    //
+    // Dropping the `high_hz <= low_hz` half of that guard passed the entire
+    // suite on 2026-08-07.
+    assert!(
+        Brightness::new(3000.0, 300.0).is_none(),
+        "a range from 3000 Hz down to 300 Hz was accepted"
+    );
+    assert!(
+        Brightness::new(1000.0, 1000.0).is_none(),
+        "a range with no extent was accepted"
+    );
+    assert!(
+        Brightness::new(300.0, 3000.0).is_some(),
+        "the ordinary range was refused"
+    );
 }

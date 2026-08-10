@@ -607,3 +607,84 @@ fn an_event_that_outlasts_the_score_is_clipped_to_the_buffer() {
         "the clipped events fell silent instead of sounding up to the end"
     );
 }
+
+#[test]
+fn the_buffer_holds_every_sample_the_duration_asks_for() {
+    // `duration_s` is a measured length, so it is almost never a whole number of
+    // samples. Truncating instead of rounding up drops the last, partial sample
+    // — inaudible on its own, and the reason it matters is that the buffer's
+    // length is what everything downstream reads back as the piece's duration:
+    // the WAV header, the player's scrub bar, and the analysis of a rendering.
+    // Off by one sample every render is a length that disagrees with the score
+    // that produced it.
+    //
+    // Dropping the `.ceil()` passed the whole suite on 2026-08-07 — 27 tests
+    // that render audio, none asserting how much of it there is.
+    for duration_s in [0.5001f32, 0.10005, 1.333] {
+        let rendered = synth::render(&score(vec![note(0.0, 0.05, 220.0)], duration_s, vec![1.0]));
+        let held_s = rendered.len() as f32 / RENDER_RATE as f32;
+        assert!(
+            held_s >= duration_s,
+            "a {duration_s} s score rendered {} samples, {held_s} s — short of what it asked for",
+            rendered.len()
+        );
+        assert!(
+            held_s < duration_s + 1.0 / RENDER_RATE as f32,
+            "a {duration_s} s score rendered {held_s} s, more than one sample long"
+        );
+    }
+}
+
+#[test]
+fn a_note_with_no_pitch_makes_no_sound() {
+    // `hz` reaches here from a pitch track, and a pitch track has unvoiced
+    // frames: 0 is what "there was no pitch here" looks like by the time it is
+    // an event. A partial series multiplied by zero is a series of partials all
+    // at 0 Hz, which is not silence — it is a constant, a DC offset that the
+    // normalisation then scales the whole piece down to make room for.
+    //
+    // The guard exists; nothing asserted it, and removing it passed the suite.
+    for hz in [0.0f32, -110.0] {
+        let rendered = synth::render(&score(vec![note(0.0, 0.5, hz)], 0.5, vec![1.0]));
+        assert!(
+            rendered.iter().all(|s| s.abs() < 1e-9),
+            "a note at {hz} Hz rendered a peak of {:.6}",
+            rendered.iter().fold(0.0f32, |m, s| m.max(s.abs()))
+        );
+    }
+}
+
+#[test]
+fn a_partial_landing_exactly_on_nyquist_is_dropped() {
+    // Half the sample rate is not a frequency this can render: sampled at
+    // 44'100, a 22'050 Hz sinusoid is two points per cycle, and which two
+    // depends entirely on the partial's phase. What comes out is an alternating
+    // sequence at whatever amplitude that phase happens to give — a buzz that is
+    // not in the score, and one whose loudness would change if the phase
+    // formula were ever touched.
+    //
+    // The boundary is closed for that reason and the test has to sit exactly on
+    // it: 2205 Hz has its tenth partial at 22'050.0 with no rounding to argue
+    // about, and `>=` against `>` is the whole difference.
+    let mut spectrum = vec![0.0f32; 10];
+    spectrum[0] = 1.0;
+    spectrum[9] = 1.0;
+    let rendered = synth::render(&score(vec![note(0.0, 0.5, 2205.0)], 0.5, spectrum));
+
+    // Nyquist is the one frequency a correlation can measure exactly: it is
+    // `+1, -1, +1, ...`, so this is a one-bin DFT with no window and no leakage.
+    let alternating = rendered
+        .iter()
+        .enumerate()
+        .map(|(n, s)| if n % 2 == 0 { *s } else { -*s })
+        .sum::<f32>()
+        .abs()
+        / rendered.len() as f32;
+    let peak = rendered.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+
+    assert!(
+        alternating < peak * 0.01,
+        "the rendering carries {alternating:.4} at Nyquist against a peak of {peak:.4}, \
+         so the partial sitting exactly there was sounded"
+    );
+}

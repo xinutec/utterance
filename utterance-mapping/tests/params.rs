@@ -5,7 +5,7 @@
 //! else. A knob that silently does nothing is worse than no knob.
 
 use utterance_mapping::dissonance::Component;
-use utterance_mapping::params::{Params, bind_toward_equal};
+use utterance_mapping::params::{KnobName, Params, bind_toward_equal};
 use utterance_mapping::tuning::{self, ratio_to_cents};
 
 /// A bright harmonic spectrum — rich enough to give a scale worth thinning.
@@ -292,4 +292,22 @@ mod table {
     fn an_empty_query_is_the_defaults() {
         assert_eq!(KnobQuery::default().params(), Params::default());
     }
+}
+
+#[test]
+fn a_count_knob_rounds_to_the_nearest_rather_than_down() {
+    // These knobs count things — voices, scale degrees — and the UI hands them
+    // over as the `f32` a slider carries. Truncating means a slider stopped a
+    // hair under an integer silently means the integer below: the difference
+    // between a five-voice chord and a four-voice one, from a control the user
+    // has visibly put on 5.
+    //
+    // `KnobValue for usize` says exactly this in a doc comment, and dropping the
+    // `.round()` passed the whole suite on 2026-08-07.
+    assert_eq!(Params::default().with(KnobName::VOICES, 4.7).voices, 5);
+    assert_eq!(Params::default().with(KnobName::VOICES, 4.4).voices, 4);
+    assert_eq!(Params::default().with(KnobName::VOICES, 5.0).voices, 5);
+    // The other count knob, so the property belongs to the conversion and not to
+    // one field that happens to be spelled right.
+    assert_eq!(Params::default().with(KnobName::SPACING, 2.7).spacing, 3);
 }

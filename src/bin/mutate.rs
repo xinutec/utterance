@@ -58,11 +58,6 @@ enum Expect {
     /// is the argument for that, and it has to be an argument about the code —
     /// "no test covers it" is a finding, not an equivalence.
     ///
-    /// Unused as written, because which mutants are equivalent is what a run
-    /// finds out rather than something to assert in advance. `expect` and not
-    /// `allow` so that the day one is added, this attribute becomes unfulfilled
-    /// and clippy says to delete it.
-    #[expect(dead_code, reason = "no mutant has been argued equivalent yet")]
     Survives(&'static str),
 }
 
@@ -161,7 +156,17 @@ const MUTANTS: &[Mutant] = &[
         from: "let octave_mean = octaves.iter().sum::<f32>() / octaves.len().max(1) as f32;",
         to: "let octave_mean = octaves.iter().sum::<f32>() / octaves.len() as f32;",
         claim: "empty: an empty octave list divides by one rather than by zero",
-        expect: Expect::Killed,
+        expect: Expect::Survives(
+            "Equivalent, and provably so rather than for want of a test. `octaves` \
+             is `(lowest..=highest)`, and both ends are fixed at compile time: \
+             ANALYSIS_RATE 16000 over SPECTRAL_WINDOW 512 gives 31.25 Hz bins, so \
+             lowest is ceil(300/31.25) = 10 and highest is min(floor(5000/31.25), \
+             256) = 160, for every input there is. The list has 151 entries \
+             always, and no signal can empty it. The `.max(1)` guards a future \
+             edit to NOISE_BAND_LOW_HZ or TILT_HIGH_HZ that inverts the range, \
+             which is a source change and not something a test can reach — so it \
+             stays, and no test is owed here.",
+        ),
     },
     Mutant {
         file: "utterance-analysis/src/speaker.rs",

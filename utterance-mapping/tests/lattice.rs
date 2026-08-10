@@ -475,3 +475,43 @@ fn a_scale_whose_intervals_never_agree_still_gets_a_lattice() {
     let (a, b) = generators(&awkward).expect("a lattice is still spanned");
     assert_ne!(a.cents, b.cents);
 }
+
+#[test]
+fn a_point_a_hair_below_the_tonic_folds_to_the_tonic() {
+    // `pitch_class` promises a position *within* one octave, and everything
+    // downstream reads it that way: `tonnetz` registers each voice by adding
+    // whole octaves to it, so a pitch class of 1200 is a voice an octave above
+    // where the lattice put it — the tonic sounding as the octave, in a mapping
+    // whose entire argument is that a pitch the lattice keeps is a frequency the
+    // ear keeps.
+    //
+    // The case is exactly representable and not hypothetical. `rem_euclid` on a
+    // small negative returns `1200.0 - eps`, and f32 has no room for an eps
+    // below 1.2e-4 at that magnitude, so the subtraction lands back on 1200.0
+    // itself. Two axes that nearly cancel put a lattice point there.
+    let cancelling = Lattice {
+        a_cents: 1e-5,
+        b_cents: -2e-5,
+    };
+    assert!(
+        cancelling.cents(1, 1) < 0.0,
+        "the fixture is meant to sit just below the tonic, not on or above it"
+    );
+    assert_eq!(
+        cancelling.pitch_class(1, 1),
+        0.0,
+        "a point a hair below the tonic came back as a whole octave above it"
+    );
+
+    // The general statement, over a lattice built the way a real one is.
+    let real = Lattice::from_tuning(&harmonic()).expect("a lattice");
+    for x in -12..=12 {
+        for y in -12..=12 {
+            let pc = real.pitch_class(x, y);
+            assert!(
+                (0.0..1200.0).contains(&pc),
+                "({x}, {y}) has a pitch class of {pc}, outside the octave it is defined in"
+            );
+        }
+    }
+}

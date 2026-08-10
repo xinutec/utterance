@@ -267,3 +267,34 @@ fn tilt_separates_two_vowels_the_centroid_agrees_about() {
         centroids.1
     );
 }
+
+#[test]
+fn the_band_never_reaches_below_its_stated_low_edge() {
+    // `NOISE_BAND_LOW_HZ` is a claim the rest of the system reads: both series
+    // are documented as measured above 300 Hz, and the consonant thresholds
+    // downstream were set from a sweep against a real take *on that basis* —
+    // room rumble swamping a consonant measure is the mistake this constant
+    // exists to have fixed.
+    //
+    // The first bin is `ceil(300 / 31.25)` = 10, at 312.5 Hz. Rounding that down
+    // instead admits bin 9 at 281.25 Hz, and a tone sitting exactly there is
+    // then measured as if it were part of the noise band. Nothing noticed:
+    // the mutant survived the whole suite on 2026-08-07.
+    //
+    // The centroid is a power-weighted mean of the bins in the band, so it
+    // cannot fall below the band's first bin. That makes this an invariant
+    // rather than a tolerance, and 281.25 Hz is the signal that makes a lower
+    // edge show up in it.
+    let below = common::sine(281.25, ANALYSIS_RATE, 0.5);
+    let t = texture::track(&below);
+    assert!(!t.centroid_hz.is_empty(), "no frames to measure");
+
+    for (i, &hz) in t.centroid_hz.iter().enumerate() {
+        assert!(
+            hz >= texture::NOISE_BAND_LOW_HZ,
+            "frame {i} put the centroid at {hz:.1} Hz, below the {:.0} Hz edge the \
+             band is documented to start at",
+            texture::NOISE_BAND_LOW_HZ
+        );
+    }
+}
