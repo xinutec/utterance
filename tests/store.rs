@@ -320,3 +320,93 @@ fn a_calibration_take_stays_one_when_the_analyser_changes() {
         "re-analysis demoted a calibration take to material"
     );
 }
+
+// --- a take is replaced in one step, or not at all ---------------------------
+//
+// `fs::write` truncates and then writes, so between those two the file on disk
+// is short. `read_json` maps a parse failure to `StoreError::Corrupt`, so a
+// request arriving mid-write reads the take as CORRUPT rather than as its old
+// or new self — and a crash in that window leaves it corrupt permanently. The
+// audio is the largest of the three files and holds the window open longest.
+//
+// Ablation, 2026-08-11: reverting `store::write` to a plain `fs::write` fails
+// both of these. An earlier pass at the same fix in memview had four tests that
+// all still passed against the old code, because they pinned the OUTCOME —
+// which truncate-and-rewrite also reaches. These pin the MECHANISM instead.
+
+/// A rename REPLACES the directory entry, so the file is a different inode
+/// afterwards. A truncate-and-write modifies it in place and keeps it. That is
+/// the difference, observed directly and without a race.
+#[test]
+fn rewriting_a_take_replaces_the_file_rather_than_editing_it_in_place() {
+    use std::os::unix::fs::MetadataExt;
+
+    let store = TempStore::open();
+    let id = store
+        .put(&wav(1.0), "first", &a_voiceprint(), Role::Material)
+        .expect("put")
+        .id;
+
+    let meta_path = store.path().join(&id).join("meta.json");
+    let before = fs::metadata(&meta_path).expect("meta").ino();
+
+    store.put_role(&id, Role::Calibration).expect("put_role");
+    let after = fs::metadata(&meta_path).expect("meta").ino();
+
+    assert_ne!(
+        before, after,
+        "meta.json was rewritten in place, so a reader can see it half-written \
+         and a crash can leave it that way"
+    );
+}
+
+/// The property: a reader running alongside a writer never sees a take as
+/// corrupt. Timing-dependent by nature, which is why the inode test above
+/// carries the deterministic half of the claim.
+#[test]
+fn a_reader_alongside_a_writer_never_sees_a_take_as_corrupt() {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    let store = Arc::new(TempStore::open());
+    let id = store
+        .put(&wav(4.0), "under edit", &a_voiceprint(), Role::Material)
+        .expect("put")
+        .id;
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let reader = {
+        let (store, stop, id) = (Arc::clone(&store), Arc::clone(&stop), id.clone());
+        std::thread::spawn(move || {
+            let mut seen = 0u32;
+            while !stop.load(Ordering::Relaxed) {
+                match store.meta(&id) {
+                    Ok(_) => seen += 1,
+                    Err(StoreError::Corrupt { detail, .. }) => {
+                        panic!("read a half-written take: {detail}")
+                    }
+                    // Anything else is the take momentarily absent, which this
+                    // is not about.
+                    Err(_) => {}
+                }
+            }
+            seen
+        })
+    };
+
+    for i in 0..60 {
+        let role = if i % 2 == 0 {
+            Role::Calibration
+        } else {
+            Role::Material
+        };
+        store.put_role(&id, role).expect("put_role");
+    }
+    stop.store(true, Ordering::Relaxed);
+
+    let seen = reader.join().expect("the reader saw a corrupt take");
+    assert!(
+        seen > 0,
+        "the reader never got to look, so this proved nothing"
+    );
+}

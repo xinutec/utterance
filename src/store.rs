@@ -404,10 +404,41 @@ fn now_ms() -> u64 {
         .map_or(0, |d| d.as_millis() as u64)
 }
 
+/// Replace `path` in one step, or leave it as it was.
+///
+/// `fs::write` truncates and THEN writes, so between those two the file is
+/// short. Every JSON reader here goes through `read_json`, which maps a parse
+/// failure to `StoreError::Corrupt` — so a request that arrives mid-write reads
+/// a take as corrupt rather than as its old or new self, and a crash in that
+/// window makes it corrupt for good. The audio is written the same way and is
+/// the largest file of the three, so it holds the window open longest.
+///
+/// Write-then-rename closes both: a reader sees the whole old file or the whole
+/// new one. The temp is a SIBLING deliberately — `rename` across filesystems is
+/// `EXDEV`, and the recordings live on a PVC mount while `/tmp` is the
+/// container's own filesystem.
+///
+/// ⚠ Atomicity per file, not exclusion between writers. Two processes editing
+/// the SAME take still lose one update; different takes never collide, which is
+/// why utterance keeps a rolling deployment where memview does not (#744).
 fn write(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
-    fs::write(path, bytes).map_err(|source| StoreError::Io {
-        path: path.to_path_buf(),
-        source,
+    let io = |path: &Path| {
+        let path = path.to_path_buf();
+        move |source| StoreError::Io { path, source }
+    };
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(".tmp");
+    let tmp = path.with_file_name(name);
+
+    fs::write(&tmp, bytes).map_err(io(&tmp))?;
+    fs::rename(&tmp, path).map_err(|source| {
+        // Best effort: the rename failing is the news, and a second error about
+        // the temp would bury it.
+        let _ = fs::remove_file(&tmp);
+        StoreError::Io {
+            path: path.to_path_buf(),
+            source,
+        }
     })
 }
 
