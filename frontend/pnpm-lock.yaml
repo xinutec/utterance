@@ -36,8 +36,8 @@ importers:
         specifier: ^5.2.10
         version: 5.3.0
       '@xinutec/ui-harness':
-        specifier: github:xinutec/ui-harness#8d8340ff672392ac472c1fb16e0d8fdfecbd710d
-        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d(@playwright/test@1.62.0)
+        specifier: github:xinutec/ui-harness#971cb32736d8ae40c26474fb7876f1e9c58c493e
+        version: https://codeload.github.com/xinutec/ui-harness/tar.gz/971cb32736d8ae40c26474fb7876f1e9c58c493e(@playwright/test@1.62.0)
       material-icons:
         specifier: ^1.13.14
         version: 1.13.14
@@ -1481,8 +1481,8 @@ packages:
   '@vitest/utils@4.1.10':
     resolution: {integrity: sha512-fy9am/HWxbaGt/Sawrp90vt6Y6jQwf1RX77cz3uwoJwJVMli/e1IEwRPnMNJ7vKfPTwo0diXifkpPvwH9v7nGA==}
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d':
-    resolution: {gitHosted: true, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d}
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/971cb32736d8ae40c26474fb7876f1e9c58c493e':
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/xinutec/ui-harness/tar.gz/971cb32736d8ae40c26474fb7876f1e9c58c493e}
     version: 0.1.0
     peerDependencies:
       '@playwright/test': '>=1.61.0'
@@ -4342,7 +4342,7 @@ snapshots:
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.0
 
-  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/8d8340ff672392ac472c1fb16e0d8fdfecbd710d(@playwright/test@1.62.0)':
+  '@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/971cb32736d8ae40c26474fb7876f1e9c58c493e(@playwright/test@1.62.0)':
     dependencies:
       '@types/node': 24.13.3
     optionalDependencies:
