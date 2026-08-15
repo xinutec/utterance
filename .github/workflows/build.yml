@@ -35,6 +35,15 @@ name: build
 #   The JSON is generated and committed, so what CI runs is the same table that
 #   row would check.
 #
+# dev-lint: allow-gate-row-not-in-ci-the-package-builds-what-this-repo-publishes
+#   `nix build .#default` needs nix, and this job runs in a rust:1-bookworm
+#   container with no nix in it. ⚠ **CI is not a substitute for that row**, and
+#   the difference is the point of having it: the `tests` step above runs cargo
+#   against the checkout, while the row builds the derivation — committed
+#   lockfile, /nix/store, the source fileset. gamepads shipped a repo that could
+#   not be built, twice, with every other check green. The row runs locally on
+#   every commit through the pre-commit hook, which is where the nix is.
+#
 # There is NO image automation on this fleet — no Flux, no Argo image
 # controller. The Deployment pins :latest, a fixed string, so a green build here
 # changes nothing on the cluster by itself. Roll it out by hand afterwards; the

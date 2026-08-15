@@ -152,6 +152,21 @@ in  { name = "utterance"
         , argv = G.inDevShell [ "pnpm", "run", "ui-check" ]
         , timeout_s = 1800
         }
+      , {-  A green gate has to mean the package this repo PUBLISHES still builds.
+
+            ⚠ This is NOT the same work as the `tests` row above, though it looks
+            like it. That row runs cargo in the dev shell against the working
+            tree; this one builds the derivation, which resolves dependencies
+            from the committed lockfile and compiles inside /nix/store. The
+            package's own comment says the build runs the tests deliberately, for
+            the external-volume reason — this row is what makes that promise
+            checkable rather than aspirational.
+        -}
+        G.Check::{
+        , name = "the package builds (what this repo publishes)"
+        , argv = [ "nix", "build", "--no-warn-dirty", "--no-link", ".#default" ]
+        , timeout_s = 1800
+        }
       , G.checkTable "../dev-lint"
       , G.devLint "../"
       ]
