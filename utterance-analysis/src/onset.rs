@@ -1,33 +1,26 @@
 //! Event detection by spectral flux.
 //!
-//! These are *events*, not beats. A syllable onset, a plosive release, the start
-//! of a vowel. Turning them into a metrical structure — grouping them into feet,
-//! finding the strong/weak alternation — is a mapping-layer job that needs the
-//! stress hierarchy this does not yet compute.
+//! These are *events*, not beats: a syllable onset, a plosive release, the start of a
+//! vowel. Grouping them into a metrical structure needs the stress hierarchy this does
+//! not compute, and is a mapping-layer job.
 //!
-//! Flux rather than raw energy rise, because a vowel-to-vowel transition at a
-//! constant level is an onset a listener hears and an energy tracker misses: the
-//! spectrum changes even though the loudness does not.
+//! Flux rather than raw energy rise, because a vowel-to-vowel transition at constant
+//! level is an onset a listener hears and an energy tracker misses — the spectrum changes
+//! even though the loudness does not.
 //!
 //! # What flux cannot tell apart
 //!
-//! Spectral flux measures *the spectrum changed*, and reads that as *a sound
-//! started*. In speech the two coincide — a new syllable is a new articulation —
-//! which is why the measure works at all. They come apart whenever a single
-//! continuous sound changes shape.
+//! Flux measures *the spectrum changed* and reads it as *a sound started*. In speech the
+//! two coincide, which is why the measure works at all; they come apart whenever one
+//! continuous sound changes shape. The clean demonstration is a glided vowel: *ee → ah →
+//! oo* on one breath contains no events whatsoever, yet produces large flux wherever the
+//! articulators move quickly. In purely spectral terms there is no difference.
 //!
-//! The clean demonstration is a glided vowel: *ee → ah → oo* on one unbroken
-//! breath contains no events whatsoever, yet produces large flux wherever the
-//! articulators move quickly between targets. Nothing in the flux curve
-//! distinguishes that from a genuine onset, because in purely spectral terms
-//! there is no difference.
-//!
-//! The consequence for tuning: **onset thresholds must be judged on speech, not
-//! on sustained material.** A held or glided vowel can bound how badly the
-//! detector over-fires, and `tests/onset_real.rs` uses one for exactly that, but
-//! it cannot say what the right count is — the question has no answer there.
-//! Resolving the ambiguity properly needs a cue flux does not carry: the stress
-//! hierarchy, which is where the metrical work in `docs/roadmap.md` starts.
+//! ⚠ **So onset thresholds must be judged on speech, not on sustained material.** A held
+//! or glided vowel can bound how badly the detector over-fires — `tests/onset_real.rs`
+//! uses one for exactly that — but cannot say what the right count is, because the
+//! question has no answer there. Resolving it needs a cue flux does not carry: the stress
+//! hierarchy (`docs/roadmap.md`).
 
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -153,20 +146,17 @@ pub fn flux(samples: &[f32]) -> Vec<f32> {
 
 /// Weight in 0..1 that suppresses flux in frames near the noise floor.
 ///
-/// Spectral flux is a *relative* measure — it is normalised by the take's own
-/// maximum — so room tone shuffling between bins produces a flux value on the
-/// same scale as a real attack, and the local threshold is at its most permissive
-/// in exactly those quiet stretches. But there is no such thing as an onset in
-/// silence: whatever the spectrum did there, no sound started.
+/// Flux is *relative*, normalised by the take's own maximum, so room tone shuffling
+/// between bins scores like a real attack — and the local threshold is most permissive in
+/// exactly those quiet stretches. But there is no such thing as an onset in silence.
 ///
-/// Judged against the take's own noise floor rather than an absolute dBFS
-/// number, because a quiet recording is not a recording of nothing.
+/// Judged against the take's own noise floor rather than an absolute dBFS number, because
+/// a quiet recording is not a recording of nothing.
 ///
-/// Measured over a short window *starting* at the candidate rather than at the
-/// candidate frame alone: the beginning of a sound is precisely the moment its
-/// level is still crossing up from the floor, so testing that one frame would
-/// attenuate every real onset. What matters is whether sound is present just
-/// after.
+/// ⚠ Measured over a short window *starting* at the candidate, not the candidate frame
+/// alone: the beginning of a sound is the moment its level is still crossing up from the
+/// floor, so testing that one frame would attenuate every real onset. What matters is
+/// whether sound is present just after.
 fn silence_gate(level_db: &[f32], i: usize) -> f32 {
     let floor = noise_floor(level_db);
     let hi = (i + GATE_SPAN).min(level_db.len());

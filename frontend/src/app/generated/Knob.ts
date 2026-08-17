@@ -5,22 +5,19 @@ import type { Mapping } from "./Mapping";
 /**
  * One knob, described well enough that a UI can offer it without being told.
  *
- * **Why the range lives here and not in the UI.** A slider needs a minimum, a
- * maximum, a step and a starting position, and every one of those is a fact
- * about the mapping rather than about the browser. Written twice they drift,
- * and the way that failure shows up is a slider that cheerfully offers a value
- * the mapping quietly clamps away — the person moves it and hears nothing
- * change. Declared once here, `Params::default`, `Params::sane` and the
- * controls in the UI cannot disagree, and a knob added to this table appears
- * in the UI without anyone editing the UI.
+ * **Why the range lives here and not in the UI.** A slider's minimum, maximum, step and
+ * starting position are all facts about the mapping, not the browser. Written twice
+ * they drift, and the failure shows up as a slider offering a value the mapping quietly
+ * clamps away — the person moves it and hears nothing change. Declared once,
+ * `Params::default`, `Params::sane` and the UI controls cannot disagree, and a knob
+ * added to this table appears in the UI with no UI edit.
  *
- * **This is the wire type as well.** `routes::api` used to hold a second
- * `Knob`, field for field, differing only in `String` where this has
- * `&'static str`, plus the loop in `controls` that copied one into the other.
- * The stated reason was that the mapping crate carries no serialisation for a
- * UI — true of a `Score`, which the API projects on the way out, and not true
- * of this, which the API forwards unchanged. A copy that is required to be
- * identical is not an abstraction boundary; it is a second place to forget.
+ * **This is the wire type as well.** `routes::api` used to hold a second `Knob`, field
+ * for field, differing only in `String` where this has `&'static str`. The stated
+ * reason was that the mapping crate carries no serialisation for a UI — true of a
+ * `Score`, which the API projects on the way out, false of this, which it forwards
+ * unchanged. A copy required to be identical is not a boundary, it is a second place to
+ * forget.
  */
 export type Knob = { 
 /**
@@ -43,45 +40,37 @@ about: string,
 /**
  * Mappings this knob reaches. Empty means every one of them.
  *
- * **Why a knob has to say.** The table exists so that a control cannot be
- * offered at a value the mapping clamps away — a slider that moves and
- * changes nothing. A knob belonging to one mapping and shown while another
- * is playing is the same failure by another route, and the only thing that
- * can be trusted to know which is the knob itself. `tests/api.rs` renders
- * every knob against every mapping it claims and fails if the audio is
- * unchanged, so a claim made here is a claim that is checked.
+ * **Why a knob has to say.** A knob belonging to one mapping but shown while
+ * another is playing is the same failure the table exists to prevent — a slider
+ * that moves and changes nothing — and only the knob can be trusted to know which.
+ * `tests/api.rs` renders every knob against every mapping it claims and fails if
+ * the audio is unchanged, so a claim made here is checked.
  *
- * [`Mapping`] rather than a name, so a knob cannot claim a mapping that
- * does not exist. It used to be able to: the claim was a `&'static str`
- * compared against another `&'static str`, and a typo here made a knob that
- * reached nothing and was therefore never shown.
+ * [`Mapping`] rather than a name, so a knob cannot claim one that does not exist.
+ * It used to be a `&'static str` compared against another, where a typo made a knob
+ * that reached nothing and was therefore never shown.
  */
 mappings: Array<Mapping>, 
 /**
  * Whether to offer this one before anybody asks for it.
  *
- * **The rule: primary knobs decide what kind of piece this is, advanced
- * ones adjust a piece you already have.** Ten sliders at equal weight is
- * an instrument panel for someone who already knows what each does; to
- * anyone else it reads as ten things they might be getting wrong. So the
- * UI shows the primary ones and puts the rest behind a disclosure.
+ * **The rule: primary knobs decide what kind of piece this is, advanced ones adjust
+ * a piece you already have.** Ten sliders at equal weight is an instrument panel for
+ * someone who already knows what each does; to anyone else it is ten things they
+ * might be getting wrong. So the UI shows the primary ones and hides the rest.
  *
- * Declared here for the same reason the range is. The alternative — a list
- * of important names kept in the frontend — is a second opinion about the
- * knob table that drifts the first time somebody adds a knob in Rust, and
- * the way *that* failure shows up is a new control nobody can find.
+ * Declared here for the same reason the range is: a list of important names kept in
+ * the frontend is a second opinion that drifts the first time somebody adds a knob
+ * in Rust, and *that* failure shows up as a new control nobody can find.
  *
- * Note this is not simply a ranking by audible authority. `bind` was kept
- * primary while the only figure for it said 18 cents — the smallest in the
- * table — because it is the axis the whole project argues about. Nor is it
- * the reverse: `spacing` earns its place on authority alone, having no
- * thesis behind it whatever. Both arguments are admissible and a knob needs
- * only one of them.
+ * ⚠ **Not a ranking by audible authority.** `bind` stayed primary while its only
+ * figure said 18 cents — the smallest in the table — because it is the axis the
+ * whole project argues about; `spacing` earns its place on authority alone, with no
+ * thesis behind it. Either argument suffices.
  *
- * That 18 cents turned out to be a measurement artefact — it was the field
- * mapping's pitch travel, and on the Tonnetz `bind` moves 1168 cents, since
- * the lattice's axes are derived from the scale being retuned. Left written
- * down because the decision was right *before* anyone knew that, and a rule
- * that only ever agrees with the latest measurement is not a rule.
+ * (That 18 cents was a measurement artefact: it was the field mapping's pitch
+ * travel, and on the Tonnetz `bind` moves 1168 cents. Left written down because the
+ * decision was right *before* anyone knew, and a rule that only ever agrees with
+ * the latest measurement is not a rule.)
  */
 primary: boolean, };

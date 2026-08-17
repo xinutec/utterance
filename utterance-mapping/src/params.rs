@@ -1,19 +1,17 @@
 //! The knobs.
 //!
-//! Every number here was a constant somewhere in this crate, chosen by whoever
-//! wrote the mapping and documented as arguable. They are gathered into one type
-//! because the constants were never the point: the mapping layer exists to be
-//! swept and compared by ear, and a value buried in a `const` can only be
+//! Every number here was a `const` somewhere in this crate, chosen by whoever wrote the
+//! mapping and documented as arguable. Gathered into one type because the mapping layer
+//! exists to be swept and compared by ear, and a value buried in a `const` can only be
 //! changed by editing, rebuilding and re-rendering.
 //!
-//! **Why these live in mapping.** A control over how the music sounds is
-//! aesthetic, so it belongs here and never in analysis — a knob in analysis
-//! would invalidate every stored voiceprint each time it moved, where one here
-//! is swept against a fixed voiceprint and heard immediately. That is recorded
-//! as a decision in `docs/roadmap.md`.
+//! **Why these live in mapping.** A control over how the music sounds is aesthetic, so
+//! it belongs here and never in analysis: a knob in analysis would invalidate every
+//! stored voiceprint each time it moved, where one here is swept against a fixed
+//! voiceprint and heard immediately (`docs/roadmap.md`).
 //!
-//! Defaults reproduce what the mapping did before it was parameterised, so
-//! taking none of them changes nothing.
+//! Defaults reproduce what the mapping did before it was parameterised, so taking none
+//! of them changes nothing.
 
 use serde::{Deserialize, Serialize};
 
@@ -22,22 +20,19 @@ use crate::tuning::{Degree, Tuning};
 
 /// One knob, described well enough that a UI can offer it without being told.
 ///
-/// **Why the range lives here and not in the UI.** A slider needs a minimum, a
-/// maximum, a step and a starting position, and every one of those is a fact
-/// about the mapping rather than about the browser. Written twice they drift,
-/// and the way that failure shows up is a slider that cheerfully offers a value
-/// the mapping quietly clamps away — the person moves it and hears nothing
-/// change. Declared once here, `Params::default`, `Params::sane` and the
-/// controls in the UI cannot disagree, and a knob added to this table appears
-/// in the UI without anyone editing the UI.
+/// **Why the range lives here and not in the UI.** A slider's minimum, maximum, step and
+/// starting position are all facts about the mapping, not the browser. Written twice
+/// they drift, and the failure shows up as a slider offering a value the mapping quietly
+/// clamps away — the person moves it and hears nothing change. Declared once,
+/// `Params::default`, `Params::sane` and the UI controls cannot disagree, and a knob
+/// added to this table appears in the UI with no UI edit.
 ///
-/// **This is the wire type as well.** `routes::api` used to hold a second
-/// `Knob`, field for field, differing only in `String` where this has
-/// `&'static str`, plus the loop in `controls` that copied one into the other.
-/// The stated reason was that the mapping crate carries no serialisation for a
-/// UI — true of a `Score`, which the API projects on the way out, and not true
-/// of this, which the API forwards unchanged. A copy that is required to be
-/// identical is not an abstraction boundary; it is a second place to forget.
+/// **This is the wire type as well.** `routes::api` used to hold a second `Knob`, field
+/// for field, differing only in `String` where this has `&'static str`. The stated
+/// reason was that the mapping crate carries no serialisation for a UI — true of a
+/// `Score`, which the API projects on the way out, false of this, which it forwards
+/// unchanged. A copy required to be identical is not a boundary, it is a second place to
+/// forget.
 #[derive(Clone, Copy, Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -57,44 +52,36 @@ pub struct Knob {
     pub about: &'static str,
     /// Mappings this knob reaches. Empty means every one of them.
     ///
-    /// **Why a knob has to say.** The table exists so that a control cannot be
-    /// offered at a value the mapping clamps away — a slider that moves and
-    /// changes nothing. A knob belonging to one mapping and shown while another
-    /// is playing is the same failure by another route, and the only thing that
-    /// can be trusted to know which is the knob itself. `tests/api.rs` renders
-    /// every knob against every mapping it claims and fails if the audio is
-    /// unchanged, so a claim made here is a claim that is checked.
+    /// **Why a knob has to say.** A knob belonging to one mapping but shown while
+    /// another is playing is the same failure the table exists to prevent — a slider
+    /// that moves and changes nothing — and only the knob can be trusted to know which.
+    /// `tests/api.rs` renders every knob against every mapping it claims and fails if
+    /// the audio is unchanged, so a claim made here is checked.
     ///
-    /// [`Mapping`] rather than a name, so a knob cannot claim a mapping that
-    /// does not exist. It used to be able to: the claim was a `&'static str`
-    /// compared against another `&'static str`, and a typo here made a knob that
-    /// reached nothing and was therefore never shown.
+    /// [`Mapping`] rather than a name, so a knob cannot claim one that does not exist.
+    /// It used to be a `&'static str` compared against another, where a typo made a knob
+    /// that reached nothing and was therefore never shown.
     pub mappings: &'static [Mapping],
     /// Whether to offer this one before anybody asks for it.
     ///
-    /// **The rule: primary knobs decide what kind of piece this is, advanced
-    /// ones adjust a piece you already have.** Ten sliders at equal weight is
-    /// an instrument panel for someone who already knows what each does; to
-    /// anyone else it reads as ten things they might be getting wrong. So the
-    /// UI shows the primary ones and puts the rest behind a disclosure.
+    /// **The rule: primary knobs decide what kind of piece this is, advanced ones adjust
+    /// a piece you already have.** Ten sliders at equal weight is an instrument panel for
+    /// someone who already knows what each does; to anyone else it is ten things they
+    /// might be getting wrong. So the UI shows the primary ones and hides the rest.
     ///
-    /// Declared here for the same reason the range is. The alternative — a list
-    /// of important names kept in the frontend — is a second opinion about the
-    /// knob table that drifts the first time somebody adds a knob in Rust, and
-    /// the way *that* failure shows up is a new control nobody can find.
+    /// Declared here for the same reason the range is: a list of important names kept in
+    /// the frontend is a second opinion that drifts the first time somebody adds a knob
+    /// in Rust, and *that* failure shows up as a new control nobody can find.
     ///
-    /// Note this is not simply a ranking by audible authority. `bind` was kept
-    /// primary while the only figure for it said 18 cents — the smallest in the
-    /// table — because it is the axis the whole project argues about. Nor is it
-    /// the reverse: `spacing` earns its place on authority alone, having no
-    /// thesis behind it whatever. Both arguments are admissible and a knob needs
-    /// only one of them.
+    /// ⚠ **Not a ranking by audible authority.** `bind` stayed primary while its only
+    /// figure said 18 cents — the smallest in the table — because it is the axis the
+    /// whole project argues about; `spacing` earns its place on authority alone, with no
+    /// thesis behind it. Either argument suffices.
     ///
-    /// That 18 cents turned out to be a measurement artefact — it was the field
-    /// mapping's pitch travel, and on the Tonnetz `bind` moves 1168 cents, since
-    /// the lattice's axes are derived from the scale being retuned. Left written
-    /// down because the decision was right *before* anyone knew that, and a rule
-    /// that only ever agrees with the latest measurement is not a rule.
+    /// (That 18 cents was a measurement artefact: it was the field mapping's pitch
+    /// travel, and on the Tonnetz `bind` moves 1168 cents. Left written down because the
+    /// decision was right *before* anyone knew, and a rule that only ever agrees with
+    /// the latest measurement is not a rule.)
     pub primary: bool,
 }
 
@@ -151,25 +138,19 @@ impl KnobValue for usize {
 
 /// Declare the knobs once.
 ///
-/// **Why this is a macro and the alternative was not sustainable.** Every knob
-/// used to be written seven times: the `Knob` const, the `Params` field, the
-/// entry in `Default`, the clamp in `sane`, the arm in `with`, the query field
-/// on the route's `VoiceParams`, and the line in `VoiceParams::params`. Three of
-/// those seven the compiler did not check — the const, the `with` arm and the
-/// query field — because none of them is an exhaustive struct literal. What that
-/// bought was a knob published to the browser, drawn as a slider, and connected
-/// to nothing: the query field was missing, so the value never reached `Params`.
-/// A test caught that class, which is to say it was caught after being written
-/// rather than instead.
+/// **Why a macro.** Every knob used to be written seven times: the `Knob` const, the
+/// `Params` field, the `Default` entry, the clamp in `sane`, the arm in `with`, the
+/// query field on `VoiceParams`, and the line in `VoiceParams::params`. ⚠ Three of the
+/// seven the compiler did not check — none is an exhaustive struct literal — which
+/// bought a knob published to the browser, drawn as a slider, and connected to nothing,
+/// its query field missing so the value never reached `Params`.
 ///
-/// So one declaration generates all seven, and adding a knob is adding a line.
-/// The cost is honest and worth naming: fields declared here do not answer to
-/// grep, and jumping to `Params::bind` lands on this macro rather than on a
-/// field. At eleven knobs across seven sites that trade is clearly right; at
-/// three knobs it would not have been.
+/// So one declaration generates all seven. The honest cost: fields declared here do not
+/// answer to grep, and jumping to `Params::bind` lands on this macro. At eleven knobs
+/// across seven sites that trade is clearly right; at three it would not have been.
 ///
-/// [`KnobName`] is generated too, which is what makes `with` total — it had a
-/// `panic!` for a name no knob has, the only one left in library code.
+/// [`KnobName`] is generated too, which is what makes `with` total — it had the only
+/// `panic!` left in library code, for a name no knob has.
 macro_rules! knobs {
     ($(
         $(#[$field_doc:meta])*
@@ -553,19 +534,18 @@ const SEMITONE_CENTS: f32 = 100.0;
 /// did not ask for it.
 /// Pull one pitch toward the nearest equal-tempered one by `1 - bind`.
 ///
-/// The whole convention-to-speaker axis, on a single number. Separate from
-/// [`bind_toward_equal`] because the two callers apply it at different places
-/// and only one of them has a scale to hand: the field mapping binds the
-/// *degrees* and stacks voices on them, while the Tonnetz binds each **sounding
-/// pitch**, having built its chord from the speaker's own lattice first.
+/// The whole convention-to-speaker axis on one number. Separate from
+/// [`bind_toward_equal`] because the callers apply it in different places and only one
+/// has a scale to hand: the field mapping binds the *degrees* and stacks voices on them,
+/// while the Tonnetz binds each **sounding pitch**, its chord already built from the
+/// speaker's own lattice.
 ///
-/// **Why the Tonnetz cannot bind its axes instead.** A lattice point's pitch is
-/// `x·a + y·b`, so an error in an axis multiplies by how far out the point sits.
-/// Binding the axes moves a chord near the tonic by a few cents and one three
-/// cells away by fifty or more — and since the pitch folds into an octave, far
-/// enough out it becomes a different note altogether. That is a structural
-/// change wearing a tuning knob's name, and it made `bind` untestable on the one
-/// mapping whose chords hold still long enough to test it.
+/// ⚠ **Why the Tonnetz cannot bind its axes instead.** A lattice point's pitch is
+/// `x·a + y·b`, so an axis error multiplies by how far out the point sits: binding the
+/// axes moves a chord near the tonic by a few cents and one three cells away by fifty or
+/// more, and since pitch folds into an octave, far enough out it becomes a different
+/// note. That is a structural change wearing a tuning knob's name, and it made `bind`
+/// untestable on the one mapping whose chords hold still long enough to test it.
 pub fn bind_cents_toward_equal(cents: f32, bind: f32) -> f32 {
     if bind >= 1.0 {
         return cents;

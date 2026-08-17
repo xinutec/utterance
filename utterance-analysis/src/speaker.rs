@@ -1,19 +1,18 @@
 //! The speaker profile: what stays true of a person across their recordings.
 //!
-//! A voiceprint describes one utterance. This describes the person who produced
-//! it — the range their pitch moves in, the corners their vowel space reaches.
-//! Those barely change between takes, because they are anatomy and habit rather
-//! than a function of what was said.
+//! A voiceprint describes one utterance; this describes the person who produced it — the
+//! range their pitch moves in, the corners their vowel space reaches. Those barely change
+//! between takes, being anatomy and habit rather than a function of what was said.
 //!
-//! The split earns its keep downstream. Stable per-person facts are what a tuning
-//! system and a harmonic lattice get built from, while the utterance decides what
-//! happens inside them — the speaker is the world, the utterance is the piece.
-//! Keeping them in separate documents also stops a mapping quietly deriving a
-//! speaker's range from one short take that never reached it.
+//! The split earns its keep downstream: stable per-person facts are what a tuning system
+//! and a harmonic lattice are built from, while the utterance decides what happens inside
+//! them. The speaker is the world, the utterance is the piece — and separate documents
+//! stop a mapping quietly deriving a speaker's range from one short take that never
+//! reached it.
 //!
-//! This is measurement rather than aesthetics, which is why it belongs to the
-//! analysis layer: *how high does this person's F2 go* has an answer that can be
-//! demonstrated wrong. What to do with that range is the mapping layer's problem.
+//! Measurement rather than aesthetics, which is why it is analysis: *how high does this
+//! person's F2 go* has an answer that can be shown wrong. What to do with that range is
+//! the mapping layer's problem.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,23 +20,20 @@ use crate::voiceprint::Voiceprint;
 
 /// Bumped whenever the meaning of a field changes.
 ///
-/// Same contract as [`crate::voiceprint::SCHEMA_VERSION`], and for the same
-/// reason: a profile is a cache of a pure function of the voiceprints it was
-/// built from, so this number identifies the function, and an algorithm change
-/// invalidates a stored profile exactly as thoroughly as a shape change does.
+/// Same contract as [`crate::voiceprint::SCHEMA_VERSION`]: a profile is a cache of a pure
+/// function of the voiceprints it was built from, so this number identifies the function,
+/// and an algorithm change invalidates a stored profile as thoroughly as a shape change.
 /// - 2: added `brightness` (the spectral range this speaker's voiced tone
 ///   moves through).
 pub const PROFILE_VERSION: u32 = 2;
 
 /// Percentiles taken as the low and high edge of a measured range.
 ///
-/// Deliberately not the minimum and maximum. Formant assignment is per-frame with
-/// no continuity tracking, so a handful of frames in any take place a formant
-/// somewhere it never actually was — and a true extreme would be defined entirely
-/// by those frames. Trimming a twentieth from each end costs nothing real, since
-/// a speaker spends far more than 5% of a take near their own corners, and makes
-/// the bound reproducible across takes instead of hostage to the worst frame in
-/// each.
+/// ⚠ Deliberately not the minimum and maximum. Formant assignment is per-frame with no
+/// continuity tracking, so a handful of frames in any take place a formant somewhere it
+/// never was — and a true extreme would be defined entirely by those frames. Trimming a
+/// twentieth from each end costs nothing real, a speaker spending far more than 5% of a
+/// take near their own corners, and makes the bound reproducible across takes.
 const LOW_PERCENTILE: f32 = 0.05;
 const HIGH_PERCENTILE: f32 = 0.95;
 

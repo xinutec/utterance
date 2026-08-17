@@ -1,29 +1,24 @@
 //! A harmonic lattice with both of its axes read out of the speaker's spectrum.
 //!
-//! The classical Tonnetz is a plane of pitches spanned by two intervals — the
-//! fifth one way, the major third the other — in which every triangle is a triad
-//! and adjacent triangles share two of their three notes. That adjacency is the
-//! useful part: it makes *related* a geometric fact rather than a stylistic one,
-//! and voice leading falls out of moving between neighbours instead of being
-//! composed.
+//! The classical Tonnetz is a plane of pitches spanned by two intervals — the fifth one
+//! way, the major third the other — in which every triangle is a triad and adjacent
+//! triangles share two of their three notes. That adjacency is the useful part: it makes
+//! *related* a geometric fact rather than a stylistic one, and voice leading falls out
+//! of moving between neighbours instead of being composed.
 //!
-//! **The axes here are derived, not assumed.** 3:2 and 5:4 are the two intervals
-//! a harmonic spectrum makes least rough, which is *why* western harmony settled
-//! on them — so taking them as given would be assuming the conclusion this
-//! project exists to re-derive. Instead the generators are the two deepest
-//! minima of the speaker's own dissonance curve, subject to being independent of
-//! each other. For a voice they will land near the familiar pair, which is a
-//! result; for a bell they would not, and neither would the harmony built on
-//! them.
+//! **The axes here are derived, not assumed.** 3:2 and 5:4 are the two intervals a
+//! harmonic spectrum makes least rough, which is *why* western harmony settled on them,
+//! so taking them as given would assume the conclusion this project exists to re-derive.
+//! The generators are instead the two deepest minima of the speaker's own dissonance
+//! curve, subject to independence. For a voice they land near the familiar pair, which
+//! is a result; for a bell they would not, and neither would the harmony built on them.
 //!
-//! **Why independence has to be checked.** A harmonic spectrum's two deepest
-//! minima are the fifth and the fourth, and those sum to the octave — so the
-//! obvious pair spans a plane that is secretly a line, where the two triangles
-//! of every cell are the same three pitches and half of all harmonic motion does
-//! nothing. Taking the deepest two would walk into that every time. A scale
-//! offering no second independent interval genuinely cannot be laid out this
-//! way, and the honest answer is to say so rather than to fold the plane flat
-//! and pretend.
+//! ⚠ **Why independence has to be checked.** A harmonic spectrum's two deepest minima
+//! are the fifth and the fourth, and those sum to the octave — so the obvious pair spans
+//! a plane that is secretly a line, where both triangles of every cell are the same
+//! three pitches and half of all harmonic motion does nothing. A scale offering no
+//! second independent interval genuinely cannot be laid out this way, and the honest
+//! answer is to say so rather than fold the plane flat and pretend.
 
 use std::fmt;
 
@@ -159,35 +154,29 @@ fn is_consonance(candidates: &[Degree], cents: f32) -> bool {
 /// The two intervals a scale is spanned by.
 ///
 /// Depth rather than shallowness of the minimum: `Degree::depth` is how far the
-/// roughness curve climbs either side before turning back down, which is the
-/// measure of how firmly a note is somewhere a listener rests.
+/// roughness curve climbs either side before turning back down, which measures how
+/// firmly a note is somewhere a listener rests.
 ///
-/// **A triangle has three intervals and the third is `a - b`, which the scale
-/// never measured.** The roughness curve is swept as one spectrum against a
-/// shifted copy of itself, so every degree is a good interval *from the tonic*
-/// and nothing in it says how two degrees sound against each other. Picking the
-/// two deepest and stopping — which this did until 2026-07-29 — gave this
-/// speaker axes of 884 and 702 and so put **182 cents inside every chord the
-/// mapping has ever played**: not a degree, not near one, and close to where the
-/// roughness curve peaks. A tuning difference of sixteen cents was being looked
-/// for underneath a whole-tone clash.
+/// ⚠ **A triangle has three intervals and the third is `a - b`, which the scale never
+/// measured.** The roughness curve is swept as one spectrum against a shifted copy of
+/// itself, so every degree is a good interval *from the tonic* and says nothing about
+/// how two degrees sound against each other. Picking the two deepest and stopping gave
+/// this speaker axes of 884 and 702, putting **182 cents inside every chord the mapping
+/// had ever played** — not a degree, not near one, and close to where the roughness
+/// curve peaks. A sixteen-cent tuning difference was being looked for underneath a
+/// whole-tone clash.
 ///
-/// So a pair is judged by its worst interval rather than its best, because a
-/// chord is as rough as the roughest thing in it. Pairs whose difference is also
-/// a consonance are preferred, and among those the one whose *shallowest* of the
-/// three minima is deepest.
-///
-/// On the voice this was found with, that changes the answer from a major sixth
-/// and a fifth to **a fifth and a major third** — the classical Tonnetz, arrived
-/// at from one speaker's spectrum rather than assumed. Its triangles are then
-/// just major and minor triads whose every internal interval is a degree of the
-/// speaker's own scale.
+/// So a pair is judged by its worst interval, a chord being as rough as the roughest
+/// thing in it: pairs whose difference is also a consonance are preferred, and among
+/// those the one whose *shallowest* of the three minima is deepest. On the voice this
+/// was found with, that changes the answer from a major sixth and a fifth to **a fifth
+/// and a major third** — the classical Tonnetz, arrived at from one speaker's spectrum
+/// rather than assumed.
 ///
 /// **Falls back to the deepest independent pair** when no pair has a consonant
-/// difference, rather than refusing: a lattice with a rough interval in every
-/// chord is worse than one without, and still better than no mapping at all.
-/// That case is worth knowing about, so it is what `NoPlane` would report if the
-/// fallback also fails.
+/// difference: a lattice with a rough interval in every chord is worse than one
+/// without, and better than no mapping at all. `NoPlane` is what a failed fallback
+/// reports.
 pub fn generators(tuning: &Tuning) -> Result<(Degree, Degree), NoPlane> {
     // Interior degrees only. The tonic and the octave are degrees by decision
     // rather than by measurement and carry a depth of zero, and neither spans
@@ -409,28 +398,24 @@ pub fn settle(previous: Triangle, x: f32, y: f32, hold: f32) -> Triangle {
 
 /// The harmony's walk across the lattice, holding in space *and* in time.
 ///
-/// **Why [`settle`] alone is not enough, measured rather than supposed.**
-/// `hold` is hysteresis in space: how far past a boundary the mouth must travel.
-/// It deletes short chords well and never lengthens typical ones, and at the top
-/// of its range it still leaves an artifact that no amount of it can reach. On
-/// `what I need vocal 4` at `hold = 1.0` the mapping spends 99% of its time in
-/// rings of a second or more and has a *median* ring of 0.04 s — a chord sitting
-/// still for twenty-two seconds, flicking to a neighbour for two frames and back.
-/// The mouth genuinely crossed the boundary, so the spatial rule is right to let
-/// it; what is wrong is that it came straight back.
+/// **Why [`settle`] alone is not enough, measured rather than supposed.** `hold` is
+/// hysteresis in space — how far past a boundary the mouth must travel — and even at the
+/// top of its range it leaves an artifact it cannot reach. On `what I need vocal 4` at
+/// `hold = 1.0` the mapping spends 99% of its time in rings of a second or more and has
+/// a *median* ring of 0.04 s: a chord sitting still for twenty-two seconds, flicking to
+/// a neighbour for two frames and back. The mouth genuinely crossed the boundary, so the
+/// spatial rule is right to let it; what is wrong is that it came straight back.
 ///
-/// So this adds hysteresis in time. A frame that wants to leave starts a count,
-/// and the harmony follows only once the wanting has lasted `frames` in a row.
-/// The two rules compose rather than replace: `hold` decides whether a position
-/// counts as having left at all, and this decides whether it stayed gone.
+/// So this adds hysteresis in time. A frame that wants to leave starts a count, and the
+/// harmony follows only once the wanting has lasted `frames` in a row. The two compose:
+/// `hold` decides whether a position counts as having left, this decides whether it
+/// stayed gone.
 ///
-/// **The count is of consecutive frames wanting to leave, not of frames in one
-/// new triangle**, and that distinction is what keeps a deliberate glide
-/// working. A mouth sweeping across several cells never rests in any of them, so
-/// a rule waiting for one candidate to hold still would freeze the harmony for
-/// the whole gesture. Counting departures instead, the walk commits to wherever
-/// the mouth is *now* and goes on committing as it travels — lagging by `frames`
-/// and no more.
+/// ⚠ **The count is of consecutive frames wanting to leave, not frames in one new
+/// triangle** — that is what keeps a deliberate glide working. A mouth sweeping across
+/// several cells rests in none of them, so a rule waiting for one candidate to hold
+/// still would freeze the harmony for the whole gesture. Counting departures, the walk
+/// commits to wherever the mouth is *now*, lagging by `frames` and no more.
 pub struct Walk {
     here: Triangle,
     /// Consecutive frames the position has wanted to leave `here`.
