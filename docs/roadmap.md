@@ -387,6 +387,46 @@ In rough order of how much each unlocks.
   has a shape across its whole length and nothing here produces one. The Tonnetz
   buys time at the chord's timescale and no more; it is a held harmony, not a
   harmonic plan.
+
+  **Recurrence was the unblocked route to a harmonic plan, and the probe refused
+  it** (2026-08-26, `src/bin/form.rs`). Every route tried so far ends behind
+  syllables somebody marks by ear: meter needs stress, the symbol stream needs
+  phone classes, and the formant Viterbi needs frequencies marked. Resemblance
+  needs none of them. If the mouth returns to where it has been, a harmony could
+  return with it and hold at the timescale of the returning rather than of the
+  syllable — which is the same thing "making the tuning audible" asks for, from
+  a third direction.
+
+  Measured over the store: a self-similarity matrix over the eight streams a
+  mapping reads, Foote novelty at 1, 2, 4, 8 and 16 seconds, and the rate at
+  which frames five seconds apart or more resemble each other. **Real takes do
+  not beat a surrogate of themselves at any scale** — 3/15 at one second, 3/11 at
+  eight, 1/8 at sixteen — and return is a coin flip at 6/13. Including the
+  pauses, where phrase boundaries mostly live, moves none of it. The two takes
+  that do beat their surrogates at every scale are `steady-ah` and `what I need
+  vocal 3`, and the first of those is a sustained vowel whose only boundary is
+  the note starting.
+
+  **What makes that a result rather than an empty run is the control, and the
+  control was wrong twice first.** A block shuffle manufactures a discontinuity
+  at every block edge, so its strength varied with the very axis being measured
+  along — real material duly "won" at 16 s and "lost" at 1 s, and both were
+  properties of the control. A raw peak novelty is a competition the noisier
+  curve wins, which reported real takes as less structured than their surrogates
+  at one second, where nobody claims they are structured at all. That is twice in
+  one tool that an extreme over many draws stood in for a question it could not
+  answer, after the recurrence maximum saturated at 0.91 against 0.94 for the
+  same reason. The control that survives keeps each stream's Fourier magnitudes
+  and replaces the phases, one phase sequence across all eight streams, so it has
+  the take's smoothness, its variance, its slow drift and its correlations, and
+  nothing of its arrangement.
+
+  **The honest limit.** A phase surrogate keeps every periodicity the take has,
+  so a genuinely periodic form is structure the surrogate has too, misaligned.
+  This measures that the structure is not strong enough to build a mapping on
+  blind. It does not measure that there is none, and it says nothing about
+  material nobody has recorded yet — every take in the store is improvised or
+  spoken, and none of it was performed with a section in mind.
 - **The note mapping's rhythm is still wrong.** `compose.rs` reads onsets, which
   mean *the spectrum changed* rather than *a syllable began*. It is kept because
   comparing mappings is how any of them get judged, not because it is right.
