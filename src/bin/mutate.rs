@@ -342,9 +342,29 @@ fn explain(outcome: &Outcome, expect: &Expect) -> String {
 }
 
 fn git_is_clean(root: &Path) -> bool {
+    // ⚠ **`-C` and `current_dir` set the DIRECTORY; they do not clear
+    // `GIT_INDEX_FILE`, which wins over both.** A pre-commit hook exports its
+    // own repository to every descendant, so without this scrub `git status`
+    // answers about the repository being committed rather than about `root` —
+    // and this function decides whether a tool that REWRITES FILES may start.
+    //
+    // ⚠ Chained rather than a loop over the names: `rust-git-env-unscrubbed`
+    // matches the spawn only when the scrub is in the same call chain.
+    // `GIT_EXEC_PATH` deliberately survives — it names git's own helper
+    // directory, and under nix dropping it breaks git rather than containing it.
     Command::new("git")
+        .arg("-C")
+        .arg(root)
         .args(["status", "--porcelain"])
-        .current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_CEILING_DIRECTORIES")
+        .env_remove("GIT_PREFIX")
+        .env_remove("GIT_CONFIG_PARAMETERS")
         .output()
         .is_ok_and(|o| o.status.success() && o.stdout.is_empty())
 }
