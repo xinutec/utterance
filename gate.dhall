@@ -109,25 +109,28 @@ in  { name = "utterance"
         , name = "frontend deps match the lockfile"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "install", "--frozen-lockfile" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend lint"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "lint" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend typecheck (e2e)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "typecheck:e2e" ]
+        , env = G.nonInteractive
         , timeout_s = 900
         }
       , G.Check::{
         , name = "frontend unit tests"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "test" ]
-        , env = toMap { NG_BUILD_MAX_WORKERS = "1" }
+        , env = G.nonInteractive # toMap { NG_BUILD_MAX_WORKERS = "1" }
         , timeout_s = 1800
         }
       , {-  `../../dev-lint`, not `../dev-lint`: cwd is `utterance/frontend`.
@@ -140,6 +143,7 @@ in  { name = "utterance"
               "../../"
               [ "dist/utterance-web/browser" ]
               [ "pnpm", "exec", "ng", "build" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , {-  The L2 phone-width layout harness, serving the dist the build row
@@ -150,6 +154,7 @@ in  { name = "utterance"
         , name = "frontend ui-check (phone-width layout harness)"
         , cwd = "frontend"
         , argv = G.inDevShell [ "pnpm", "run", "ui-check" ]
+        , env = G.nonInteractive
         , timeout_s = 1800
         }
       , {-  A green gate has to mean the package this repo PUBLISHES still builds.
