@@ -279,13 +279,9 @@ fn the_mouth_shape_tips_the_chord_without_moving_it() {
     // pitch here moves in lattice steps, so a stream reaching the harmony would
     // be silent for most of its travel and then jump.
     let mut rounded = take(300);
-    for slot in &mut rounded.formants.f3 {
-        *slot = Some(2100.0);
-    }
+    rounded.formants.f3.fill(Some(2100.0));
     let mut spread = take(300);
-    for slot in &mut spread.formants.f3 {
-        *slot = Some(3100.0);
-    }
+    spread.formants.f3.fill(Some(3100.0));
 
     let voice = voice();
     let a = tonnetz::compose_with(&rounded, &voice, still()).unwrap();
@@ -303,13 +299,9 @@ fn the_mouth_shape_tips_the_chord_without_moving_it() {
 #[test]
 fn voicing_at_zero_ignores_the_third_formant() {
     let mut rounded = take(300);
-    for slot in &mut rounded.formants.f3 {
-        *slot = Some(2100.0);
-    }
+    rounded.formants.f3.fill(Some(2100.0));
     let mut spread = take(300);
-    for slot in &mut spread.formants.f3 {
-        *slot = Some(3100.0);
-    }
+    spread.formants.f3.fill(Some(3100.0));
 
     let off = Params {
         voicing: 0.0,

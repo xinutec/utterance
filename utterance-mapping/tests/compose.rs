@@ -295,13 +295,9 @@ fn a_less_periodic_voice_gives_a_breathier_note() {
     // Aperiodicity was measured from the first commit and read by nothing until
     // now — one of the streams the mapping was throwing away.
     let mut clean = take(&[0], &[MIDDLE], 100, true);
-    for slot in &mut clean.pitch.aperiodicity {
-        *slot = 0.02;
-    }
+    clean.pitch.aperiodicity.fill(0.02);
     let mut breathy = take(&[0], &[MIDDLE], 100, true);
-    for slot in &mut breathy.pitch.aperiodicity {
-        *slot = 0.5;
-    }
+    breathy.pitch.aperiodicity.fill(0.5);
 
     let v = voice();
     let quiet_breath = compose(&clean, &v).events[0].breath;
