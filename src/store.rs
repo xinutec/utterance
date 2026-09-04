@@ -162,7 +162,7 @@ impl Store {
     ///
     /// The audio is the source of truth and analysis is a pure function of it,
     /// so a voiceprint is a *cache*, not a record — it can always be rebuilt.
-    /// That is what makes bumping [`SCHEMA_VERSION`] cheap, and this project
+    /// That is what makes bumping [`voiceprint::SCHEMA_VERSION`] cheap, and this project
     /// will bump it every time the analyser learns to measure something new.
     ///
     /// The alternative — defaulting the missing fields — would answer "was this

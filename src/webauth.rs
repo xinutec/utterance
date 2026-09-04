@@ -110,7 +110,7 @@ impl WebAuth {
         }
     }
 
-    /// The cookie value that signs `session` in until [`SESSION_TTL`] elapses.
+    /// The cookie value that signs `session` in until `SESSION_TTL` elapses.
     ///
     /// Public because a test has to be able to arrive already signed in without
     /// standing up a Nextcloud to sign in against.

@@ -82,6 +82,13 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: tests
         run: cargo test --workspace
+      # Named exactly after the gate row, which is what DL-GHA-GATE-PARITY
+      # checks. No nix here, so the flag is set inline rather than through the
+      # dev shell the local row uses.
+      - name: rustdoc resolves every intra-doc link
+        run: cargo doc --no-deps --workspace
+        env:
+          RUSTDOCFLAGS: -D rustdoc::broken_intra_doc_links
       # The frontend's types are generated from the Rust wire types; fail if the
       # committed output drifted from them. Does in CI what `scripts/gen-types.sh
       # --check` does locally, without the nix dev shell. Deleting the directory first so a

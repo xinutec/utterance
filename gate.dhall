@@ -96,6 +96,15 @@ in  { name = "utterance"
         , argv = G.inDevShell [ "cargo", "test", "--workspace" ]
         , timeout_s = 1800
         }
+      , {-  Rustdoc's link resolution. Nothing else in this table sees it: the
+            compiler does not read doc comments, and clippy does not follow the
+            links inside them, so a `[`Thing`]` naming something that moved or was
+            never public renders as literal text and reads as prose.
+
+            Adopted 2026-09-04, when it found two links resolving to nothing and
+            three aimed at private items — every one of them under a green gate.
+        -}
+        G.cargoDoc
       , {-  Regenerate the frontend TS from the Rust types and fail on drift.
             This is the row the worktree lock exists for: it writes into
             `frontend/src/app/generated` while comparing it.

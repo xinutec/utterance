@@ -201,7 +201,7 @@ pub struct RoleBody {
 ///
 /// A whole endpoint for one field, because the field decides whether a take
 /// shapes the speaker's sound world, and until this existed it could only be
-/// set while uploading. See [`Store::put_role`] for what that cost.
+/// set while uploading. See [`crate::store::Store::put_role`] for what that cost.
 ///
 /// Idempotent, and a `PUT` rather than a `PATCH` for that reason: the body is
 /// the complete new value of the thing being addressed.

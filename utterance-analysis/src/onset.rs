@@ -227,7 +227,7 @@ fn normalise(mut x: Vec<f32>) -> Vec<f32> {
 /// Pick onset frames from a flux curve.
 ///
 /// A peak qualifies when it is a local maximum, clears the local threshold, and
-/// is at least [`MIN_SEPARATION`] frames from the last one accepted.
+/// is at least `MIN_SEPARATION` frames from the last one accepted.
 pub fn pick(flux: &[f32]) -> Vec<usize> {
     let mut picked: Vec<usize> = Vec::new();
     for i in 1..flux.len().saturating_sub(1) {

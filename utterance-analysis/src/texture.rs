@@ -64,7 +64,7 @@ pub const NOISE_BAND_LOW_HZ: f32 = 300.0;
 /// The same reasoning as [`NOISE_BAND_LOW_HZ`] at the other end, and the same
 /// failure it was written for: a measure whose average is dominated by something
 /// that is not the voice.
-const TILT_HIGH_HZ: f32 = 5000.0;
+pub const TILT_HIGH_HZ: f32 = 5000.0;
 
 /// Floor added to every bin before the flatness ratio.
 ///
