@@ -1,69 +1,6 @@
 ---
 name: build
 
-# utterance (Rust workspace + Angular frontend) — gate on the Rust half (clippy,
-# tests, generated-type drift) and the frontend half (lint, unit tests, layout
-# harness), then build and push the single image xinutec/utterance:latest to
-# Docker Hub. Between them these are the gate (`gate.dhall`) minus the shared
-# dev-lint rules, which need a private sibling repo and stay local.
-#
-# The k8s manifests live in the home monorepo (xinutec/pippijn,
-# code/kubes/utterance/k8s); the image tag is the only contract between this
-# repo and the deploy.
-#
-# dev-lint: gate-parity
-#
-# **Step names are load-bearing.** A step whose `name` matches a row of
-# `gate.dhall` exactly is that row. `DL-GHA-GATE-PARITY` fails if a row is
-# claimed by no step and not waived below; `tests/ci_parity.rs` adds the two
-# things that rule deliberately leaves to a repository — that no row is claimed
-# twice, and that the covered rows run in table order, which matters here
-# because `frontend build` writes the `dist/` that `frontend ui-check` serves.
-# Between them that is what stops this file drifting behind the table one line
-# at a time, which it did three times in two days. Rename a row and you rename
-# the step.
-#
-# The two rows a runner cannot run, and why:
-#
-# dev-lint: allow-gate-row-not-in-ci-dev-lint
-#   needs nix in the runner and a token for the private sibling repo. Same
-#   split as messages and coach: the shared fleet rules stay local across the
-#   whole fleet, and CI is the rest of the gate.
-#
-# dev-lint: allow-gate-row-not-in-ci-the-table-matches-its-dhall
-#   re-rendering needs dhall and the nix dev shell, and the runner has neither.
-#   The JSON is generated and committed, so what CI runs is the same table that
-#   row would check.
-#
-# dev-lint: allow-gate-row-not-in-ci-the-package-builds-what-this-repo-publishes
-#   `nix build .#default` needs nix, and this job runs in a rust:1-bookworm
-#   container with no nix in it. ⚠ **CI is not a substitute for that row**, and
-#   the difference is the point of having it: the `tests` step above runs cargo
-#   against the checkout, while the row builds the derivation — committed
-#   lockfile, /nix/store, the source fileset. gamepads shipped a repo that could
-#   not be built, twice, with every other check green. The row runs locally on
-#   every commit through the pre-commit hook, which is where the nix is.
-#
-# There is NO image automation on this fleet — no Flux, no Argo image
-# controller. The Deployment pins :latest, a fixed string, so a green build here
-# changes nothing on the cluster by itself. Roll it out by hand afterwards; the
-# restart is what pulls the fresh image (:latest implies imagePullPolicy:
-# Always):
-#   ssh root@isis.xinutec.org "kubectl -n utterance rollout restart deploy/utterance \
-#     && kubectl -n utterance rollout status deploy/utterance --timeout=180s"
-
-# ⚠ Runs are serialised, newest wins. `:latest` is one mutable tag, so whichever
-# build finishes LAST is what the cluster pulls — and GitHub's queue does not
-# deliver in order. Measured on life 2026-09-13: three pushes ten minutes apart,
-# and the newest commit's build went green while its own ANCESTOR sat pending for
-# over forty minutes, ready to republish `:latest` from a superseded tree with
-# nothing in any diff to explain it.
-#
-# ⚠ That stale run could be neither cancelled NOR deleted — 409 "has not been
-# queued yet" and 403 "could not delete", for the same run, seconds apart. A run
-# wedged before dispatch has no remedy, so a group that is ALREADY here is the
-# only defence. `cancel-in-progress` is right because this branch only ever ships
-# its tip: an older run's image is never the one wanted.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -71,8 +8,6 @@ concurrency:
 on:
   push:
     branches: [main]
-    # The image builds from rust:1-bookworm and node:24-alpine, never from the
-    # flake, so a lock-only change cannot affect it.
     paths-ignore:
       - "**/flake.lock"
 
@@ -84,34 +19,18 @@ jobs:
     container: rust:1-bookworm
     steps:
       - uses: actions/checkout@v6
-      # Without this the container re-downloads and recompiles the whole
-      # dependency tree on every push, twice (clippy and test).
       - uses: Swatinem/rust-cache@v2
       - run: rustup component add clippy rustfmt
-      # Formatting was checked by the local gate and by nothing here, so it
-      # rode on whichever machine ran the pre-commit hook.
       - name: formatting
         run: cargo fmt --all --check
-      # The lint level lives in Cargo.toml's [workspace.lints] (pedantic, with
-      # the cast and internal-API families allowed there and reasoned about);
-      # `-D warnings` is what turns those warnings into a failure.
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: tests
         run: cargo test --workspace
-      # Named exactly after the gate row, which is what DL-GHA-GATE-PARITY
-      # checks. No nix here, so the flag is set inline rather than through the
-      # dev shell the local row uses.
       - name: rustdoc resolves every intra-doc link
         run: cargo doc --no-deps --workspace
         env:
           RUSTDOCFLAGS: -D rustdoc::broken_intra_doc_links
-      # The frontend's types are generated from the Rust wire types; fail if the
-      # committed output drifted from them. Does in CI what `scripts/gen-types.sh
-      # --check` does locally, without the nix dev shell. Deleting the directory first so a
-      # type REMOVED from Rust shows up as a leftover file, and asking git for
-      # status rather than diff so an ADDED one (untracked) counts too — a plain
-      # `git diff --exit-code` is blind to both.
       - run: rm -rf frontend/src/app/generated
       - run: cargo test --workspace --features ts export_bindings
       - name: generated types are current
@@ -123,16 +42,6 @@ jobs:
             exit 1
           fi
 
-  # The other half of the gate. Until this existed CI ran clippy and
-  # the Rust tests and nothing else, so the frontend was gated only by the
-  # pre-commit hook on whichever machine did the commit — and a push with
-  # `--no-verify`, or from a checkout without the hook installed, went green
-  # having compiled no TypeScript at all.
-  #
-  # Not the gate itself, which would need nix in the runner and a
-  # token for the private dev-lint repo. Same split as messages and coach: the
-  # shared dev-lint rules stay local across the whole fleet, and this is the
-  # rest of the gate.
   fe-verify:
     permissions:
       contents: read
@@ -142,9 +51,6 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v6
-      # Before setup-node, whose `cache: pnpm` shells out to `pnpm store path`.
-      # The major floats: pinning it would be a second version held level with
-      # the flake's by hand, and the lockfile is what has to match.
       - uses: pnpm/action-setup@v4
         with:
           version: 11
@@ -157,29 +63,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: frontend lint
         run: pnpm run lint
-      # The e2e tree is not reached by the app's own tsconfigs, and Playwright
-      # transforms specs with esbuild, which strips types rather than checking
-      # them. Without this step the harness that measures how the app behaves on
-      # a phone is compiled by nothing in CI — it was gated only by the
-      # pre-commit hook, which a --no-verify push or a hookless checkout skips.
       - name: frontend typecheck (e2e)
         run: pnpm run typecheck:e2e
       - name: frontend unit tests
         run: pnpm test
-      # The harness serves the *built* bundle, and `ui-check` is `playwright
-      # test` alone — the gate table (gate.dhall) makes the build a row of its
-      # own so that a build failure is reported as one, rather than as a layout
-      # failure. So the build has to happen here too, or the static server has
-      # nothing to serve and the harness dies on `Timed out waiting 60000ms from
-      # config.webServer`, which is what it did for two commits.
-      #
-      # Plain `ng build`, not the `dev-lint#ng-build` wrapper the gate row uses:
-      # that needs nix and the private dev-lint repo, and the mtime assertion it
-      # adds guards a macOS-only kqueue abort that cannot happen on the runner.
       - name: frontend build
         run: pnpm exec ng build
-      # Real-browser layout check: asserts nothing overlaps or overflows at
-      # phone geometry.
       - run: pnpm exec playwright install --with-deps chromium
       - name: frontend ui-check (phone-width layout harness)
         run: pnpm run ui-check
@@ -202,6 +91,4 @@ jobs:
           push: true
           tags: xinutec/utterance:latest
           cache-from: type=registry,ref=xinutec/utterance:cache
-          # mode=max keeps the builder stages too — the pnpm install and the
-          # primed cargo dependency layer — which are the expensive ones.
           cache-to: type=registry,ref=xinutec/utterance:cache,mode=max

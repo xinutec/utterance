@@ -17,7 +17,12 @@
             "index": "src/index.html",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
-            "assets": [{ "glob": "**/*", "input": "public" }],
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
             "styles": [
               "node_modules/@fontsource/roboto/300.css",
               "node_modules/@fontsource/roboto/400.css",
@@ -29,11 +34,24 @@
           "configurations": {
             "production": {
               "budgets": [
-                { "type": "initial", "maximumWarning": "800kB", "maximumError": "1.5MB" },
-                { "type": "anyComponentStyle", "maximumWarning": "6kB", "maximumError": "10kB" }
+                {
+                  "type": "initial",
+                  "maximumWarning": "800kB",
+                  "maximumError": "1.5MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "6kB",
+                  "maximumError": "10kB"
+                }
               ],
               "outputHashing": "all",
-              "optimization": { "scripts": true, "styles": true, "fonts": false }
+              "optimization": {
+                "scripts": true,
+                "styles": true,
+                "fonts": false
+              },
+              "serviceWorker": "ngsw-config.json"
             },
             "development": {
               "optimization": false,
@@ -45,10 +63,16 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
-          "options": { "proxyConfig": "proxy.conf.json" },
+          "options": {
+            "proxyConfig": "proxy.conf.json"
+          },
           "configurations": {
-            "production": { "buildTarget": "utterance-web:build:production" },
-            "development": { "buildTarget": "utterance-web:build:development" }
+            "production": {
+              "buildTarget": "utterance-web:build:production"
+            },
+            "development": {
+              "buildTarget": "utterance-web:build:development"
+            }
           },
           "defaultConfiguration": "development"
         },

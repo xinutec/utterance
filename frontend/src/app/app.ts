@@ -10,6 +10,7 @@ import { toSignal } from "@angular/core/rxjs-interop";
 import { filter, map } from "rxjs";
 
 import { AuthState } from "./auth";
+import { SwUpdates } from "./sw-updates";
 import { Telemetry } from "./telemetry";
 
 @Component({
@@ -37,6 +38,7 @@ export class App {
    * exactly the screens nobody thought about.
    */
   private readonly telemetry = inject(Telemetry);
+  private readonly swUpdates = inject(SwUpdates);
 
   /**
    * Read by the template to decide whether there is an app to show.
@@ -122,5 +124,8 @@ export class App {
     // After the field initialisers, so the router this subscribes to exists.
     // Idempotent, so a shell recreated in a test does not stack listeners.
     this.telemetry.init();
+    // Same seam, same argument: wired once here so no view has to know a
+    // service worker exists.
+    this.swUpdates.start();
   }
 }
