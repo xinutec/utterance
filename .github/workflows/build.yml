@@ -1,6 +1,70 @@
 ---
 name: build
 
+# utterance (Rust workspace + Angular frontend) — gate on the Rust half (clippy,
+# tests, generated-type drift) and the frontend half (lint, unit tests, layout
+# harness), then build and push the single image xinutec/utterance:latest to
+# Docker Hub. Between them these are the gate (`gate.dhall`) minus the shared
+# dev-lint rules, which need a private sibling repo and stay local.
+#
+# The k8s manifests live in the home monorepo (xinutec/pippijn,
+# code/kubes/utterance/k8s); the image tag is the only contract between this
+# repo and the deploy.
+#
+# dev-lint: gate-parity
+#
+# **Step names are load-bearing.** A step whose `name` matches a row of
+# `gate.dhall` exactly is that row. `DL-GHA-GATE-PARITY` fails if a row is
+# claimed by no step and not waived below; `tests/ci_parity.rs` adds the two
+# things that rule deliberately leaves to a repository — that no row is claimed
+# twice, and that the covered rows run in table order, which matters here
+# because `frontend build` writes the `dist/` that `frontend ui-check` serves.
+# Between them that is what stops this file drifting behind the table one line
+# at a time, which it did three times in two days. Rename a row and you rename
+# the step.
+#
+# The two rows a runner cannot run, and why:
+#
+# dev-lint: allow-gate-row-not-in-ci-dev-lint
+#   needs nix in the runner and a token for the private sibling repo. Same
+#   split as messages and coach: the shared fleet rules stay local across the
+#   whole fleet, and CI is the rest of the gate.
+#
+# dev-lint: allow-gate-row-not-in-ci-the-table-matches-its-dhall
+#   re-rendering needs dhall and the nix dev shell, and the runner has neither.
+#   The JSON is generated and committed, so what CI runs is the same table that
+#   row would check.
+#
+# dev-lint: allow-gate-row-not-in-ci-the-package-builds-what-this-repo-publishes
+#   `nix build .#default` needs nix, and this job runs in a rust:1-bookworm
+#   container with no nix in it. ⚠ **CI is not a substitute for that row**, and
+#   the difference is the point of having it: the `tests` step above runs cargo
+#   against the checkout, while the row builds the derivation — committed
+#   lockfile, /nix/store, the source fileset. gamepads shipped a repo that could
+#   not be built, twice, with every other check green. The row runs locally on
+#   every commit through the pre-commit hook, which is where the nix is.
+#
+# There is NO image automation on this fleet — no Flux, no Argo image
+# controller. The Deployment pins :latest, a fixed string, so a green build here
+# changes nothing on the cluster by itself. Roll it out by hand afterwards; the
+# restart is what pulls the fresh image (:latest implies imagePullPolicy:
+# Always):
+#   ssh root@isis.xinutec.org "kubectl -n utterance rollout restart deploy/utterance \
+#     && kubectl -n utterance rollout status deploy/utterance --timeout=180s"
+
+# ⚠ Runs are serialised, newest wins. `:latest` is one mutable tag, so whichever
+# build finishes LAST is what the cluster pulls — and GitHub's queue does not
+# deliver in order. Measured on life 2026-09-13: three pushes ten minutes apart,
+# and the newest commit's build went green while its own ANCESTOR sat pending for
+# over forty minutes, ready to republish `:latest` from a superseded tree with
+# nothing in any diff to explain it.
+#
+# ⚠ That stale run could be neither cancelled NOR deleted — 409 "has not been
+# queued yet" and 403 "could not delete", for the same run, seconds apart. A run
+# wedged before dispatch has no remedy, so a group that is ALREADY here is the
+# only defence. `cancel-in-progress` is right because this branch only ever ships
+# its tip: an older run's image is never the one wanted.
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
