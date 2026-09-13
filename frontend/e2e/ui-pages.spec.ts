@@ -5,6 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
+  expectNoStarvedText,
   expectNoOccludedControls,
   expectViewportIsPhone,
 } from "@xinutec/ui-harness";
@@ -233,6 +234,7 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
   await expectSomewhereToScrollFrom(page);
 });
@@ -246,6 +248,7 @@ test("studio — empty state lays out cleanly @ phone", async ({ page }, testInf
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -259,6 +262,7 @@ test("calibration — the guided steps lay out cleanly @ phone", async ({ page }
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -272,6 +276,7 @@ test("calibration — the longest step still fits @ phone", async ({ page }, tes
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -293,6 +298,7 @@ test("studio — the derived scale lays out cleanly @ phone", async ({ page }, t
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -318,6 +324,7 @@ test("studio — a scale that carries no lattice says so @ phone", async ({ page
   });
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -341,6 +348,7 @@ test("the sign-in wall lays out cleanly @ phone", async ({ page }, testInfo) => 
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -357,6 +365,7 @@ test("compare — two renders side by side lay out cleanly @ phone", async ({ pa
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
@@ -373,6 +382,7 @@ test("compare — both settings panels open lay out cleanly @ phone", async ({ p
 
   await expectNoTextOverlaps(page, testInfo);
   await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
 
