@@ -54,10 +54,9 @@ name: build
 
 # ⚠ Runs are serialised, newest wins. `:latest` is one mutable tag, so whichever
 # build finishes LAST is what the cluster pulls — and GitHub's queue does not
-# deliver in order. Measured on life 2026-09-13: three pushes ten minutes apart,
-# and the newest commit's build went green while its own ANCESTOR sat pending for
-# over forty minutes, ready to republish `:latest` from a superseded tree with
-# nothing in any diff to explain it.
+# deliver in order. A newer commit's build can go green while its own ANCESTOR
+# sits pending for the best part of an hour, ready to republish `:latest` from a
+# superseded tree with nothing in any diff to explain it.
 #
 # ⚠ That stale run could be neither cancelled NOR deleted — 409 "has not been
 # queued yet" and 403 "could not delete", for the same run, seconds apart. A run
