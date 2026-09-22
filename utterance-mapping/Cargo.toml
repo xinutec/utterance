@@ -20,8 +20,8 @@ utterance-analysis = { path = "../utterance-analysis" }
 # saying why. They are not projected on the way out — the API serves the variant
 # itself, so a hand-written wire copy would be the same three names again, which
 # is the duplication this module exists to remove.
-serde = { version = "1.0.229", features = ["derive"] }
-ts-rs = { version = "12.0.1", features = ["serde-compat"], optional = true }
+serde = { version = "1", features = ["derive"] }
+ts-rs = { version = "12", features = ["serde-compat"], optional = true }
 
 [lints]
 workspace = true
