@@ -11,23 +11,25 @@ those constraints are run.
 The output is not meant to sound like a voice. Two people reading the same
 sentence should produce audibly different pieces, each internally consistent.
 
-**The chain runs end to end, and only from the crates.** A calibration take
-yields a scale and a timbre derived from the speaker's own spectrum; an utterance
-in that world yields a score; the score renders to audio. What the browser shows
-is still only the voiceprint — nothing derived is reachable from the UI yet.
-`docs/roadmap.md` says what exists, what is next, and which decisions are
-settled.
+The chain runs end to end: guided calibration takes yield a scale and a timbre
+derived from the speaker's own spectrum; an utterance in that world yields a
+score; the score renders to audio. The browser records takes, shows each
+voiceprint, plays the derived music with every mapping choice on a slider, and
+compares two settings side by side. `docs/roadmap.md` says what is next and
+which decisions are settled.
 
 ## Layout
 
-| Path             | What it is                                                  |
-| ---------------- | ----------------------------------------------------------- |
-| `utterance-analysis` | Pure DSP core: audio in, voiceprint out. No IO, no opinions. |
-| `utterance-mapping`  | Musical decisions over a voiceprint. Where the opinions live.  |
-| `utterance-realisation` | Score to audio. Additive synthesis, no decisions.          |
-| `src`            | axum server: recordings, analysis runs, static bundle.        |
-| `frontend`       | Angular 22 app: capture, inspect, visualise.                  |
-| `docs`           | Design intent. Start with `architecture.md`, then `roadmap.md`.|
+| Path                    | What it is                                                     |
+| ----------------------- | -------------------------------------------------------------- |
+| `utterance-analysis`    | Pure DSP core: audio in, voiceprint out. No IO, no opinions.   |
+| `utterance-mapping`     | Musical decisions over a voiceprint. Where the opinions live.  |
+| `utterance-realisation` | Score to audio. Additive synthesis, no decisions.              |
+| `src`                   | axum server: recordings, analysis, renders, the static bundle. |
+| `src/bin`               | Research tools that measure what the mappings do.              |
+| `frontend`              | Angular app: capture, calibrate, inspect, listen, compare.     |
+| `android`               | A WebView wrapper with microphone access.                      |
+| `docs`                  | Design intent. Start with `architecture.md`, then `roadmap.md`. |
 
 ## Running locally
 
@@ -42,8 +44,7 @@ Then open <http://localhost:4200>.
 To just *use* it, serving the built bundle and the API from one origin:
 
 ```sh
-nix develop -c bash -c 'cd frontend && npm run build'
-nix develop -c cargo build --release
+nix develop -c bash -c 'cd frontend && pnpm install --frozen-lockfile && pnpm run build'
 BIND_ADDR=0.0.0.0:8181 \
   DATA_DIR="$PWD/data" \
   STATIC_DIR="$PWD/frontend/dist/utterance-web/browser" \
@@ -53,7 +54,7 @@ BIND_ADDR=0.0.0.0:8181 \
 Then <http://localhost:8181>. Binding `0.0.0.0` also serves the LAN, so another
 device can browse takes and inspect voiceprints — but **not record**: browsers
 only grant microphone access in a secure context, which `localhost` is and a
-plain-HTTP LAN address is not. Recording happens at the machine running it.
+plain-HTTP LAN address is not.
 
 Backend alone, API only:
 
@@ -69,10 +70,6 @@ re-derived automatically whenever the analyser moves on.
 ## Verifying
 
 ```sh
-nix run ../dev-lint#gate -- . gate.json
-                          # rust: fmt, clippy, tests · generated-type drift
-                          # frontend: eslint, e2e typecheck, unit tests,
-                          #           build, layout harness
-                          # plus the shared dev-lint rules
-scripts/setup-hooks.sh    # one-time per clone: pre-commit runs the above
+nix run ../dev-lint#gate -- . gate.json   # every check in gate.dhall
+scripts/setup-hooks.sh                    # one-time per clone: pre-commit runs the gate
 ```

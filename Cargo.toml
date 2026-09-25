@@ -20,18 +20,18 @@ unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
-# The fleet baseline's three (dev-lint docs/standards.md §7): a debugging
+# The fleet baseline's three (dev-lint docs/standards.md): a debugging
 # leftover or a stub is a compile error, not a warning to scroll past.
 dbg_macro = "deny"
 todo = "deny"
 unimplemented = "deny"
 
 # Numeric conversion between sample indices, frame counts and Hz is what this
-# workspace *is* — `(seconds * rate) as usize`, `i as f32 / rate`. Roughly a
-# hundred sites, every one deliberate and none of them near a precision limit
-# (a 32-bit float holds a sample index exactly to 16.7M, which is six minutes
-# at 48 kHz; takes are seconds long). Denying these would buy `try_from`
-# ceremony and `#[allow]` noise, not safety.
+# workspace *is* — `(seconds * rate) as usize`, `i as f32 / rate`. Every site
+# is deliberate and none is near a precision limit (a 32-bit float holds a
+# sample index exactly to 16.7M, which is six minutes at 48 kHz; takes are
+# seconds long). Denying these would buy `try_from` ceremony and `#[allow]`
+# noise, not safety.
 cast_possible_truncation = "allow"
 cast_precision_loss = "allow"
 cast_sign_loss = "allow"
@@ -45,9 +45,8 @@ cast_lossless = "allow"
 float_cmp = "allow"
 
 # These crates are a workspace-internal split, not a published API — nothing
-# outside this repo calls them, so the ~50 `#[must_use]` attributes and ~14
-# `# Errors` sections these ask for would document a boundary that does not
-# exist. The API that *is* public is the HTTP one, and that is documented at
+# outside this repo calls them, so the `#[must_use]` attributes and `# Errors`
+# sections these ask for would document a boundary that does not exist. The API that *is* public is the HTTP one, and that is documented at
 # the handlers.
 must_use_candidate = "allow"
 return_self_not_must_use = "allow"

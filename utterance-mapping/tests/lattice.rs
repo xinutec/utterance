@@ -296,9 +296,7 @@ const DWELL: usize = 5;
 fn a_chord_survives_a_departure_that_comes_straight_back() {
     // The artifact this exists for. `hold` is hysteresis in space and cannot see
     // this case at all: the mouth really did cross the boundary, so the spatial
-    // rule is right to let it go — and then it came back two frames later. On a
-    // real take that produced a chord sitting still for twenty-two seconds with a
-    // median ring of 0.04 s around it.
+    // rule is right to let it go — and then it came back two frames later.
     let mut walk = Walk::start(0.2, 0.2);
     let home = walk.step(0.2, 0.2, 0.0, DWELL);
 
@@ -388,9 +386,9 @@ fn a_glide_keeps_moving_rather_than_freezing() {
 
 #[test]
 fn no_settle_time_is_the_walk_that_has_no_clock_in_it() {
-    // The default, and the promise that adding this knob changed nothing for
-    // anyone who does not touch it. Both 0 and 1 frame mean *commit as soon as
-    // the spatial rule allows*, which is what `settle` alone did.
+    // The default changes nothing for anyone who does not touch the knob. Both
+    // 0 and 1 frame mean *commit as soon as the spatial rule allows*, which is
+    // what `settle` alone does.
     for frames in [0, 1] {
         let mut walk = Walk::start(0.2, 0.2);
         walk.step(0.2, 0.2, 0.5, frames);
@@ -409,12 +407,11 @@ fn no_settle_time_is_the_walk_that_has_no_clock_in_it() {
 
 #[test]
 fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
-    // The real scale this was found on, measured from a held *ah*, with its two
-    // deepest minima at their measured depths. Their difference is 182 cents,
-    // which is not a degree, is not near one, and sits close to where the
-    // roughness curve peaks — so spanning the lattice by the deepest pair put a
-    // whole-tone clash inside *every chord the mapping could play*, and a
-    // sixteen-cent tuning question was being asked underneath it.
+    // A real scale, measured from a held *ah*, with its two deepest minima at
+    // their measured depths. Their difference is 182 cents, which is not a
+    // degree, is not near one, and sits close to where the roughness curve
+    // peaks — so spanning the lattice by the deepest pair would put a whole-tone
+    // clash inside every chord the mapping could play.
     let measured = scale(&[
         (316.0, 0.09),
         (386.0, 0.12),
@@ -450,9 +447,9 @@ fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
         );
     }
 
-    // And the deepest pair is specifically *not* what comes out, which is the
-    // whole change: 884 and 702 are the two deepest minima here and their
-    // difference is 182, which is nothing.
+    // And the deepest pair is specifically *not* what comes out: 884 and 702
+    // are the two deepest minima here and their difference is 182, which is
+    // nothing.
     let deepest_pair = (a.cents - 884.0).abs() < 1.0 && (b.cents - 702.0).abs() < 1.0;
     assert!(
         !deepest_pair,

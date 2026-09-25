@@ -1,19 +1,15 @@
 //! What each knob actually changes, measured on the mapping being listened to.
 //!
-//! **Why the published figures needed redoing.** The numbers in
-//! `docs/roadmap.md` — `density` 1516 cents, `spacing` 1200, `bind` 18 — are
-//! how far each knob moves the *pitch* of the field mapping at its widest. Two
-//! things are wrong with using them now. They were measured on `field`, and the
-//! Tonnetz is a different geometry. And a single scalar under-reports any knob
-//! that does not work by moving pitch: `bind` scored 18 cents not because it is
-//! feeble but because pitch travel is the wrong ruler for it. Its whole effect
-//! is whether partials of different voices lock or beat, which a measure of how
-//! far the notes moved cannot see at all.
+//! **Why several axes.** A single scalar under-reports any knob that does not
+//! work by moving pitch: measured as pitch travel on the field mapping, `bind`
+//! scores a few cents, not because it is feeble but because pitch travel is the
+//! wrong ruler for it. Its whole effect is whether partials of different voices
+//! lock or beat, which a measure of how far the notes moved cannot see at all.
+//! And each mapping is measured separately, because the Tonnetz is a different
+//! geometry from the field.
 //!
-//! That is the same error as reporting the Tonnetz's held-chord *fraction*
-//! instead of its ring durations (see `dwell.rs`). So this reports several axes
-//! side by side and refuses to rank them into one number: a knob is loud if it
-//! is loud on *any* of them.
+//! So this reports several axes side by side and refuses to rank them into one
+//! number: a knob is loud if it is loud on *any* of them.
 //!
 //! | axis | what it sees | the knobs it is the right ruler for |
 //! | --- | --- | --- |
@@ -24,12 +20,12 @@
 //! | noise | loudness of the unpitched material | consonants |
 //! | ring | how long one chord holds, in seconds | hold, reach |
 //!
-//! **Every axis here was added because its absence produced a false zero**, and
-//! the count is now three: the field-only comparison reported `consonants` as
-//! doing nothing, holding one derived voice fixed reported `density` as doing
-//! nothing, and pitch-travel-alone reported `bind` as nearly doing nothing. A
-//! knob measured on the wrong axis is indistinguishable from a knob that does
-//! not work, which is the reading that gets one deleted.
+//! **Every axis here exists because its absence produces a false zero**: a
+//! field-only comparison reports `consonants` as doing nothing, holding one
+//! derived voice fixed reports `density` as doing nothing, and pitch travel
+//! alone reports `bind` as nearly doing nothing. A knob measured on the wrong
+//! axis is indistinguishable from a knob that does not work, which is the
+//! reading that gets one deleted.
 //!
 //! ```text
 //! cargo run --bin authority                  # the default take, both mappings
@@ -267,19 +263,16 @@ fn ring_s(vp: &Voiceprint, voice: &Voice, params: Params) -> f32 {
 /// Whether a mapping quantises its harmony, and so has a ring worth timing.
 ///
 /// The only thing this measurement needs to know about a mapping that the
-/// mapping crate does not already say. It kept a whole local enum to hold it —
-/// three variants' worth of name and dispatch restated to carry one predicate —
-/// until `Mapping` existed to be asked instead.
+/// mapping crate does not already say.
 fn holds_a_chord(mapping: Mapping) -> bool {
     matches!(mapping, Mapping::Tonnetz)
 }
 
 /// The speaker's voice as it would be derived at these settings.
 ///
-/// Not a constant across a sweep, which is the trap this measurement fell into
-/// first: `density` is the depth a dip in the roughness curve must clear to
-/// count as a note, so it decides what the *scale* is before any mapping runs.
-/// Held fixed, it measures as a knob that changes nothing.
+/// Not a constant across a sweep: `density` is the depth a dip in the roughness
+/// curve must clear to count as a note, so it decides what the *scale* is before
+/// any mapping runs. Held fixed, it measures as a knob that changes nothing.
 fn voice_at(store: &Store, params: Params) -> anyhow::Result<Voice> {
     Ok(voice::calibrate_with(store, None, params.density)
         .map_err(|e| anyhow::anyhow!("{e}"))?
@@ -298,8 +291,8 @@ fn main() -> anyhow::Result<()> {
             .iter()
             .find(|m| m.label == *label || m.id == *label)
             .ok_or_else(|| anyhow::anyhow!("no take called {label}"))?,
-        // The calibration take by default, which is what the published field
-        // figures were measured on — so the two tables can be read together.
+        // The calibration take by default: the one the speaker's scale comes
+        // from, and so the one every mapping is tuned against.
         None => takes
             .iter()
             .find(|m| m.id == calibrated.source.id)
@@ -331,10 +324,9 @@ fn main() -> anyhow::Result<()> {
             let high = Params::default().with(knob.name, knob.max);
 
             // **`density` acts on the calibration, not on the composition**, so
-            // a sweep holding one derived voice fixed measured it at exactly
-            // zero on every axis — and reported the loudest knob in the
-            // published table as one that does nothing. The scale is re-derived
-            // at each end, which is what the render route does too.
+            // a sweep holding one derived voice fixed measures it at exactly
+            // zero on every axis. The scale is re-derived at each end, which is
+            // what the render route does too.
             let (Ok(va), Ok(vb)) = (voice_at(&store, low), voice_at(&store, high)) else {
                 println!("  {:<14} {:>10}", knob.name, "no scale");
                 continue;

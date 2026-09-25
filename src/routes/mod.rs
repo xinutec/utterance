@@ -26,14 +26,12 @@ const MAX_UPLOAD_BYTES: usize = 64 * 1024 * 1024;
 
 /// How long a static response may be reused without asking again.
 ///
-/// ⚠ **`index.html` MUST REVALIDATE.** With no `Cache-Control` at all — which
-/// is what this served from 2026-07-28 until it was measured on 2026-09-07 — a
-/// client falls back to HEURISTIC freshness, roughly a tenth of the document's
-/// age, and may keep it for days without ever asking. The document names the
+/// ⚠ **`index.html` MUST REVALIDATE.** With no `Cache-Control` at all a client
+/// falls back to HEURISTIC freshness, roughly a tenth of the document's age, and
+/// may keep it for days without ever asking. The document names the
 /// content-hashed bundle, so the new `main-*.js` is never fetched either and a
-/// deploy is invisible: an Android `WebView` loaded messages' API and a whole
-/// thread while running several builds behind, with a missing button as the
-/// only symptom.
+/// deploy is invisible: the app keeps running a build behind, with nothing but
+/// a missing feature as the symptom.
 ///
 /// `no-cache` means "ask first", not "never keep" — the `ETag` still turns the
 /// usual case into a 304 with no body.
@@ -52,10 +50,7 @@ fn cache_control_for<B>(res: &Response<B>) -> Option<HeaderValue> {
     //
     // ⚠ NOT `!is_success()`. That excludes **304 Not Modified**, which must
     // carry the headers a 200 would so the client can refresh what it already
-    // holds. Stripping it made every revalidated image a full re-fetch, and the
-    // arriving bytes grew the thread AFTER it had scrolled to the bottom —
-    // `thread-scroll.spec.ts` caught it at 271px off, a symptom with no visible
-    // connection to a cache header.
+    // holds; without them every revalidation becomes a full re-fetch.
     if res.status().is_client_error() || res.status().is_server_error() {
         return None;
     }
@@ -77,9 +72,6 @@ fn cache_control_for<B>(res: &Response<B>) -> Option<HeaderValue> {
 /// ⚠ **A missing FILE must not be handed the page, and this mistake is
 /// invisible**: the wrong answer is a `200`, so a browser that asked for a
 /// woff2 and got HTML renders broken icons and reports nothing anywhere.
-/// Measured here 2026-09-08 — `/media/nope.woff2` answered `200 text/html`
-/// (#1478). `tasks` and memview's console both shipped it and were fixed this
-/// way; this is the third copy.
 ///
 /// The test is a dot in the last path segment. It is a heuristic, and the
 /// alternative — enumerating the bundle's own asset names — would have to be
@@ -141,8 +133,7 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
     // **Outside the gate, and that ordering is the whole point.** A later
     // `layer` wraps the earlier ones, so tracing added before the gate sees
     // only requests the gate let through — and a refused request is exactly the
-    // one worth a line. Found by reading the log after deploying it the other
-    // way round: `/login` appeared and every 401 was invisible.
+    // one worth a line.
     let api = api.layer(http_trace::layer());
 
     let mut app = Router::new()
@@ -167,9 +158,8 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
             let index = index.clone();
             async move { spa(&index, uri.path()) }
         }));
-        // ⚠ The layer wraps the STATIC SERVICE ALONE. `health`'s first attempt
-        // hooked every route and stamped a year of `immutable` onto API JSON,
-        // which is this bug pointing the other way.
+        // ⚠ The layer wraps the STATIC SERVICE ALONE. Hooking every route would
+        // stamp a year of `immutable` onto API JSON.
         app = app.fallback_service(
             ServiceBuilder::new()
                 .layer(SetResponseHeaderLayer::overriding(

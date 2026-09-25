@@ -40,8 +40,8 @@ export interface CalibrationStep {
    * by ts-rs) rather than as a string. The backend reads a take's label to know
    * which vowel it is — that is where the speaker's own vowel corners come from
    * — so a rename on either side would quietly stop a take being a vowel, with
-   * nothing failing and no measurement missing enough to notice. Now it does not
-   * compile.
+   * nothing failing and no measurement missing enough to notice. Typed, it does
+   * not compile.
    */
   readonly id: StepId;
   readonly title: string;
@@ -225,9 +225,9 @@ function percentile(sorted: readonly number[], p: number): number {
   const floor = Math.floor(rank);
   const lo = sorted[floor];
   const hi = sorted[Math.ceil(rank)];
-  // `driftSemitones` is the only caller and has already required 20 values, so
-  // this cannot fire today. NaN rather than 0 if a later caller skips that
-  // check: an empty track has no percentile, and 0 would be read as one.
+  // `driftSemitones` is the only caller and has already required 20 values.
+  // NaN rather than 0 if a later caller skips that check: an empty track has no
+  // percentile, and 0 would be read as one.
   if (lo === undefined || hi === undefined) return NaN;
   return lo + (hi - lo) * (rank - floor);
 }

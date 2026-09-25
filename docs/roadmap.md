@@ -15,938 +15,380 @@ the voiceprint as the interface between its layers.
 | formants F1/F2/F3 | done | LPC + Durand-Kerner. Range-constrained assignment. |
 | speaker profile | done | Vowel-space corners, F3 range, f0 range, brightness range. |
 | measured partial ratios | done | Per take, over frames steady enough to use. |
-| noise shape (texture) | done | Centroid and flatness above 300 Hz. The consonants. |
-| stress hierarchy | **not started** | Was needed to fix onsets; the field mapping sidesteps it. |
+| noise shape (texture) | done | Centroid, flatness and tilt above 300 Hz. The consonants. |
+| stress hierarchy | **not started** | Needed for meter; the continuous mappings sidestep it. |
 | phone-class segmentation | **not started** | Needed for the symbol stream. |
 
-All three layers exist and the chain runs end to end from a browser: a
-calibration take yields a scale, a timbre palette and a detune; an utterance
-yields a score; the score renders to audio on demand at
-`/api/recordings/{id}/render`, with every mapping choice reachable as a query
-parameter.
+All three layers exist and the chain runs end to end from a browser: calibration
+takes yield a scale, a timbre palette and a detune; an utterance yields a score;
+the score renders to audio on demand at `/api/recordings/{id}/render`, with every
+mapping choice reachable as a query parameter and published as a slider.
 
-## The four mappings
+## The mappings
 
 In rough order of how much each unlocks.
 
 1. **Tuning from measured partials.** *Built* — `utterance-mapping/src/tuning.rs`.
    A Plomp–Levelt roughness curve over the speaker's own measured spectrum,
    swept from unison to the octave, with its deep minima read as scale degrees.
-   What came out of the first real calibration set:
+   On real calibration takes:
 
-   - **Reproducible across takes.** Two steady-*ah* recordings gave scales
-     identical to the cent, despite individual partials differing by up to 8 dB
-     between them. The curve integrates over every pair, so per-partial wobble
-     barely moves it. Tuning needs no pooling across takes.
-   - **Not reproducible across vowels.** The same speaker's *ah*, *ee* and *oo*
-     gave 8, 3 and 4 degrees. A deliberately open *ah* yields a nearly-just
-     scale — 6:5, 5:4, 7:5, 3:2, 8:5, 5:3 — while a relaxed one collapses to the
-     fifth alone. See the open question below.
-   - **Audibly not 12-TET.** Four of those six degrees sit 13–18 cents off
-     equal temperament, and 7:5 at 582 cents has no equal-tempered equivalent.
+   - **Reproducible across takes** of the same vowel, to the cent, even where
+     individual partials differ by several dB. The curve integrates over every
+     pair, so per-partial wobble barely moves it.
+   - **Not reproducible across vowels.** One speaker's *ah*, *ee* and *oo* gave
+     scales of very different sizes — an open *ah* a nearly-just scale of eight
+     degrees, an *ee* the fifth alone. See the open question below.
+   - **Audibly not 12-TET.** Several degrees sit well over ten cents off equal
+     temperament, and 7:5 at 582 cents has no tempered equivalent.
 
 2. **Harmony from vowel space.** *Built, twice* — `field.rs` and `tonnetz.rs`.
-   The first stacks five voices at a fixed degree spacing and walks the whole
-   stack with the vowel: polyphony from articulation, and every moment the same
-   chord at a different pitch.
+   The field stacks voices at a fixed degree spacing and walks the whole stack
+   with the vowel: polyphony from articulation, every moment the same chord at a
+   different pitch.
 
-   The second is the Tonnetz. The two dimensions of vowel space become the two
-   dimensions of a harmonic lattice, spanned by two independent minima of the
-   speaker's own roughness curve — for a voice, the fifth and a third, which is
-   a result rather than an assumption. Position on it is quantised to a
-   triangle, and that is the part that matters:
+   The Tonnetz maps the two dimensions of vowel space onto a harmonic lattice
+   spanned by two of the speaker's own consonances, and quantises position on it
+   to a triangle:
 
    - **Chords hold.** While the mouth stays in one triangle the pitches do not
-     move, so a sustained vowel is a sustained chord and there is finally
-     something for the derived tuning to be audible *in*. Everything else the
-     voice does goes on moving underneath it.
-   - **Voice leading falls out of the geometry.** Triangles sharing an edge
-     share two of their three pitches, and a pitch the lattice keeps keeps its
-     frequency, so a chord change holds two voices and steps one. Nobody wrote
-     that rule.
-   - `hold` is the knob that decides how far past a boundary the mouth must go
-     before the harmony follows — the one that decides whether a chord rings.
+     move, so a sustained vowel is a sustained chord and the derived tuning has
+     something to be audible *in*. Every other stream keeps moving underneath.
+   - **Voice leading falls out of the geometry.** Neighbouring triangles share
+     two of three pitches, and a kept pitch keeps its frequency, so a chord
+     change holds two voices and steps one. Nobody wrote that rule.
+   - `hold` (hysteresis in space) and `settle` (a minimum dwell in time) decide
+     how readily the harmony follows the mouth — together, whether a chord rings.
 
-   **Heard against the field mapping, 2026-07-29, by both listeners: neither
-   wins.** Pippijn and Michiel, on `what I need vocal 3` at `hold = 0.9` with the
-   consonant lattice — "they both sound a bit like music, they are both fun, we
-   like them."
+   **Heard against each other by both listeners: neither wins.** Both "sound a
+   bit like music", and both stay (see *Freedom is a feature*). That settles the
+   question the Tonnetz was built to ask — a held harmony is not better than a
+   sliding one by enough to prefer it — and redirects effort to what both lack:
+   nothing operates above the phrase, and there is no meter.
 
-   That is an answer and not a failure to decide. It settles the question the
-   Tonnetz was built to ask — *is a held harmony better than a continuously
-   sliding one* — with **no**, or at least not by enough to prefer one. Both stay,
-   which the "mappings are alternatives" decision already provides for; what
-   changes is that nobody should spend more time choosing between them.
-
-   It also carries the first positive result about the project's output rather
-   than its machinery: two listeners, one of whom did not build it, find the
-   derived music musical and enjoyable. Every measurement before this was about
-   whether a mechanism worked.
-
-   The consequence for planning is a redirection. Effort belongs in what both
-   mappings lack — nothing operates above the phrase, and there is still no
-   meter — rather than in refining either one.
 3. **Meter from stress hierarchy.** Nested strong/weak grouping from syllable
-   prominence. Still blocked on stress measurement — but no longer on the
-   critical path, because the field mapping needs no rhythm at all. It went from
-   the thing everything waited on to an enrichment.
+   prominence. Blocked on stress measurement, but off the critical path: the
+   continuous mappings need no rhythm at all.
+
 4. **Development from the symbol stream.** Phone classes as an alphabet for a
-   deterministic rewrite system. The furthest out and the least specified, and
-   the place the project's oldest idea still lives: structure at every timescale
-   at once.
+   deterministic rewrite system. The furthest out and least specified: structure
+   at every timescale at once.
 
 ## Known gaps, with their cost
 
-- **Syllable labelling was built and removed** (2026-07-29). `/label` collected
-  syllable onsets by ear: tap while playing, then place each mark against the
-  level curve at up to 400 px/s, at a quarter speed. It is gone; recoverable at
-  `5ff52dd` if the stress work ever wants it.
-
-  **Two reasons, and the second is the one that matters.**
-
-  The ask was misjudged. It was put as ten minutes of tapping; placing a
-  consonant onset precisely is slow, skilled work — thirty or forty careful
-  judgements for ten seconds of speech. Pippijn spent hours finding defects in
-  the tool instead, none of which any check here could reach: a chart that
-  painted dark on dark, a rate that called a correct session wrong, no way to
-  discover that a mark is moved by dragging, and a drag that let go of its mark
-  when the autosave reordered the list.
-
-  Then he asked whether reciting the alphabet would do instead — and the idea
-  generalises past what it was offered as. **The measurement wanted is a count,
-  and a count comes from the text rather than the audio.** A known passage has a
-  known number of syllables; the detector either reports that number or it does
-  not. Nobody marks anything. Isolated letters with pauses only establish a floor
-  — flux fails *inside* connected speech, where the silences are not there to
-  help it — but one read sentence with a hand-counted syllable total measures the
-  real distribution, and counting syllables in writing is a desk task.
-
-  **What labelling was never for**, though it was repeatedly described that way
-  here: scoring the formant tracker. Syllable onsets say nothing about where F1
-  is; that would need somebody marking frequencies, which is a different job
-  entirely and is not on offer.
-
 - **Onsets mean "the spectrum changed", not "a syllable began."** Spectral flux
-  cannot separate the two; a continuously glided vowel demonstrates it. Threshold
-  tuning needs speech with syllables labelled by ear, which no one has produced
-  yet, so the onset tests assert bounds rather than counts. The real fix is the
-  stress hierarchy, which carries a cue flux does not.
+  cannot separate the two; a continuously glided vowel demonstrates it. Tuning
+  the threshold needs ground truth on speech, so the onset tests assert bounds
+  rather than counts. The real fix is the stress hierarchy, which carries a cue
+  flux does not. The `notes` mapping inherits this: its rhythm is wrong, and it
+  is kept because comparing mappings is how any of them get judged.
+
+- **Ground truth for syllables should come from the text, not the audio.**
+  Marking syllable onsets by ear was built (`/label`, recoverable at `5ff52dd`)
+  and removed: placing an onset precisely is slow, skilled work, far more than
+  the ask it was presented as. The measurement wanted is a *count*, and a known
+  passage has a known number of syllables — the detector either reports it or
+  does not, and counting syllables in writing is a desk task. Isolated letters
+  only establish a floor; one read sentence with a hand-counted total measures
+  connected speech. Asking anyone to record it is parked.
+
 - **No formant continuity tracking.** Assignment is per-frame, constrained by
-  anatomical range. Where a formant drops out of the fit its slot is nulled
-  rather than filled with the one above — correct, but lossy.
+  anatomical range; a formant that drops out is nulled rather than filled from
+  the one above — correct, but lossy.
 
-  **A Viterbi pass was written, measured and reverted** (2026-07-29). Scoring
-  whole assignments across frames — movement in octaves, plus a cost per empty
-  slot — is the obvious fix, and the case for it is real: slot ranges overlap
-  heavily, so a resonance at 900 Hz is a legal F1 *and* a legal F2, and one frame
-  alone cannot tell which.
+  A Viterbi pass scoring whole assignments across frames was written, measured
+  and reverted. On the real fixture it filled *fewer* slots and moved F2 up into
+  what the per-frame rule calls F3; raising the empty-slot cost plateaued. It
+  passed on synthetic vowels only because a synthesised vowel does not move, so
+  continuity always wins — **the property was checked against signals that could
+  not falsify it.** The blocker is ground truth: the only available score is
+  *how many slots got filled*, and optimising that proxy would undo the reason
+  the per-frame rule exists.
 
-  On the real fixture it made things worse rather than better. Against the
-  per-frame rule it filled **fewer** slots, not more — F1 701 → 660 frames, F3
-  566 → 538 — while moving F2's 95th percentile from 2324 Hz to 2864, which is
-  it taking a resonance the old rule called F3. Raising the empty-slot cost
-  recovered F2 and then plateaued, leaving F1 and F3 still short: a structural
-  result rather than a tuning one.
+- **Analysis is not cheap.** Measuring partials runs a 2048-point FFT on every
+  steady frame, so a take costs seconds rather than milliseconds. Fine once per
+  recording, but a re-analysis sweep after a schema bump is something you wait
+  for.
 
-  It passed on synthetic vowels, and that is the lesson worth keeping. A
-  synthesised vowel does not move, so continuity always wins there and the test
-  could not fail. **The property was checked against signals that could not
-  falsify it.**
+- **Speech does not hold a chord.** `src/bin/dwell.rs` measures how long each
+  Tonnetz chord rings. Sustained and sung takes spend most of their time in
+  rings of a second or more — long enough for a tuning to be perceptible — while
+  speech rings in fractions of a second at any `hold`: it does not hold a vowel
+  long enough for spatial hysteresis to help. `settle` removes the flickers
+  `hold` cannot (a chord held for seconds that flicks to a neighbour for two
+  frames and back) without freezing anything; past a point on speech it lags
+  enough to chase the mouth and makes new short rings, which is why it is a
+  published range. It defaults to 0, reproducing the behaviour before it
+  existed; where it should sit is a question for the ear.
 
-  **The blocker is the same one meter has: there is no ground truth.** Nobody has
-  marked where the formants really are in a real take, so the only available
-  score is *how many slots got filled* — and filling slots is precisely what the
-  per-frame rule already refuses to do when it cannot be sure, on the grounds
-  that a plausible number in the wrong place is undetectable downstream.
-  Optimising the proxy would undo the reason the current rule exists. This needs
-  labelled material before it can be attempted again.
-- **Vowel-space landmarks were generic; they are the speaker's own where the
-  guided vowels exist** (2026-07-30). The plot drew population positions for an
-  adult speaker. It now draws `ee`, `ah` and `oo` where *this* mouth put them,
-  measured from the corner takes, and falls back to the population grid — saying
-  on the chart that it is doing so — until those are recorded.
-
-  **The vowel's identity comes from the prompt, not from the audio.** The take
-  recorded against the *ee* step is this speaker's *ee* by construction, which is
-  the same argument the guided flow already rests on: a take per step makes the
-  label free and exact. Nothing here needs anybody to mark a recording by ear,
-  and it is the second time that principle has paid — the syllable count was
-  moved from the audio to the text on exactly the same reasoning.
-
-  Two details that are not incidental. The centre is a **median**: a corner take
-  is a mouth opening into a shape and closing again, so its first and last frames
-  are honest measurements of something that is not the vowel, and a mean is
-  dragged toward neutral in proportion to how far off they are — every corner
-  comes out less extreme than the speaker is. And the **spread is drawn beside
-  the point**, as the interquartile cross, because two takes can share a centre
-  while one was held still and the other wandered through half the space; a dot
-  claims a precision that the smeared case does not have, and the smeared case is
-  the one worth seeing.
-
-  `steady-ah` is held on *ah* and deliberately does **not** place the open
-  corner: it is recorded for its spectrum, at whatever shape holds a note
-  steadiest, and it is the longest take in the set — so counting it would let the
-  more casual *ah* win the corner by weight of evidence.
-
-  Served by `GET /api/speaker/corners` rather than folded into `/api/voice`,
-  because corners need no scale: a store whose takes are all too short to derive
-  one still has corners, and asking through the voice summary would refuse to
-  report them for a reason that has nothing to do with them.
-
-  Mapping (2) is the consumer this was actually for, and it can now ask.
-- **Analysis is no longer cheap.** Measuring partials runs a 2048-point FFT on
-  every steady frame, so a fifteen-second take costs seconds rather than
-  milliseconds. Acceptable because it runs once per recording and the result is
-  cached, but it is the reason a re-analysis sweep after a schema bump is now
-  something you wait for.
-- **Nothing sustained, so the tuning could not be heard.** The derived scale is
-  real and was inaudible, because a chord has to ring for about a second before
-  its tuning is perceptible and the field mapping never held still that long.
-  The Tonnetz mapping is the answer built for it — quantising the harmony while
-  leaving the time continuous.
-
-  **Measured 2026-07-28 by `src/bin/dwell.rs`, and the answer depends on the
-  material rather than on the mapping.** The figure previously reported for the
-  Tonnetz — 55% of a take spent holding one chord — is the wrong statistic: a
-  fraction cannot tell eight seconds of held harmony from eighty chords of a
-  hundred milliseconds, and only the first is audible as a tuning. Measuring the
-  duration of each individual ring instead, at the default `hold = 0.35` and
-  pooled over every take in the store, the *median* chord lasts **0.15 s** while
-  **56%** of sounding time sits inside chords of a second or more. Both are
-  true: the distribution is bimodal, and the median describes a crowd of
-  flickers that occupy almost no time.
-
-  Split by take, it separates cleanly and the boundary is not where a knob is:
-
-  | material | median ring | share of time in rings ≥ 1 s |
-  | --- | --- | --- |
-  | `vowel-ee`, `steady-ah` (sustained) | 3.4–11.3 s | 95–98% |
-  | `what I need vocal 3` (sung) | 0.27 s | 90% |
-  | `Fiona Improv Vocal 1` (sung) | 0.18 s | 56% |
-  | `speech` | 0.16 s | **2%** |
-
-  So the prediction is that `bind` is now audible on sung and sustained
-  material and still inaudible on speech — where the longest chord in a
-  46-second take is 1.00 s even at the default, and 1.90 s with `hold` at its
-  maximum. Speech does not hold a vowel long enough for any amount of spatial
-  hysteresis to make a chord ring.
-
-- **`hold` suppresses flickers rather than lengthening chords, and never
-  removes them.** Across its whole range the pooled median ring moves only
-  0.07 s → 0.22 s while the share of time in rings ≥ 1 s moves 43% → 75%. What
-  the knob does is delete short chords, not extend typical ones. It never
-  finishes the job: at `hold = 1.0` the take `what I need vocal 4` spends 99% of
-  its time in long rings and still has a *median* ring of **0.04 s** — a chord
-  sitting still for twenty-two seconds, flicking to a neighbour for two frames
-  and back. That is an artifact rather than music.
-
-  **Fixed 2026-07-29 by `settle`, a minimum dwell in time.** `hold` is
-  hysteresis in *space* and structurally cannot see this case: the mouth really
-  did cross the boundary, so the spatial rule is right to let the chord go — and
-  then it came straight back. `settle` counts consecutive frames the position
-  has wanted to leave, and the harmony follows only once the wanting has lasted.
-  The two rules compose: `hold` decides whether a position counts as having
-  left, `settle` decides whether it stayed gone.
-
-  Measured across the whole store at the default `hold = 0.35`, sweeping
-  `settle` from 0 to its maximum of 0.5 s:
-
-  | settle | chords | pooled median ring | share ≥ 1 s | longest |
-  | --- | --- | --- | --- | --- |
-  | 0.00 s | 704 | 0.14 s | 57% | 15.60 s |
-  | 0.10 s | 540 | 0.23 s | 60% | 15.60 s |
-  | 0.30 s | 401 | 0.37 s | 69% | 15.60 s |
-  | 0.50 s | 367 | 0.42 s | 73% | 15.61 s |
-
-  **It reaches what `hold` could not.** At a fixed `hold` it moves the pooled
-  median 0.14 → 0.42 s, where `hold` across its entire travel moves it 0.07 →
-  0.22. The longest ring does not move at all, which is the property worth
-  having: it deletes flickers without freezing anything. On the take the
-  artifact was found in, the median goes 0.04 s → 0.40 s at `settle = 0.10`.
-
-  **Two honest limits.** `take 16:54:26` has a median of 0.08 s at every setting
-  — whatever is short there is not a flicker, and this knob does not touch it.
-  And on `speech` the median rises to 0.29 s at `settle = 0.3` and falls back to
-  0.17 s at 0.5: past some point the walk lags far enough that it commits to
-  wherever the mouth has got to, chasing rather than following, and makes new
-  short rings of its own. So the range's top end is not simply "more of the good
-  thing", which is exactly why it is a published range rather than a constant.
-
-  **Default 0, deliberately** — the rule that defaults reproduce the
-  unparameterised behaviour, so every render made before today is still
-  comparable with one made after it. Where it should sit is a question for the
-  ear, and `/compare` is the instrument: the flickers may turn out to be
-  inaudible under the consonants, in which case the right default is the one it
-  has.
 - **The Tonnetz says nothing about register.** Each voice takes whichever octave
   of its pitch class falls nearest a target, which keeps common tones at common
-  frequencies and is why voice leading survives. What it does not do is anything
-  a voice-leading rule would recognise: no contrary motion, no avoidance of
-  parallels, no bass line. Whether any of that is wanted is a taste question and
-  should be settled by ear.
-- **A scale of the fourth and the fifth spans no lattice**, and the honest
-  response is that the Tonnetz mapping produces nothing at all for that speaker.
-  *Hit in listening, 2026-07-28, and now said out loud.* It was not a thin
-  calibration that got there but the `density` knob: past about 0.14 on a real
-  take the scale prunes to the tonic, the fifth and the octave, which is one
-  direction and no plane. The render refused nothing and returned a score with
-  no field in it, so the answer was a valid 200 containing consonants over
-  silence — indistinguishable from a broken build.
+  frequencies. It does nothing a voice-leading rule would recognise — no contrary
+  motion, no avoidance of parallels, no bass line. Whether any of that is wanted
+  is a taste question.
 
-  `Lattice::from_tuning` now fails with a reason rather than an absence; the
-  route turns that into a 422 `unplayable` naming the intervals it had and the
-  knob that undoes it; and the voice summary carries the same verdict, because
-  it is fetched by script before the player is pointed anywhere and an `<audio>`
-  element handed a failing URL shows a broken control and no words.
+- **A scale of the fourth and the fifth spans no lattice.** `density` high enough
+  prunes a real scale to the tonic, the fifth and the octave: one direction, no
+  plane. `Lattice::from_tuning` then fails with a reason, the render answers 422
+  `unplayable` naming the intervals and the knob that undoes it, and the voice
+  summary carries the same verdict so the page can say so before a player is
+  pointed anywhere. Where the threshold falls is a fact about the speaker, so
+  nothing clamps the slider.
 
-  **Where the threshold is, is a fact about the speaker**, not a constant — it is
-  wherever their second-deepest minimum falls. Nothing clamps the slider for
-  that reason: a limit that moves per person, silently, would be a worse lie
-  than the refusal.
+- **Not every stream is read.** `src/bin/streams.rs` correlates every stream a
+  mapping reads, over the sounding frames of every take. Tilt earns admission —
+  it moves where brightness does not — but no mapping reads it yet; what it
+  should *drive* is a question for the ear. Flatness tracks aperiodicity closely
+  enough to add nothing and stays unread. Harmonic-to-noise per band is not
+  measured: its distinct claim is that periodicity varies *across* bands (a
+  breathy voice is periodic low and noisy high), and that is testable with the
+  same tool before any of it is built.
 
-- **Comparing is now a page rather than an exercise in URLs.** `/compare` plays
-  two settings at once with one muted, so switching is instant and at the same
-  moment of the piece, and draws each stream's difference scaled to its own
-  largest gap. Built after four separate attempts to answer the `bind` question
-  by ear failed for want of an instrument.
-
-  **And a comparison is now a link** (2026-07-28). The page reads `take`, `a`
-  and `b` from its own URL and writes its state back as the settings move, where
-  before it could only be handed on as a description of which controls to press.
-  A comparison is this project's unit of evidence and there are two listeners in
-  two places: passing one on as instructions means they hear two slightly
-  different things and then disagree about a result neither of them heard. `a`
-  and `b` each carry a whole settings query encoded inside the outer one, so
-  there is no second format to keep in step with the knob table. A URL is input
-  from outside, so an unpublished knob is dropped and an out-of-range value is
-  clamped rather than left on a slider that cannot show it.
-- **The API's voice fixture was less of a voice than any voice** (2026-07-28,
-  fixed). Two formants and a textbook source slope gave a four-degree scale
-  whose two deepest intervals were the fourth and the fifth — the one pair that
-  spans no harmonic lattice — where a real take through the same code gives
-  eight. Every mapping that reads the *shape* of a scale was being tested
-  against something shaped like nothing. Now three formants and a shallower
-  source, tuned until the measured partials resemble a measured voice's.
-- **The field reads eight streams; the voice emits about ten.** What was unread
-  is the *shape* of the spectrum beyond its centroid — a tilt measurement proper,
-  and the harmonic-to-noise balance per band.
-
-  **Tilt is now measured** (2026-07-29, schema 8): the least-squares slope of
-  power in dB against log frequency, fitted between 300 Hz and 5 kHz, per frame.
-  The ceiling is the measurement rather than a detail — everything is analysed at
-  16 kHz and a band-limited resampler's anti-alias filter collapses approaching
-  8 kHz, so a fit taken to Nyquist would measure that cliff on every frame of
-  every recording and report it as a property of the speaker, steeply and
-  consistently enough to look like a result. `tilt_measures_the_voice_and_not_the_resampler`
-  fits white noise and fails if the answer is not flat.
-
-  On the store's takes the loud-frame medians run −5.5 to −15.4 dB/octave, which
-  is where voiced speech belongs, and they separate the way the physics says:
-  *ee* shallow at −5.5, *oo* dark at −13.7, and a high-pitched take shallower
-  than a low one by 8 dB/octave.
-
-- **Whether a stream is worth reading is now a measurement**, by
-  `src/bin/streams.rs`. The *one stream drives one parameter* decision was taken
-  after the field's `colour` was found being set from the same normalised F2 that
-  walked its root — found by reading the code, which is luck — and nothing had
-  checked it since. The tool correlates every stream a mapping reads, pooled over
-  the sounding frames of every take.
-
-  Silence is gated out, and that is not tidiness: every stream reports something
-  constant in digital silence — tilt fits a flat line through the bin floor and
-  returns exactly 0 — so the silent frames pile up at one point of the scatter
-  and two streams unrelated in the voice are reported as agreeing about nothing.
-
-  Over 31,491 sounding frames from 15 takes:
-
-  - **No welded pairs.** Nothing among the eight reaches \|r\| = 0.9. The
-    decision has held since it was taken.
-  - **Tilt earns admission at r = 0.41 against brightness** — the stream it most
-    resembles, and not a restatement of it. Its other neighbours are aperiodicity
-    at 0.55 and energy at −0.45, both physically expected: a pressed voice is
-    loud, periodic and shallow-tilted together.
-  - **Flatness does not, at r = 0.80 against aperiodicity.** The second unread
-    stream is nearly one already read. It stays measured and stays unread.
-  - The strongest existing pair is energy against aperiodicity at −0.73. Below
-    the threshold, and worth knowing: two of the eight carry less separate
-    information than the count suggests.
-
-  **Neither is wired into a mapping yet.** Measuring a stream and reading it are
-  separate steps, and what tilt should *drive* is a mapping question to be
-  settled by ear.
-
-  **Harmonic-to-noise per band is still not measured, now with a reason to be
-  careful.** Flatness came in at 0.80 against aperiodicity, and HNR measures the
-  same thing — periodicity. Its distinct claim is that it varies *across* bands:
-  a breathy voice is periodic low and noisy high, which one global aperiodicity
-  cannot express. That claim is testable with the tool above before any of it is
-  built, and it should be, rather than adding a ninth stream that turns out to be
-  the eighth.
 - **Nothing operates above the phrase.** The field moves at three timescales —
   level, articulation, prosodic drift — and the longest is two seconds. A piece
-  has a shape across its whole length and nothing here produces one. The Tonnetz
-  buys time at the chord's timescale and no more; it is a held harmony, not a
-  harmonic plan.
+  has a shape across its whole length and nothing here produces one.
 
   **Recurrence was the unblocked route to a harmonic plan, and the probe refused
-  it** (2026-08-26, `src/bin/form.rs`). Every route tried so far ends behind
-  syllables somebody marks by ear: meter needs stress, the symbol stream needs
-  phone classes, and the formant Viterbi needs frequencies marked. Resemblance
-  needs none of them. If the mouth returns to where it has been, a harmony could
-  return with it and hold at the timescale of the returning rather than of the
-  syllable — which is the same thing "making the tuning audible" asks for, from
-  a third direction.
+  it** (`src/bin/form.rs`). Every other route ends behind syllables somebody
+  marks by ear; resemblance needs none. Measured over the store — a
+  self-similarity matrix over the eight mapped streams, Foote novelty from 1 to
+  16 seconds, and the rate at which distant frames resemble each other — real
+  takes do not beat a phase-randomised surrogate of themselves at any scale.
 
-  Measured over the store: a self-similarity matrix over the eight streams a
-  mapping reads, Foote novelty at 1, 2, 4, 8 and 16 seconds, and the rate at
-  which frames five seconds apart or more resemble each other. **Real takes do
-  not beat a surrogate of themselves at any scale** — 3/15 at one second, 3/11 at
-  eight, 1/8 at sixteen — and return is a coin flip at 6/13. Including the
-  pauses, where phrase boundaries mostly live, moves none of it. The two takes
-  that do beat their surrogates at every scale are `steady-ah` and `what I need
-  vocal 3`, and the first of those is a sustained vowel whose only boundary is
-  the note starting.
+  The control is what makes that a result. A block shuffle manufactures a
+  boundary at every block edge, so its bias runs along the very axis measured;
+  a raw peak novelty is a contest the noisier curve wins. The surrogate that
+  survives keeps each stream's Fourier magnitudes and replaces the phases, one
+  phase sequence across all eight, so it has the take's smoothness, drift and
+  correlations and nothing of its arrangement.
 
-  **What makes that a result rather than an empty run is the control, and the
-  control was wrong twice first.** A block shuffle manufactures a discontinuity
-  at every block edge, so its strength varied with the very axis being measured
-  along — real material duly "won" at 16 s and "lost" at 1 s, and both were
-  properties of the control. A raw peak novelty is a competition the noisier
-  curve wins, which reported real takes as less structured than their surrogates
-  at one second, where nobody claims they are structured at all. That is twice in
-  one tool that an extreme over many draws stood in for a question it could not
-  answer, after the recurrence maximum saturated at 0.91 against 0.94 for the
-  same reason. The control that survives keeps each stream's Fourier magnitudes
-  and replaces the phases, one phase sequence across all eight streams, so it has
-  the take's smoothness, its variance, its slow drift and its correlations, and
-  nothing of its arrangement.
-
-  **The honest limit.** A phase surrogate keeps every periodicity the take has,
-  so a genuinely periodic form is structure the surrogate has too, misaligned.
-  This measures that the structure is not strong enough to build a mapping on
-  blind. It does not measure that there is none, and it says nothing about
-  material nobody has recorded yet — every take in the store is improvised or
-  spoken, and none of it was performed with a section in mind.
-- **The note mapping's rhythm is still wrong.** `compose.rs` reads onsets, which
-  mean *the spectrum changed* rather than *a syllable began*. It is kept because
-  comparing mappings is how any of them get judged, not because it is right.
+  **The limit:** a phase surrogate keeps every periodicity, so a genuinely
+  periodic form is structure it shares. This measures that the structure is not
+  strong enough to build a mapping on blind — not that there is none — and says
+  nothing about material performed with sections in mind, which the store does
+  not hold.
 
 ## Decisions taken
 
 Recorded so they are not reopened without reason. **This is not the full
-ledger** — most decisions are documented at the code they govern, where they are
-harder to forget about. Listed here are the ones with no obvious home in the
-source, plus the one that most shapes daily work.
+ledger** — most decisions are documented at the code they govern. Listed here
+are the ones with no obvious home in the source, plus the ones that most shape
+daily work.
 
 - **A stored voiceprint is a cache, not a record.** The audio is the source of
   truth and analysis is a pure function of it, so `SCHEMA_VERSION` identifies the
-  analyser and `Store::ensure_current` re-derives anything stale. Bump that
-  version for *any* change to the output, algorithm as much as shape: a shape
-  change fails loudly on deserialise, an algorithm change is silent. This is why
-  improving the analyser never invalidates a recording.
+  analyser and `Store::ensure_current` re-derives anything stale. Bump it for
+  *any* change to the output, algorithm as much as shape: a shape change fails
+  loudly on deserialise, an algorithm change is silent.
 
-- **Capture stays in the browser** (2026-07-27). Server-side capture — the Mac
-  recording from its own microphone with a phone as remote control — was
-  considered and rejected. It would have sidestepped the secure-context limit,
-  but it moves audio capture into the backend and doubles the number of capture
-  paths to maintain.
-- **Consequence: recording happens at the Mac.** Browsers only allow microphone
-  access in a secure context, so `localhost` works and a plain-HTTP LAN address
-  does not. A phone can browse takes and view voiceprints over the LAN; it cannot
-  record. Serving over HTTPS would lift that if it ever matters.
+- **Capture stays in the browser.** Server-side capture — the host recording
+  from its own microphone with a phone as remote — was rejected: it doubles the
+  capture paths to maintain. Browsers allow the microphone only in a secure
+  context, so recording works on `localhost` and on the deployed HTTPS site, not
+  on a plain-HTTP LAN address.
+
 - **No ML.** See `architecture.md`. The mapping layer needs the derivation, not
   an inferred number.
 
-- **Aesthetic parameters live in the mapping layer.** Any control over how
-  strongly the voice binds the result is a mapping parameter and never an
-  analysis one. This follows from the split rather than being a fresh choice, but
-  it has a practical edge worth stating: because a voiceprint is a cache keyed on
-  the analyser, a knob in analysis would invalidate every recording each time it
-  moved, while a knob in mapping can be swept against a fixed voiceprint and
-  heard immediately.
+- **Aesthetic parameters live in the mapping layer.** A knob in analysis would
+  invalidate every stored voiceprint each time it moved; a knob in mapping is
+  swept against a fixed voiceprint and heard immediately.
 
-- **A take says what it is for, and only some takes define the speaker**
-  (2026-07-29). `Role::Calibration` or `Role::Material`, declared at upload and
-  defaulting to material. `voice::calibrate` and `speaker::profile` read the
-  calibration takes alone — for the scale, the timbre palette, the pitch range
-  and the vowel space.
+- **A take says what it is for, and only calibration takes define the
+  speaker.** `Role::Calibration` or `Role::Material`, declared at upload or
+  later through `PUT /api/recordings/{id}/role`, defaulting to material. The
+  store holds other people's singing to render; pooled into the profile it would
+  describe an anatomy belonging to nobody. This is role, not ownership — there
+  is one user.
 
-  **The bug this fixes was already present.** The store holds other people's
-  singing, uploaded as material to render, and the profile pooled *everything*.
-  So the vowel space, the pitch range and the brightness every mapping
-  normalises against described an anatomy belonging to nobody, which is the
-  exact failure the "normalised against the speaker's own extremes" decision
-  below exists to prevent — it was being violated by a crowd rather than by a
-  constant.
-
-  **Not ownership: role.** There is one user. The distinction is between takes
-  that define the voice and takes that are merely something to hear, and it does
-  not become a per-person question until a second singer arrives.
-
-  - **Material is the default**, so a take that never said what it was for
-    cannot start shaping the sound world, and every take stored before this
-    existed reads back as material.
   - **One take per calibration step, most recent wins.** A step is re-recorded
-    because the earlier take was bad; averaging the two means a bad take that
-    never stops counting.
-  - **The role survives re-analysis.** `ensure_current` rebuilds metadata from
-    the audio and the role is not in the audio, so it is read from the old
-    record and carried across. Defaulting it there would demote every
-    calibration take on the next schema bump and dissolve the speaker silently.
+    because the earlier take was bad; averaging would keep it counting.
+  - **The role survives re-analysis.** It is not in the audio, so
+    `ensure_current` carries it across; defaulting it would dissolve the speaker
+    on the next schema bump.
   - **A store with no calibration take refuses to render** and says to record
-    the guided vowels. Deriving a voice from whatever is lying around is the
-    failure above, reported as success.
-  - **The step ids are one list, in Rust** (2026-07-30). A calibration take
-    carries its step's id verbatim as its label, and the backend reads that label
-    to know which vowel a take is — so the ids had to agree across two languages
-    and did so only by convention. `CalibrationStep` in `src/calibration.rs` is
-    exported to TypeScript by ts-rs and `steps.ts` types its ids against it; a
-    rename that would once have quietly stopped a take being a vowel is now a
-    build error. The label is parsed by deserialising rather than by a `match` on
-    literals, so the spellings exist once rather than twice.
+    the guided vowels.
+  - **A vowel's identity comes from the prompt, not the audio.** A take carries
+    its calibration step's id as its label, so the take recorded against *ee* is
+    this speaker's *ee* by construction and nobody marks anything by ear. The ids
+    are one enum in Rust (`CalibrationStep`), exported to TypeScript. `steady-ah`
+    does not place the open corner: it is recorded for its spectrum, and its
+    length would let a more casual *ah* win the corner by weight of evidence.
 
-  - **A mapping is an enum, not a name** (2026-07-31). `Mapping` and `Material`
-    live in `utterance-mapping/src/mapping.rs`, carry their own label and blurb
-    the way `Knob` does, and dispatch to their score through
-    `Mapping::score_with`. What they replace is a four-column table of `&str` in
-    the route and a chain of `names.contains(&"tonnetz")` — an arrangement whose
-    own doc comment conceded that adding a mapping meant adding a row *and* a
-    branch, and that *the compiler will not remind you about the second*. It
-    does now: the match is exhaustive, `Knob::mappings` is `&[Mapping]` so a
-    knob cannot claim a mapping nobody serves, and the render picks its
-    continuous layer by asking `makes()` rather than by naming field or lattice,
-    so a fourth texture mapping needs no change in the route at all.
+- **Taxonomies are enums, and the browser reads the same union.** `Mapping`,
+  `Material`, `KnobName`, `ErrorCode`, `CalibrationStep` and `Role` are Rust
+  enums exported by ts-rs, so a name the backend does not serve cannot be written
+  in the frontend and a rename is a build error on both sides. Dispatch goes
+  through `Mapping::score_with`, whose exhaustive match means a new mapping does
+  not compile until it has a score. Where a `&'static str` must restate a serde
+  spelling, a test round-trips it.
 
-    The browser reads the same union. `MappingSettings.mapping` was
-    `readonly string[]`, and the test covering it asserted that a link saying
-    `mapping=field,compose` kept `compose` — a name no mapping has ever had.
-    Nothing caught that, because both ends of the wire called a mapping a
-    string; `parseSettings` now drops what the backend did not publish, which is
-    what its comment had claimed all along.
+- **A knob is declared once.** `knobs!` in `utterance-mapping/src/params.rs`
+  generates the `Knob` table, the `Params` field, `Default`, `sane`, `with`,
+  `KnobName` and the `KnobQuery` the route deserialises. `params::Knob` is also
+  the wire type: the API forwards it unchanged, so a copy would only restate it.
 
-  - **A knob is declared once** (2026-07-31). `knobs!` in
-    `utterance-mapping/src/params.rs` generates the `Knob` const, the `Params`
-    field, `Default`, `sane`, `with`, `KnobName`, and the `KnobQuery` the route
-    deserialises. Each of those was written by hand, so `reach` appeared seven
-    times; three of the seven — the const, the `with` arm and the route's query
-    field — were not exhaustive struct literals and so were checked by no
-    compiler, only by a test. What that arrangement bought was a knob published
-    to the browser, drawn as a slider, and wired to nothing.
+- **A vowel space is normalised against the speaker's own extremes**, not
+  population norms. It makes the *utterance* the variable rather than the
+  anatomy, so a body of work by one person is one sound world with a different
+  piece in each take. The cost is a calibration per speaker.
 
-    `params::Knob` is now the wire type as well. `routes::api` held a second
-    `Knob`, field for field, differing only in `String` where the table has
-    `&'static str`, plus the loop that copied one into the other — justified at
-    the time by the rule that the mapping crate carries no serialisation for a
-    UI. That rule is right for a `Score`, which the API projects on the way out,
-    and wrong for a type the API forwards unchanged.
+- **Anything a mapping normalises against is measured per speaker.** Pitch
+  range, vowel space, F3 range and brightness all live in `SpeakerProfile`.
+  Against a constant, a measurement stops meaning *bright for them*; against the
+  take, the difference between two things one person said is normalised away —
+  which is why the field's pitch drift is relative to the profile's tonic, not
+  the take's median.
 
-    Two things fell out. `with` is total, so the last `panic!` in library code
-    is gone — `KnobName` cannot name a knob that does not exist. And the `f32`
-    the table speaks converts to the `usize` two fields hold through one
-    `KnobValue` impl, where it had been written three times and *differently*:
-    `with` rounded and `default`/`sane` truncated.
+- **Control is exercised by learning the mapping, not by playing it live.**
+  Real-time would force analysis to become causal and give up non-causal pitch
+  tracking and whole-take statistics, before anyone knows whether the mapping is
+  worth performing. Deterministic mapping plus fast iteration gets most of the
+  control: record, hear it, adjust, sing it again. Determinism is also the
+  strongest argument for no ML — a singer can only build a mental model of a
+  system that answers the same way twice.
 
-  - **Error codes are an enum, and the browser reads the list** (2026-07-31).
-    `ErrorCode` in `src/error.rs` is the whole set — the API's nine and
-    `webauth`'s five, which were separate lists of literals — and `ErrorBody`
-    carries it rather than a `String`. In the frontend `ApiFailure.code` and
-    `ApiError.code` are the generated union, so `err.code === "unplayable"` in
-    the compare page is checked against Rust instead of merely spelled
-    carefully. An unrecognised code on the wire is classified `unknown` rather
-    than asserted into the type: the bundle is served by the backend that
-    produces the codes, so the set is closed at deploy time and anything outside
-    it is a bug, not skew.
+  **Constraint kept while this holds:** mappings stay frame-local where they
+  can, so real-time remains reachable. The speaker profile is measured once per
+  person, not per take, so it is not a violation.
 
-  - **A stored take can be told what it is for** (2026-07-30), by
-    `PUT /api/recordings/{id}/role` and a button on its row in the take list.
+- **Freedom is a feature** (Pippijn, on hearing the Lattice against the field and
+  liking both). Keeping alternatives is worth something in itself: a mapping is
+  not on probation waiting to be beaten. The same instinct runs through the code
+  — nothing clamps `density` where the lattice refuses, anything arguable is a
+  parameter, a published range is a promise. The person listening goes where
+  they want, and the software says what happened rather than preventing it.
 
-    **This was missing and it broke the deployed app.** Role was settable only
-    at upload, and the note above — that every take stored before the
-    distinction existed reads back as material — was written as though it were a
-    safe backward-compatibility property. It is not: it means a store that
-    predated the field has *no* calibration take, so `/api/voice` answers 400
-    `no_calibration` and nothing on the studio page works. Every take on isis
-    was material, the guided vowels among them, with no way to say otherwise.
+  **What it rules out:** converging on one blessed mapping, removing a knob
+  because the default beats its ends, and narrowing a range to the part that
+  currently sounds good.
 
-    The remedy on offer was to record the vowels again — asking someone to redo
-    good work to satisfy a field they cannot see. And the same gap applies to
-    audio that arrives as a *file*: it never passes through the guided flow, so
-    before this it could never define the speaker at all.
+- **Mappings are alternatives, not a pipeline.** `notes` emits events and no
+  field; `field` and `tonnetz` emit a field and no notes; all carry the
+  consonants. A score carries one field and one list of events, so two mappings
+  making the same material are refused together rather than one silently
+  winning. What each makes is published, so the browser turns a rival off rather
+  than assembling a combination the route rejects.
 
-    Safe to expose because the role lives in the metadata and a voiceprint is a
-    pure function of the audio, so nothing here can reach a measurement.
-    `saying_what_a_take_is_for_does_not_touch_the_audio` asserts it.
+- **Anything arguable is a parameter, not a constant.** If a value could
+  reasonably be chosen differently it belongs in `params::Params` and is
+  reachable from the render URL. A new knob's default reproduces the behaviour
+  from before it existed, so renders stay comparable.
 
-    *Found by Pippijn pressing the button, not by any check here. Worth
-    recording: the same 400 had appeared in front of me the day before, when
-    `dwell` refused to run on the local store, and I hand-marked takes as
-    calibration to get my measurements going. I worked around the defect and
-    never recognised it as one.*
+- **A knob says which mappings it reaches, and whether it is primary.** A slider
+  shown while a mapping that ignores it plays moves and changes nothing, so the
+  knob declares its mappings and `tests/api.rs` renders each against every
+  mapping it claims, failing if the audio is unchanged. `Knob::primary` splits
+  the controls that decide what kind of piece this is from those that adjust a
+  piece you have: an instrument panel of equal-weight sliders is a set of things
+  to get wrong, and a panel nobody dares touch costs evidence. Primary is not a
+  ranking by audible authority — `bind` is primary because it is the axis the
+  project argues about, `spacing` for how much it changes. `reach` was moved
+  out by ear: a claim about what matters, made by the person listening, beats a
+  claim about what *ought* to matter.
 
-- **Recording is no longer tied to the Mac** (2026-07-29). `recorder.ts` gates on
-  `navigator.mediaDevices`, which browsers define only in a secure context; that
-  is what made `localhost` the one place a take could be made. Serving over TLS
-  lifted it, so the second speaker can record from his own machine. Noted here
-  because the decision below still reads as though he cannot, and because it is
-  what makes the shared-voice consequence above reachable rather than
-  theoretical. Read from the code and the certificate; not yet exercised from
-  his browser.
+- **A published range is a promise about every position on it.** Every value a
+  slider can reach either makes a sound or refuses and says which setting to
+  move — never a valid 200 carrying nothing. Checked over whole ranges by
+  `every_setting_a_slider_can_reach_either_sounds_or_says_why_not`. Clamping the
+  range instead was rejected: where the lattice gives out moves per speaker, and
+  a slider that silently stopped somewhere different for everyone would be a
+  worse lie than the refusal.
 
-- **A vowel space is normalised against the speaker's own extremes**
-  (2026-07-27), not against population norms. It makes the *utterance* the
-  variable rather than the anatomy, which is what lets a body of work by one
-  person be one sound world with a different piece in each take. The cost is a
-  calibration recording per speaker, which is cheap and which
-  `utterance-analysis/src/speaker.rs` now consumes.
+- **The mapping publishes its own controls.** `GET /api/controls` serves the
+  knob table and the mappings, and the UI builds its sliders from that, so a knob
+  added in Rust appears with no frontend change and a range cannot drift.
 
-- **Control is exercised by learning the mapping, not by playing it live**
-  (2026-07-27). Real-time would force the analysis to become causal and
-  low-latency, giving up non-causal pitch tracking and whole-take statistics —
-  a real loss of measurement quality, paid before anyone knows whether the
-  mapping is worth performing. Deterministic mapping plus fast iteration gets
-  most of the control for none of that: record, hear it, adjust, sing it again.
+- **A comparison is a link.** `/compare` plays two settings at once with one
+  muted, so switching is instant and at the same moment of the piece, and draws
+  each stream's difference scaled to its own largest gap. The page reads `take`,
+  `a` and `b` from its URL and writes its state back, each side a whole settings
+  query encoded inside the outer one. A comparison is this project's unit of
+  evidence and there are two listeners in two places: passed on as instructions,
+  they hear two slightly different things and disagree about a result neither
+  heard. A URL is input from outside, so an unpublished knob is dropped and an
+  out-of-range value clamped.
 
-  Determinism is what makes this work, and it is the strongest argument for the
-  no-ML decision that was not apparent when that decision was taken — a singer
-  can only build a mental model of a system that answers the same way twice.
+- **One stream drives one parameter.** What a listener hears as variety is how
+  many things can move *independently*; a mapping that quietly reads one stream
+  into two parameters sounds simpler than the voice it came from.
+  `src/bin/streams.rs` checks it.
 
-  **Constraint kept while this holds:** mapping should avoid depending on
-  statistics of the whole take where it can, staying frame-local, so real-time
-  remains reachable later. The speaker profile is not a violation: it is measured
-  once per person and then fixed, not recomputed per take.
+- **A lattice is judged by its worst interval.** The roughness curve measures
+  each degree against the tonic only, so the third interval of a triangle — the
+  difference of the two axes — was never measured. A pair is admitted only if
+  that difference is also a consonance, and the chosen pair is the one whose
+  *shallowest* minimum is deepest. On the voice measured so far this yields a
+  fifth and a minor third, whose difference is the just major third: the
+  classical Tonnetz, derived rather than assumed. Where no pair qualifies it
+  falls back to the deepest independent pair.
 
-- **Freedom is a feature** (Pippijn, 2026-07-29). Said on hearing the Lattice
-  against the field mapping and liking both: they stay, and not merely because
-  neither won the comparison. Keeping alternatives is worth something in itself,
-  so a mapping is not on probation waiting to be beaten, and the weaker ones are
-  not kept only as instruments for judging the stronger.
+- **`bind` binds the note, not the lattice.** A lattice point's pitch is
+  `x·a + y·b`, so binding the axes would move far-out chords by more than a
+  quarter tone and eventually into different notes — two settings of a
+  comparison would be two different pieces. The lattice is laid out on the
+  speaker's own scale unconditionally and `bind` is applied to each sounding
+  pitch.
 
-  This names a principle already running through the code rather than adding
-  one. Nothing clamps the `density` slider even where the lattice refuses past
-  it, because the limit moves per speaker and a silent stop would be a worse lie
-  than a refusal. Anything arguable is a parameter rather than a constant. A
-  published range is a promise about every position on it. All three are the same
-  instinct: the person listening gets to go where they want, and the software's
-  job is to say what happened rather than to prevent it.
-
-  **What it rules out**, so it is a decision and not a sentiment: converging on
-  one blessed mapping, removing a knob because the default is better than its
-  ends, and narrowing a range to the part that currently sounds good.
-
-- **Mappings are alternatives, not a pipeline** (2026-07-28). `compose` emits
-  notes and no field; `field` and `tonnetz` each emit a field and no notes; all
-  of them carry the consonants, because a consonant is a thing that happens at a
-  moment whichever way the pitched material is made. The reason to keep the
-  weaker ones is that comparison is the only way any of them gets judged.
-
-  **A score carries one field and one list of events**, so two mappings making
-  the same material are refused together rather than one of them silently
-  winning — whichever lost would be a mapping someone asked for and did not
-  hear. Which mappings compete is a column of the table in `routes/api.rs` and
-  is published to the UI, so the browser turns one off rather than letting
-  someone assemble a combination the route rejects.
-
-- **A knob says which mappings it reaches** (2026-07-28). `hold` belongs to the
-  Tonnetz and `voices` to neither of the note mappings, and a slider shown while
-  a mapping that ignores it is playing is the same failure the knob table exists
-  to prevent — it moves, and nothing changes, and the person concludes the thing
-  is broken. Declared on the knob, published, and checked: `tests/api.rs` renders
-  every knob against every mapping it claims and fails if the audio is unchanged.
-
-- **Anything arguable is a parameter, not a constant** (2026-07-28). If a value
-  could reasonably be chosen differently it belongs in `params::Params` and is
-  reachable from the render URL. A constant can only be changed by editing,
-  rebuilding and re-rendering, which is the wrong loop for decisions that are
-  settled by ear. Defaults reproduce the unparameterised behaviour, so old
-  renders stay comparable with new ones.
-
-- **A published range is a promise about every position on it** (2026-07-28).
-  A knob declares `min`, `max` and `step`, and a slider will be dragged to both
-  stops — so every value it can produce has to either make a sound or refuse and
-  say which setting to move. There is deliberately no third answer, because the
-  third answer is what `density` did to the lattice: a valid 200 carrying no
-  field, heard as nothing and reported as success.
-
-  Checked over the whole range rather than at one sample, by
-  `every_setting_a_slider_can_reach_either_sounds_or_says_why_not` in
-  `tests/api.rs`. The ends are the interesting part: they are what the range
-  promises and the part nobody drags to by hand. The neighbouring test sweeps one
-  value per knob and asks a different question — whether the knob does anything
-  at all.
-
-  **The alternative, clamping the range, was rejected.** Where the lattice gives
-  out depends on where a speaker's second-deepest minimum falls, so the limit
-  moves per person; a slider that silently stopped somewhere different for
-  everyone would be a worse lie than the refusal.
-
-- **The bundle budget describes this app, not a public one** (2026-07-28). The
-  initial-bundle warning was raised from 500 kB to 800 kB when the knobs brought
-  Material's slider, select and form-field in — about 230 kB uncompressed. The
-  500 was the figure `ng new` writes for a site served to strangers over a
-  mobile connection; this one is served from a Mac on a LAN to two people, so
-  the old number measured nothing anyone cares about while making a real warning
-  easy to miss. The error ceiling is untouched.
-
-- **One stream drives one parameter** (2026-07-28). Found by counting rather
-  than by listening: the field's doc claimed six streams while `colour` was set
-  from the same normalised F2 that walks the root, so the timbre could only
-  change when the harmony did. Two streams welded into one. What a listener
-  hears as variety is how many things can move *independently*, so the count is
-  only honest if each stream reaches something of its own — and a mapping that
-  quietly doubles up will always sound simpler than the voice it came from. The
-  field now reads eight: f0, frontness, openness, F3, flux, energy, centroid,
-  aperiodicity.
-
-- **Anything a mapping normalises against is measured per speaker**
-  (2026-07-28). Brightness and F3 join the vowel space and the pitch range in
-  `SpeakerProfile`. The alternative — a fixed range, or the take's own — fails
-  the same way each time: against a constant it stops meaning *bright for them*,
-  and against the take it normalises away the difference between two things the
-  same person said. This is the third time that reasoning has decided a design
-  question, which is why it is written here as a rule rather than a third time
-  as a case.
-
-- **A lattice is judged by its worst interval, not its best** (2026-07-29).
-  `generators` picked the two deepest independent minima and stopped. A triangle
-  has *three* intervals, and the third is `a - b` — which the scale never
-  measured, because the roughness curve is swept as one spectrum against a
-  shifted copy of itself and so says only how each degree sounds **against the
-  tonic**. Nothing in it says how two degrees sound against each other.
-
-  On the real voice that put the axes at 884 and 702 and so placed **182 cents
-  inside every chord the mapping could play**: not a degree, not near one, and
-  close to where the roughness curve peaks. Every listening session on this
-  mapping had been conducted underneath a whole-tone clash, which is why a
-  sixteen-cent tuning question kept coming back as "very little difference".
-
-  Now a pair is admitted only if its difference is also a consonance, and among
-  those the chosen pair is the one whose *shallowest* minimum is deepest — a
-  chord being as rough as the roughest thing in it. Measured: chord beating
-  halved (`src/bin/beating.rs`, 0.0671 → 0.0363), and `bind` on this mapping
-  moved from 0.61× — backwards — to 1.03×, the predicted direction for the first
-  time.
-
-  **This overturns a recorded result.** The note that "this speaker's lattice is
-  not the classical one — a major sixth and a fifth rather than a fifth and a
-  third" was an artefact of the old rule. Requiring the whole triangle to be
-  consonant gives axes of **702 and 316**, an up-triangle of `{0, 316, 702}` —
-  a just minor triad whose third interval is the just major third. The classical
-  Tonnetz, derived from one speaker's spectrum rather than assumed, which is a
-  considerably stronger result than an exotic lattice.
-
-  **Falls back to the deepest independent pair** where no pair has a consonant
-  difference. A lattice with a rough interval in every chord is worse than one
-  without and better than the mapping silently vanishing for that speaker.
-
-- **`bind` binds the note, not the lattice** (2026-07-29). Retuning used to move
-  the lattice's axes, and a point's pitch is `x·a + y·b` — so an error in an
-  axis multiplies by how far out the point sits, moving a chord near the tonic
-  by a few cents and one three cells away by fifty or more, and past that,
-  folding into a different note entirely. `bind` was a structural knob wearing a
-  tuning knob's name, and the two settings of a comparison were two different
-  pieces. The lattice is now laid out on the speaker's own scale unconditionally
-  and `bind` is applied to each sounding pitch, so every note moves at most a
-  quarter tone and the chord it belongs to is untouched.
-
-  Consequence worth having: the `density` refusal is now a fact about the
-  speaker's own scale rather than about where `bind` happens to sit, so the
-  route refuses in fewer places and always for the reason it names.
-
-- **A knob says whether it is offered before anyone asks** (2026-07-29).
-  `Knob::primary` splits the table into the controls that decide what kind of
-  piece this is — `bind`, `density`, `voices`, `spacing`, `hold` — and the ones
-  that adjust a piece you already have. The UI shows the first group and folds
-  the rest behind a disclosure that says how many of them have been moved.
-
-  The failure being avoided is not clutter. Ten sliders at equal weight is an
-  instrument panel for someone who already knows what each one does; to anyone
-  else it reads as ten things they might be getting wrong, and the effect is
-  that they touch none of them. Since exploring is how the questions on this
-  page get answered, a panel nobody dares touch costs evidence.
-
-  **Not a ranking by audible authority, and not the reverse either.** `bind`
-  moves the field 18 cents where `voicing` moves it 632, and `bind` is offered
-  first because it is the axis this project argues about — sorting on authority
-  alone would bury the question. But `spacing` is primary on its 1200 cents and
-  nothing else, having no thesis behind it whatever. Both arguments are
-  admissible and a knob needs only one of them.
-
-  **`reach` was primary on the thesis argument and was moved out by ear**
-  (Pippijn, 2026-07-29): "follow the vowel" is the articulation showing up as
-  harmony and so is close to the project's whole idea, but `spacing` is the one
-  a listener reaches for. A claim about what matters, made by the person
-  listening, beats a claim about what *ought* to matter.
-
-  Declared on the knob for the same reason its range is. A list of important
-  names kept in the frontend is a second opinion about the knob table, and it
-  drifts the first time somebody adds a knob in Rust — where the symptom is a
-  new control nobody can find. Two test fixtures failed to compile when this
-  field was added, which is the property working.
-
-- **The mapping publishes its own controls** (2026-07-28). `GET /api/controls`
-  serves `utterance_mapping::params::KNOBS` — each knob's range, step, starting
-  value and one line saying what it does — and the UI builds its sliders from
-  that rather than from a list of its own. A knob added to the table appears in
-  the browser with no frontend change, and a range that moves cannot leave a
-  slider offering values the mapping clamps away. The failure this prevents is
-  specific and hard to spot: a control that appears to work, moves, and changes
-  nothing. `tests/api.rs` closes the loop by driving every published knob
-  through a real render and failing if the audio is unchanged.
-
-- **Prosody is measured against the speaker, not the take** (2026-07-28). The
-  field's pitch drift is relative to the profile's tonic rather than to the
-  utterance's own median. Against the take's median, an utterance spoken entirely
-  higher produces identical music — the thing that makes one reading different
-  from another is normalised away. Caught by a test, not by reasoning.
+- **The bundle budget describes this app, not a public one.** The
+  initial-bundle warning is 800 kB rather than `ng new`'s 500: this is served to
+  two people, not to strangers on a mobile connection. The error ceiling is
+  untouched.
 
 ## Open questions
 
-- **Where on the convention-to-speaker axis is the music?** Swept, listened to,
-  and **not answerable as posed** (2026-07-28). Against every take in the store,
-  `bind=0` and `bind=1` are almost indistinguishable by ear.
+- **Is the derived tuning audible?** `bind` interpolates each degree between the
+  speaker's scale (1) and equal temperament (0). On the field mapping the two are
+  almost indistinguishable by ear. `src/bin/beating.rs` shows why: at 1 the
+  strongest partial coincidences in a chord beat at a fraction of a hertz, at 0 at
+  5–14 Hz — a real physical difference that needs roughly a second of stable
+  chord to hear, and the field never holds still that long.
 
-  Why, measured rather than guessed. The whole effect of `bind` is whether
-  partials of different voices land on each other or near each other: at 1 the
-  five strongest coincidences in the chord beat at 0.01–0.26 Hz — locked — and
-  at 0 the same ones beat at 4.8–14.3 Hz. Total chord roughness differs by 4%.
-  That is a real physical difference and it is inaudible here, because a beat
-  of a few hertz needs roughly a second of stable chord before anyone hears it
-  and the field never holds still that long: across a take the voices travel
-  3–4 semitones on the steadiest sustained vowel and 12–25 on speech.
+  The Tonnetz holds chords, and `dwell` shows sustained and sung takes ringing
+  long enough while speech does not. So the question is narrower: **is it audible
+  on sung material?** The honest listening test is a pair — one sung take where
+  the numbers say yes, one spoken take where they say no. Hearing a difference on
+  both would mean the difference is not the tuning. On the Tonnetz a `bind`
+  change can occasionally send a voice across an octave boundary, which is more
+  noticeable than the tuning; compare in the middle of a held chord and discount
+  the leaps.
 
-  **So the project's central claim is currently unhearable rather than wrong.**
-  The scale is derived, measured, and reproducible; the mapping moves too fast
-  to expose it. Answering this question needs a mapping whose harmonic rhythm is
-  slow enough for a chord to ring — which is the same thing the "nothing
-  operates above the phrase" gap asks for, from the other end.
-
-  **Acted on, 2026-07-28.** The trade looked like sustain *or* continuous
-  tracking, and it is not one: what has to hold still is the harmony, not the
-  music. The Tonnetz mapping quantises where the vowel sits on a harmonic
-  lattice and leaves every other stream — loudness, colour, breath, drift —
-  moving at its own rate, so a held vowel gives a held chord without a frame
-  going unread.
-
-  **Now measurable, and asked as a narrower question.** `src/bin/dwell.rs`
-  reports how long each chord actually rings (see the gap above): on sustained
-  and sung takes the Tonnetz spends 56–98% of its time in chords past the
-  perceptual threshold, and on speech 2%. So the question is no longer "is the
-  derived tuning audible" but "**is it audible on sung material**" — and the
-  honest form of the listening test is a pair: one sung take where the numbers
-  say yes and one spoken take where they say no. Hearing a difference on both
-  would mean the difference is not the tuning.
-
-- **Which knobs actually change what anyone hears?** Re-measured 2026-07-29 by
-  `src/bin/authority.rs`, on `vowel-ah`, across both continuous mappings and on
-  five axes rather than one.
-
-  **Read the maximum and the median together, or the table lies twice.** Both
-  columns below are worst-case *and* typical, because a knob that mostly nudges
-  and occasionally re-registers a voice by an octave is doing two different
-  things and only one of them is what it is for.
-
-  | knob | field (max / typical) | tonnetz (max / typical) |
-  | --- | --- | --- |
-  | bind | 18¢ / 2¢ | 1168¢ / **16¢** |
-  | density | 1698¢ / 1200¢ | *refused at its maximum* |
-  | spacing | 1818¢ / 1516¢ | 3600¢ / 1200¢ |
-  | reach | 1800¢ / 736¢ | 932¢ / 134¢, **−4.70s ring** |
-  | hold | — | 1088¢ / 0¢, **+4.01s ring** |
-  | drift | 1111¢ / 1067¢ | 1111¢ / 1067¢ |
-  | voicing | 814¢ / 302¢ | 0¢, 8% balance |
-  | voices | 0¢, 100% roughness | 316¢, 100% roughness |
-  | consonants | 100% noise | 100% noise |
-
-  **`bind` is louder on the Tonnetz than on the field, but not by the factor the
-  maximum suggests.** Its typical retuning is 16 cents against the field's 2 —
-  eight times as much, and consistent with the lattice's axes being derived from
-  the scale, so that retuning changes the geometry rather than sliding degrees
-  along a fixed one. The 1168 is rare: register in the Tonnetz comes from the
-  pitch class alone, each voice taking whichever octave falls nearest its
-  target, so a 16-cent shift can push a pitch class across that boundary and
-  send one voice an octave away.
-
-  **That rarity is a confound for the listening test rather than a result.** A
-  switch between `bind=0` and `bind=1` can differ at some moments by an octave
-  leap rather than by tuning, and an octave leap is the more noticeable of the
-  two. Sixteen cents is inaudible as pitch and audible only as beating between
-  partials that used to coincide, so the comparison has to be made in the middle
-  of a held chord and the leaps discounted.
-
-  *An earlier version of this entry led with "1168 cents" and called it the
-  headline. That was a maximum reported as though it were typical — the same
-  error as the held-chord fraction, made while documenting that error.*
-
-  `hold` and `reach` are the two knobs that decide how long a chord rings, and
-  they pull in opposite directions — more vowel reach means more cells crossed
-  and so more chord changes. `density` refuses at its maximum on the Tonnetz for
-  the reason recorded above, and the tool reports the refusal rather than
-  averaging it into a zero.
-
-  **Five axes, deliberately not summed.** Pitch, chord roughness, loudness
-  balance across the voices, timbre colour, and ring duration — plus the noise
-  level, which is not in the field at all. A weighted sum would need weights,
-  and the weights are a claim about what matters, which is exactly the thing the
-  listening is meant to settle.
-
-  **The tool found two of its own measurements to be lies before it found
-  anything about the knobs**, both the same error as the held-chord fraction:
-  `density` read zero everywhere because it acts on the *calibration* rather
-  than the composition, so a sweep holding one derived voice fixed reported the
-  loudest knob in the table as doing nothing; and `consonants` read zero because
-  the consonants are separate events on the score rather than part of the field.
-  It does nothing *to the field*, which is not the same sentence. That is three
-  occasions now where one number quietly stood in for a question it could not
-  answer, which is an argument for reporting several and refusing to rank them.
+- **Which knobs change what anyone hears?** `src/bin/authority.rs` measures each
+  knob on each continuous mapping along several axes — pitch (maximum *and*
+  typical, since a knob that mostly nudges and occasionally re-registers a voice
+  does two things), chord roughness, loudness balance, colour, ring duration and
+  consonant level — and deliberately does not sum them: weights would be a claim
+  about what matters, which is what the listening is meant to settle. Every axis
+  is there because its absence produced a false zero.
 
 - **Should a listener be able to perceive the connection back to the voice?**
-  Not yet answered. It is the largest single constraint on the mapping layer: a
-  perceptible link forces mappings to stay legible, while a private seed frees
-  them to be arbitrarily abstract. Current lean is perceptible, on the grounds
-  that it is what makes the project legible to anyone but its authors — but this
-  should be decided deliberately before mapping work starts, not defaulted into.
-
-  Note that this is *not* the same axis as the one below, and the two may run
-  opposite. Binding hard to the speaker yields the most derived music and the
-  least speech-like, because a real voice's ratios are unfamiliar; binding
-  loosely — a pitch contour quantised to an ordinary scale — is obviously
-  melodised speech while barely transforming anything.
+  The largest single constraint on the mapping layer: a perceptible link keeps
+  mappings legible, a private seed frees them to be arbitrarily abstract. The
+  lean is perceptible, because it is what makes the project legible to anyone but
+  its authors. This is *not* the same axis as the next, and the two may run
+  opposite: binding hard to the speaker yields the most derived and least
+  speech-like music, while a pitch contour quantised to an ordinary scale is
+  obviously melodised speech that transforms almost nothing.
 
 - **How far should the voice be allowed to bind?** The axis is convention ↔
-  speaker: 12-TET, regular meter and ordinary voice leading at one end, the
-  speaker's measured ratios alone at the other. Moving along it is the same
-  operation in each dimension — snap toward a cultural grid by some amount:
-  interpolate in cents between the derived scale degree and the nearest tempered
-  one, between a measured tempo ratio and the nearest small-integer one, between
-  the vowels' Tonnetz path and the nearest diatonic waypoint. One scalar per
-  dimension, not one global scalar; binding tuning hard while leaving rhythm
-  conventional is a different and probably more listenable result than moving
-  both together.
+  speaker in every dimension: interpolate between the derived and the tempered
+  degree, between a measured tempo ratio and a small-integer one, between the
+  vowels' lattice path and the nearest diatonic waypoint. One scalar per
+  dimension, not one global scalar — binding tuning hard while leaving rhythm
+  conventional is a different, probably more listenable, result. `bind` is that
+  control for tuning; the others wait on meter.
 
-  Unresolved is where on that axis the music actually is, which is an argument
-  for building the control early and as an instrument for answering the question
-  by ear, rather than shipping it as a slider and letting it stand in for a
-  decision.
-- **How should a speaker's vowel space be normalised?** Against their own
-  measured extremes, or against population norms? Affects whether two people
-  produce comparable music or merely internally consistent music.
+- **Which vowel does a speaker's tuning come from?** A harmonic series belongs to
+  a tract shape, so "the speaker's scale" is undefined until the vowel is pinned
+  down. Candidates: a single nominated calibration vowel, the union of several,
+  or a scale that changes with the vowel being sung — the most interesting and
+  the most likely to be unusable. `tuning::MIN_DEPTH` (the `density` knob) decides
+  when a dip counts as a note, and part of the spread between vowels is that
+  threshold rather than the voice.
 
-- **Which vowel does a speaker's tuning come from?** Measured, not speculative:
-  one person's *ah* gave an eight-note nearly-just scale and their *ee* gave the
-  fifth and nothing else. A harmonic series belongs to a tract shape, so "the
-  speaker's scale" is undefined until the vowel is pinned down. Candidates are a
-  single nominated calibration vowel, the union of several, or a scale that
-  changes with the vowel being sung — the last being the most interesting and the
-  most likely to be unusable.
-
-  Bound up with this: `tuning::MIN_DEPTH` decides when a dip in the roughness
-  curve counts as a note, and part of that 8-versus-3 spread is the threshold
-  rather than the voice. It should be settled by listening, not by argument.
-
-  Until it is settled, `src/voice.rs` picks the take yielding the richest scale
-  and `?calibration=<id>` overrides that. The first criterion tried — most steady
-  frames — picked an eleven-second *ee* measured over a thousand frames whose
-  scale is the fifth and nothing else, in preference to a five-second *ah*
-  yielding eight degrees. Measurement quality and musical usefulness turned out
-  to point in opposite directions, which is itself an argument that this question
-  has to be answered deliberately.
+  Until it is settled, `src/voice.rs` picks the calibration take yielding the
+  richest scale and `?calibration=<id>` overrides it. The obvious criterion —
+  most steady frames — picks a long *ee* whose scale is the fifth alone over a
+  shorter *ah* with eight degrees: measurement quality and musical usefulness
+  point in opposite directions, which is itself an argument that this has to be
+  answered deliberately.

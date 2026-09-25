@@ -131,9 +131,8 @@ export class CompareChart implements AfterViewInit, OnDestroy {
       const scale = bounds([...tracesA, ...tracesB], panel.key);
 
       // Each side keeps its own colour whichever is playing — only the draw
-      // order changes. Carrying the two as a pair rather than as parallel
-      // `order`/`colours` tuples is what makes that readable: it was the same
-      // fact, spelled twice, and indexable apart.
+      // order changes. Carried as a pair rather than as parallel `order` and
+      // `colours` tuples, which would be the same fact spelled twice.
       const sideA = [tracesA, theme.accent] as const;
       const sideB = [tracesB, theme.warm] as const;
       // The silent side first and faded, so the side being heard is on top and

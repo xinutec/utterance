@@ -10,8 +10,8 @@ keeps the session cookie, so it is a **one-time login**.
 
 ## The microphone
 
-This is the only wrapper in the fleet that needs one, and it is the only thing here
-that is not a copy of a sibling. Voice is what the app takes as input, so
+It is the one thing here that is not shared with the other wrappers. Voice is
+what the app takes as input, so
 `navigator.mediaDevices.getUserMedia` has to work inside the WebView — and a
 WebView **denies it by default, silently**: the promise never settles, so the page
 cannot tell a refusal from a slow microphone and shows neither audio nor an error.
@@ -33,8 +33,7 @@ the microphone is actually handed out.
 
 This lives in the app rather than in `org.xinutec:shell` because the shell's
 contract puts permission prompts with the app. If a second voice app appears,
-extract it then — the way the shell itself was extracted from eight copies rather
-than designed up front.
+extract it then, from two real copies rather than designed up front.
 
 ## What else it does
 

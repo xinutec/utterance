@@ -141,12 +141,9 @@ describe("parseSettings", () => {
   });
 
   it("drops a mapping the backend does not serve, and keeps the rest", () => {
-    // This test used to assert the opposite, with `compose` — a name no mapping
-    // has ever had — passed straight through as though it were one. Nothing
-    // caught it, because both sides of the wire called a mapping a string. The
-    // render route answers such a link with a 400, so what a listener got for
-    // one bad character was no comparison at all rather than the half they
-    // could have heard.
+    // The render route answers an unknown name with a 400, so passing one
+    // through would leave a listener with no comparison at all for one bad
+    // character, rather than the half they could have heard.
     expect(parseSettings("mapping=field,compose", KNOBS, MAPPINGS).mapping).toEqual(["field"]);
     expect(parseSettings("mapping=compose", KNOBS, MAPPINGS).mapping).toEqual(
       INITIAL_SETTINGS.mapping,

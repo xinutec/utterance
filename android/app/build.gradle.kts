@@ -13,7 +13,7 @@ android {
     defaultConfig {
         applicationId = "org.xinutec.utterance"
         // minSdk 26 (Android 8): the system WebView is Chromium on any such device,
-        // so the Angular dashboard renders as it does in Chrome.
+        // so the Angular app renders as it does in Chrome.
         minSdk = 26
         targetSdk = 36
         versionCode = 1

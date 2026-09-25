@@ -20,10 +20,8 @@ import { classifyApiError } from "./recordings-api";
 /**
  * The backend's stable codes for the two ways in can be refused.
  *
- * Typed as [`ErrorCode`], so these are checked against the generated union
- * rather than merely spelled carefully. Named constants were already the right
- * instinct here — the compare page still had the same idea written as a bare
- * literal — and now the instinct is enforced.
+ * Typed as `ErrorCode`, so these are checked against the generated union
+ * rather than merely spelled carefully.
  */
 const NOT_AUTHENTICATED: ErrorCode = "not_authenticated";
 const NOT_PERMITTED: ErrorCode = "not_permitted";

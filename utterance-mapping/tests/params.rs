@@ -1,8 +1,7 @@
 //! The knobs, checked for doing what they claim.
 //!
-//! Every one of these was a constant until someone needed to hear it moved, so
-//! what matters is that turning each changes the thing it names and nothing
-//! else. A knob that silently does nothing is worse than no knob.
+//! What matters is that turning each knob changes the thing it names and
+//! nothing else. A knob that silently does nothing is worse than no knob.
 
 use utterance_mapping::dissonance::Component;
 use utterance_mapping::params::{KnobName, Params, bind_toward_equal};
@@ -147,7 +146,7 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
 mod table {
     use utterance_mapping::params::{
         ARTICULATION, BIND, CONSONANTS, DENSITY, DRIFT, HOLD, KNOBS, KnobName, KnobQuery, Params,
-        REACH, SPACING, VOICES, VOICING,
+        REACH, SETTLE, SPACING, VOICES, VOICING,
     };
 
     #[test]
@@ -210,6 +209,7 @@ mod table {
         assert_eq!(d.with(DRIFT.name, 1.5), Params { drift: 1.5, ..d });
         assert_eq!(d.with(REACH.name, 2.5), Params { reach: 2.5, ..d });
         assert_eq!(d.with(HOLD.name, 0.9), Params { hold: 0.9, ..d });
+        assert_eq!(d.with(SETTLE.name, 0.2), Params { settle: 0.2, ..d });
         assert_eq!(d.with(VOICING.name, 0.1), Params { voicing: 0.1, ..d });
         assert_eq!(
             d.with(ARTICULATION.name, 1.2),
@@ -229,11 +229,9 @@ mod table {
 
     #[test]
     fn every_published_knob_is_reachable_by_name() {
-        // `with` used to panic on a name it did not know, and this is what
-        // caught a knob added to the table and nowhere else. It cannot happen
-        // now — the arms are generated from the same list as the table — so what
-        // is left to check is that each knob's field actually *moves*. Swept to
-        // the end furthest from the default, because `bind` starts life *at* its
+        // The arms are generated from the same list as the table, so what is
+        // left to check is that each knob's field actually *moves*. Swept to the
+        // end furthest from the default, because `bind` starts life *at* its
         // maximum and "move it to max" would be no move at all.
         for knob in KNOBS {
             let far = if (knob.max - knob.default) >= (knob.default - knob.min) {
@@ -284,10 +282,9 @@ mod table {
 
     /// A query naming no knob leaves every one of them at its default.
     ///
-    /// The generated `KnobQuery` is what the route deserialises, and it replaced
-    /// eleven hand-written `Option` fields plus eleven `unwrap_or` lines. Taking
-    /// none of them must still change nothing, which is the promise the module
-    /// header makes about the defaults.
+    /// The generated `KnobQuery` is what the route deserialises. Taking none of
+    /// its knobs must change nothing, which is the promise the module header
+    /// makes about the defaults.
     #[test]
     fn an_empty_query_is_the_defaults() {
         assert_eq!(KnobQuery::default().params(), Params::default());
@@ -301,9 +298,6 @@ fn a_count_knob_rounds_to_the_nearest_rather_than_down() {
     // hair under an integer silently means the integer below: the difference
     // between a five-voice chord and a four-voice one, from a control the user
     // has visibly put on 5.
-    //
-    // `KnobValue for usize` says exactly this in a doc comment, and dropping the
-    // `.round()` passed the whole suite on 2026-08-07.
     assert_eq!(Params::default().with(KnobName::VOICES, 4.7).voices, 5);
     assert_eq!(Params::default().with(KnobName::VOICES, 4.4).voices, 4);
     assert_eq!(Params::default().with(KnobName::VOICES, 5.0).voices, 5);

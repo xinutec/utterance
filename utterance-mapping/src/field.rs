@@ -6,9 +6,8 @@
 //!
 //! **What each stream of the voice becomes:**
 //!
-//! - **f0** — the whole field transposes with it, heavily smoothed. His prosody
-//!   becomes the piece's slow harmonic drift. This is the largest measurement in
-//!   the voiceprint and until now nothing read it at all.
+//! - **f0** — the whole field transposes with it, heavily smoothed. The
+//!   speaker's prosody becomes the piece's slow harmonic drift.
 //! - **vowel frontness** — walks a root up and down the speaker's scale.
 //! - **vowel openness** — how widely the voices spread around that root.
 //! - **F3** — opens or clusters the chord above that spread. The dimension of
@@ -18,19 +17,10 @@
 //!   Rhythm without cutting anything into notes.
 //! - **energy** — how loud the field is, and how many voices are audible in it.
 //! - **spectral centroid** — the colour every voice is rendered in, placed in
-//!   the speaker's own brightness range.
+//!   the speaker's own brightness range. Independent of the vowel: the same
+//!   vowel murmured and pressed is one point in the vowel space and two very
+//!   different tones.
 //! - **aperiodicity** — how much of the field is breath.
-//!
-//! Eight streams, continuously, against the four the note mapping read at
-//! onsets only.
-//!
-//! **Colour was frontness until it was measured.** The colour stream was set
-//! from the same normalised F2 that walks the root, so the timbre and the
-//! harmony moved as one thing: every chord change was also the only colour
-//! change, and the field had five voices doing four things. Brightness is
-//! measured independently — the same vowel murmured and pressed is one point in
-//! the vowel space and two very different tones — so reading it separately is
-//! the difference between six streams and five.
 //!
 //! **Each stream moves one thing, and only one.** Two streams driving one
 //! parameter is one stream; one stream driving two parameters welds them
@@ -41,8 +31,9 @@
 //!
 //! **The rule that keeps this from being resynthesis** is the same one as
 //! everywhere else: the voice moves the law, not the notes. Nothing here plays
-//! his pitch. His pitch bends a tuning system; his mouth chooses degrees within
-//! it; the result is in his scale at his tonic, and is not the thing he said.
+//! the speaker's pitch. Their pitch bends a tuning system; their mouth chooses
+//! degrees within it; the result is in their scale at their tonic, and is not
+//! the thing they said.
 
 use utterance_analysis::voiceprint::Voiceprint;
 
@@ -55,8 +46,7 @@ use crate::voice::Voice;
 /// Voices the field sounds with when nobody says otherwise.
 ///
 /// Enough that the result is a texture rather than a chord anyone counts, few
-/// enough that each is separately audible. Now a default rather than a rule —
-/// see [`Params`].
+/// enough that each is separately audible. The `voices` knob's default.
 pub const VOICES: usize = 5;
 
 /// Quietest the field ever falls, relative to its loudest moment.
@@ -106,7 +96,7 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
     let mut breath = vec![0.0f32; frames];
 
     for i in 0..frames {
-        // His prosody, as a slow transposition of everything.
+        // The speaker's prosody, as a slow transposition of everything.
         //
         // Measured against the speaker's habitual pitch — the profile's tonic —
         // rather than against this take's own median. Against the take's median

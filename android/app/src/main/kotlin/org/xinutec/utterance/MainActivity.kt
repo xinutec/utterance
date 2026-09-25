@@ -18,8 +18,7 @@ import org.xinutec.shell.WebShellActivity
  * call simply never resolves — so the grant has to be plumbed through twice, once
  * for the app and once for the page. This lives here rather than in the shell
  * because the shell's contract puts permission prompts with the app; if a second
- * voice app appears, extract it then, the way the shell itself was extracted from
- * eight copies rather than designed up front.
+ * voice app appears, extract it then.
  */
 class MainActivity : WebShellActivity() {
     override val shell =

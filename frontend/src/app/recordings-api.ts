@@ -31,7 +31,6 @@ export type ApiFailure =
   | { readonly kind: "server"; readonly code: ErrorCode; readonly message: string }
   | { readonly kind: "unknown"; readonly message: string };
 
-/** The error every method in this service rejects with. */
 /**
  * What to say when nothing about a failure could be recognised.
  *
@@ -41,6 +40,7 @@ export type ApiFailure =
  */
 export const UNEXPLAINED = "the server did not say what went wrong";
 
+/** The error every method in this service rejects with. */
 export class ApiError extends Error {
   constructor(readonly failure: ApiFailure) {
     super(failure.message);
@@ -52,26 +52,29 @@ export class ApiError extends Error {
    *
    * Not `string`: a caller comparing this against a code that no longer exists
    * — or never did — is the failure the generated union is here to catch, and
-   * widening to `string` at this one accessor would hand that back. It was
-   * `string`, and `err.code === "unplayable"` in the compare page was checked
-   * by nothing at all.
+   * widening to `string` at this one accessor would hand that back.
    */
   get code(): ErrorCode | "offline" | "unknown" {
     return "code" in this.failure ? this.failure.code : this.failure.kind;
   }
 }
 
-/** The named field of an unknown value, only if it really is a string.
- *
- *  `error.error` is typed `any` and holds whatever came back on the wire. When
- *  the backend answered it is the generated `ErrorBody`, but an ingress 502 sends
- *  HTML and a proxy can send a differently-shaped JSON — so asserting
- *  `Partial<ErrorBody>` onto it manufactured a `string` the compiler then trusted
- *  all the way to the screen, where a non-string paints as "[object Object]".
- *  A predicate, not an assertion, so the belief is earned rather than declared. */
+/** Whether a value is an object whose fields can be read by name. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+
+/**
+ * The named field of an unknown value, only if it really is a string.
+ *
+ * `error.error` is typed `any` and holds whatever came back on the wire. When
+ * the backend answered it is the generated `ErrorBody`, but an ingress 502 sends
+ * HTML and a proxy can send a differently-shaped JSON — so asserting
+ * `Partial<ErrorBody>` onto it would manufacture a `string` the compiler then
+ * trusts all the way to the screen, where a non-string paints as "[object
+ * Object]". A predicate, not an assertion, so the belief is earned rather than
+ * declared.
+ */
 function stringField(value: unknown, key: string): string | null {
   if (!isRecord(value)) return null;
   const field = value[key];
@@ -84,8 +87,8 @@ function stringField(value: unknown, key: string): string | null {
  * `Record<ErrorCode, true>` is the point of the shape: the compiler rejects a
  * missing key and an extra one alike, so a code added in `src/error.rs` and
  * regenerated into `ErrorCode` fails the build here until somebody decides what
- * the page does about it. A plain `string[]` would have accepted both mistakes
- * silently, which is the arrangement this replaces.
+ * the page does about it. A plain `string[]` would accept both mistakes
+ * silently.
  */
 const CODES: Readonly<Record<ErrorCode, true>> = {
   audio_undecodable: true,
@@ -188,10 +191,8 @@ export class RecordingsApi {
    * Say what an already-stored take is for.
    *
    * Separate from `upload` because the answer is not always known when the audio
-   * arrives — and until this existed it could never be changed afterwards, which
-   * meant a take could not *become* the calibration one. Every recording made
-   * before the distinction existed reads back as material, so a store that
-   * predated it held the guided vowels and could not use them.
+   * arrives: a take that came in as a file, or before roles existed, has to be
+   * able to *become* a calibration one.
    */
   setRole(id: string, role: Role): Observable<RecordingMeta> {
     return this.http
@@ -226,7 +227,7 @@ export class RecordingsApi {
   }
 
   /**
-   * The scale, timbre and tonic derived from everything recorded so far.
+   * The scale, timbre and tonic derived from the speaker's calibration takes.
    *
    * Takes the settings because two of them change the answer: `calibration`
    * picks the take the scale comes from, and `bind` decides how far those

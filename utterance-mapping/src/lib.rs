@@ -1,7 +1,7 @@
 //! Voiceprint in, musical decisions out.
 //!
-//! The aesthetic layer of the three described in `docs/architecture.md`, and the
-//! first code in this repo that can be *wrong about nothing*. Everything in
+//! The aesthetic layer of the three described in `docs/architecture.md`: code
+//! that can be *wrong about nothing*. Everything in
 //! `utterance-analysis` answers a question with a right answer — is this frame
 //! voiced, where is F2. Nothing here does. Whether the minima of a dissonance
 //! curve should be called the notes of a scale is a choice, and a different

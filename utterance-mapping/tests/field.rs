@@ -152,8 +152,7 @@ fn a_quiet_passage_is_thinner_than_a_loud_one() {
 
 #[test]
 fn his_prosody_transposes_the_whole_field() {
-    // f0 is the largest measurement in the voiceprint and until this mapping
-    // nothing read it at all.
+    // The speaker's pitch reaches the field as a slow transposition.
     let mut low = take(600);
     let mut high = take(600);
     high.pitch.hz.fill(Some(200.0));
@@ -214,10 +213,10 @@ fn is_a_pure_function_of_its_input() {
 
 #[test]
 fn colour_follows_measured_brightness_rather_than_the_vowel() {
-    // The bug this replaced: `colour` was the same normalised F2 that walks the
-    // root, so the timbre could only change when the harmony did. Five voices
-    // doing four things. A voice can hold one vowel and change tone completely —
-    // murmured against pressed — and the field has to hear that.
+    // Colour must not be the same normalised F2 that walks the root, or the
+    // timbre could only change when the harmony did. A voice can hold one vowel
+    // and change tone completely — murmured against pressed — and the field has
+    // to hear that.
     let mut vp = take(400);
     for slot in vp.texture.centroid_hz.iter_mut().skip(200) {
         *slot = 2400.0;
@@ -234,9 +233,9 @@ fn colour_follows_measured_brightness_rather_than_the_vowel() {
 
 #[test]
 fn the_vowel_alone_does_not_move_the_colour() {
-    // The other half of the same claim, and the one that would have caught the
-    // bug: articulation must not stand in for tone. Same brightness throughout,
-    // the vowel swept right across the speaker's space.
+    // The other half of the same claim: articulation must not stand in for
+    // tone. Same brightness throughout, the vowel swept right across the
+    // speaker's space.
     let mut vp = take(400);
     for slot in vp.formants.f1.iter_mut().skip(200) {
         *slot = Some(780.0);
@@ -283,8 +282,8 @@ fn a_consonant_does_not_flash_the_colour_white() {
 #[test]
 fn without_a_measured_range_the_colour_holds_still() {
     // No brightness measurement is an absence of information. Substituting
-    // another stream for it is what this whole change exists to undo, so the
-    // honest answer is a colour that does not move.
+    // another stream for it would weld two streams together, so the honest
+    // answer is a colour that does not move.
     let p = calibration();
     let voice = Voice::from_calibration(&p, &[&p], 2.0, space(), None, 120.0).unwrap();
 

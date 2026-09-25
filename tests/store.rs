@@ -283,8 +283,7 @@ fn ids_that_are_not_ours_are_not_found_rather_than_resolved() {
 
 #[test]
 fn a_take_that_did_not_say_what_it_was_for_is_material() {
-    // The safe direction, and the one every take stored before roles existed
-    // reads back as. A recording that never declared itself must not start
+    // The safe direction: a recording that never declared itself must not start
     // shaping the sound world — a store fills up with other people's singing.
     let store = TempStore::open();
     let meta = store
@@ -329,10 +328,9 @@ fn a_calibration_take_stays_one_when_the_analyser_changes() {
 // or new self — and a crash in that window leaves it corrupt permanently. The
 // audio is the largest of the three files and holds the window open longest.
 //
-// Ablation, 2026-08-11: reverting `store::write` to a plain `fs::write` fails
-// both of these. An earlier pass at the same fix in memview had four tests that
-// all still passed against the old code, because they pinned the OUTCOME —
-// which truncate-and-rewrite also reaches. These pin the MECHANISM instead.
+// Reverting `store::write` to a plain `fs::write` fails both of these. They pin
+// the MECHANISM rather than the OUTCOME, which truncate-and-rewrite also
+// usually reaches.
 
 /// A rename REPLACES the directory entry, so the file is a different inode
 /// afterwards. A truncate-and-write modifies it in place and keeps it. That is

@@ -51,8 +51,8 @@ export default tseslint.config(
   },
   {
     // The layout harness and the Playwright config. Named on the lint command
-    // once before without a matching block here, which linted nothing and
-    // warned on every run — a check that looked present and was not.
+    // too: a path on the command line with no matching block here lints nothing
+    // and warns on every run — a check that looks present and is not.
     //
     // No Angular rules: there are no components here, only Playwright specs and
     // the config. Type-aware all the same, because the harness is the only gate

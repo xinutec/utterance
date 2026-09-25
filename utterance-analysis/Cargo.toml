@@ -10,7 +10,7 @@ ts = ["dep:ts-rs"]
 [dependencies]
 # WAV container only. Everything past decoding is arithmetic in this crate.
 hound = "3.5.1"
-# STFT for spectral flux. Pure Rust, no FFTW/system library to link.
+# FFTs for flux, partials and texture. Pure Rust, no system library to link.
 rustfft = "6.4.1"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

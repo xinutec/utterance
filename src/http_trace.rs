@@ -1,8 +1,7 @@
 //! One log line per request, for the deployed server.
 //!
-//! Added after a sign-in on isis could only be confirmed by the *absence* of an
-//! error: nothing recorded that requests were being served at all, so "it
-//! works" and "nobody has tried it" looked identical from the logs.
+//! Without it, "it works" and "nobody has tried it" look identical from the
+//! logs: nothing records that requests are being served at all.
 //!
 //! **Why the query string is not always logged.** The obvious thing to record
 //! is the whole URI, and for this app that is genuinely useful — a render's
@@ -68,9 +67,8 @@ pub fn layer() -> RequestTrace {
 
     TraceLayer::new_for_http()
         .make_span_with(span as RequestSpan)
-        // At INFO on purpose: the fleet runs `RUST_LOG=info,utterance=debug`, so
-        // anything tower-http emits at its default DEBUG would be filtered out
-        // and this module would appear to do nothing.
+        // At INFO on purpose: tower-http's default is DEBUG, which an
+        // `info`-level filter drops, and this module would appear to do nothing.
         .on_response(DefaultOnResponse::new().level(Level::INFO))
         .on_failure(DefaultOnFailure::new().level(Level::WARN))
 }

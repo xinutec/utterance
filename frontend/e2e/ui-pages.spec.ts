@@ -12,10 +12,10 @@ import {
 
 /**
  * Layout-measurement checks against the built bundle with the API mocked. The
- * studio is a dense page — a take list, a stats line, a four-panel chart and a vowel-space plot —
- * and its failure modes (a stats line colliding with the delete button, a canvas
- * forcing the body wider than the screen) read fine in source and only show in a
- * real browser at a real width.
+ * studio is a dense page — a take list, a stats line, a four-panel chart and a
+ * vowel-space plot — and its failure modes (a stats line colliding with the
+ * delete button, a canvas forcing the body wider than the screen) read fine in
+ * source and only show in a real browser at a real width.
  */
 
 /** One stored take, enough for the list and the detail pane to populate. */
@@ -172,7 +172,7 @@ async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/recordings/0123456789abcdef", (r) =>
     r.fulfill({ json: { meta: META, voiceprint: voiceprint() } }),
   );
-  // Trailing wildcard because the summary now carries the mapping settings in
+  // Trailing wildcard because the summary carries the mapping settings in
   // its query string, and a glob without one stops matching the moment a
   // parameter is added — silently, by falling through to the catch-all above.
   await page.route("**/api/voice*", (r) => r.fulfill({ json: VOICE }));
@@ -224,7 +224,7 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
   await mockApi(page);
   await page.goto("/");
   await page.getByText("brother — take 1").first().waitFor();
-  // Two canvases now — the time-series chart and the vowel space. Wait for
+  // Two canvases — the time-series chart and the vowel space. Wait for
   // both, so the layout assertions run against the fully painted page.
   await page.locator("app-voiceprint-chart canvas").waitFor();
   await page.locator("app-vowel-space canvas").waitFor();
@@ -303,7 +303,7 @@ test("studio — the derived scale lays out cleanly @ phone", async ({ page }, t
 });
 
 test("studio — a scale that carries no lattice says so @ phone", async ({ page }, testInfo) => {
-  // The state this replaced was a player that produced consonants and silence,
+  // Without this message the player would produce consonants and silence,
   // which reads as a broken build rather than as a setting to move. It is a
   // paragraph of prose in a page otherwise made of numbers and controls, so it
   // is also the likeliest thing here to overflow a phone.
@@ -370,8 +370,8 @@ test("compare — two renders side by side lay out cleanly @ phone", async ({ pa
 });
 
 test("compare — both settings panels open lay out cleanly @ phone", async ({ page }, testInfo) => {
-  // Two `app-mapping-controls` side by side is nine sliders twice over, and the
-  // grid has to drop to one column rather than squeezing both in.
+  // Two `app-mapping-controls` side by side is every slider twice over, and
+  // the grid has to drop to one column rather than squeezing both in.
   await mockApi(page);
   await page.goto("/compare");
   await page.getByRole("button", { name: "Change settings" }).click();
@@ -456,10 +456,9 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 /**
- * A comparison is the project's unit of evidence, and until it could be linked
- * it could only be passed on as a description of which controls to move. Two
- * people in two rooms then listen to two slightly different things and disagree
- * about a result neither of them heard.
+ * A comparison is the project's unit of evidence. Passed on as a description of
+ * which controls to move, two people in two rooms listen to two slightly
+ * different things and disagree about a result neither of them heard.
  *
  * Checked here rather than in a unit test because the failure is in the wiring
  * and not in the parsing: the read waits for the published knobs and the write
@@ -491,10 +490,9 @@ test("compare — a shared link arrives at the settings it names", async ({ page
 });
 
 /**
- * Ten sliders at equal weight is an instrument panel for someone who already
- * knows what each one does. To anybody else — which is to say, to the second
- * person this was built for — it reads as ten things they might be getting
- * wrong.
+ * Every slider at equal weight is an instrument panel for someone who already
+ * knows what each one does. To anybody else it reads as a dozen things they
+ * might be getting wrong.
  *
  * Checked end to end rather than on the component, because the property worth
  * guarding is that the split is driven by what the *backend* published: a

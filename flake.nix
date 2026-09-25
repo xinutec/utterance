@@ -53,11 +53,9 @@
           cargoLock.lockFile = ./Cargo.lock;
 
           # **The build runs the tests**, which is most of why this exists. A
-          # nix build compiles and runs entirely inside /nix/store on the
-          # internal disk, so it needs nothing from `~/.cache/cargo` — the
-          # shared target directory on the external volume, where executing a
-          # freshly built binary hangs indefinitely in dyld. This is a way to
-          # build, run *and* check the code without touching that volume.
+          # nix build compiles and runs entirely inside /nix/store, so it needs
+          # nothing from the shared cargo target directory: a way to build, run
+          # *and* check the code from the committed tree alone.
           doCheck = true;
 
           meta = {
@@ -75,7 +73,7 @@
             pkgs.rust-analyzer
             pkgs.rustfmt
             pkgs.clippy
-            pkgs.nodejs_24 # Angular 22 frontend (frontend/)
+            pkgs.nodejs_24 # the Angular frontend (frontend/)
             pkgs.pnpm # the frontend's installer; node ships npm too, ignore it
 
             # scripts/coverage.sh. Not in the gate — a coverage threshold

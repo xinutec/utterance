@@ -1,17 +1,15 @@
 /**
  * What each panel of a comparison shows, and how the two sides differ in it.
  *
- * **Why the difference is computed per panel rather than generically.** The
- * first version of this chart drew both scores on a shared scale and left the
- * reading to the eye. Against the comparison that matters most — the speaker's
- * tuning versus equal temperament — four of five panels were byte-identical, so
- * the second curve landed exactly on the first and hid it, and the fifth
- * differed by ten cents on an axis two octaves tall. The chart showed one line
- * and no information, which reads as a broken chart rather than as a small
+ * **Why the difference is computed per panel rather than generically.** Drawn
+ * on a shared scale, the comparison that matters most — the speaker's tuning
+ * versus equal temperament — is byte-identical in most panels, so the second
+ * curve lands exactly on the first and hides it, and the rest differ by cents
+ * on an axis octaves tall. That reads as a broken chart rather than as a small
  * difference.
  *
- * The fix is that every panel knows its own units and reports its own
- * difference, scaled to itself. Ten cents out of two octaves is invisible; ten
+ * So every panel knows its own units and reports its own difference, scaled to
+ * itself. Ten cents out of two octaves is invisible; ten
  * cents out of "the largest gap here is ten cents" is the whole panel.
  */
 
@@ -59,7 +57,7 @@ function spread(score: ScoreView): number[] {
     const top = high[i];
     // The two voices are rendered from the same frame count, so this holds;
     // stopping is still the right answer if one is ever shorter, because the
-    // alternative was `Math.max(undefined, 1)` — NaN, plotted as a gap.
+    // alternative is `Math.max(undefined, 1)` — NaN, plotted as a gap.
     if (top === undefined) break;
     out.push(Math.log2(Math.max(top, 1) / Math.max(hz, 1)));
   }

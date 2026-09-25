@@ -33,8 +33,8 @@ function score(overrides: Partial<ScoreView> = {}): ScoreView {
  *
  * `ScoreView.voices` is a bare `number[][]` on the wire — the backend does not
  * promise a voice count — so a spec reaching for voice 1 has to say what it
- * expects. Throwing beats indexing blind: the old form would have quietly
- * mapped over `undefined` had the fixture ever lost a voice.
+ * expects. Throwing beats indexing blind, which would quietly map over
+ * `undefined` if the fixture ever lost a voice.
  */
 function voice(s: ScoreView, i: number): number[] {
   const found = s.voices[i];
@@ -54,7 +54,7 @@ function retuned(cents: number): ScoreView {
 
 describe("the pitch panel", () => {
   it("sees a retuning the root panel alone would miss", () => {
-    // The failure this was written for. Under `bind` the tonic does not move —
+    // Under `bind` the tonic does not move —
     // it is zero cents in every tuning — so a panel showing only the root
     // reports no difference about the one thing the knob changes.
     const difference = panel("pitch").difference(score(), retuned(15));
@@ -91,8 +91,8 @@ describe("summarise", () => {
 
 describe("mostDifferentAt", () => {
   it("finds a difference that exists only in pitch", () => {
-    // The old version looked at level, colour and breath — all identical under
-    // `bind` — and confidently offered second zero.
+    // Level, colour and breath are all identical under `bind`; looking only at
+    // those would confidently offer second zero.
     const b = retuned(20);
     // ...and make the difference happen at one moment rather than throughout.
     b.voices[1] = voice(score(), 1).map((hz, i) => (i === 60 ? hz * 2 ** (20 / 1200) : hz));

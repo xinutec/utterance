@@ -7,11 +7,9 @@ use std::path::PathBuf;
 /// A usage message that lists a default the program does not use is worse than
 /// no usage message: it is believed.
 ///
-/// Public so `tests/cli.rs` can assert the help quotes these. It used to get at
-/// them by clearing `BIND_ADDR` and `DATA_DIR` and reading back `from_env` —
-/// which meant an `unsafe` block mutating process-global environment while the
-/// other tests in the binary ran on parallel threads, exactly the race edition
-/// 2024 made `remove_var` unsafe for.
+/// Public so `tests/cli.rs` can assert the help quotes these without mutating
+/// process-global environment under parallel tests — the race edition 2024 made
+/// `remove_var` unsafe for.
 pub const DEFAULT_BIND_ADDR: &str = "127.0.0.1:8181";
 pub const DEFAULT_DATA_DIR: &str = "data";
 
@@ -46,25 +44,19 @@ pub enum Invocation {
     Print(String),
 }
 
-/// Read the command line, which until now was ignored entirely.
+/// Read the command line.
 ///
-/// **Why a binary that took no arguments needed this.** It never did while it
-/// was launched from a script that already knew how to configure it. Installed
-/// as a package and run by name, `utterance --help` is the only way anyone finds out
-/// that it is configured by three environment variables at all — and what it did
-/// instead was start a server, which looks like a hang, and then fail to bind
-/// because one was already running.
+/// Installed as a package and run by name, `utterance --help` is the only way
+/// anyone finds out that it is configured by environment variables at all.
+/// Ignoring arguments instead starts a server, which looks like a hang.
 ///
-/// An unrecognised argument is an error rather than something to ignore. Quietly
-/// ignoring arguments is exactly how `--help` came to launch a server: a typo,
+/// An unrecognised argument is an error rather than something to ignore: a typo,
 /// or a flag this program does not have, should say so rather than do something
 /// else confidently.
 ///
-/// **Every argument is read, not just the first.** The obvious shape — a loop
-/// that matches and returns — inspects one and silently drops the rest, which is
-/// the same failure again a step further along: `utterance --version --sereve` would
-/// print a version and never mention the typo. Clippy caught that one; it is
-/// written down here because the shape is easy to reach for again.
+/// **Every argument is read, not just the first.** A loop that matches and
+/// returns inspects one and silently drops the rest: `utterance --version
+/// --sereve` would print a version and never mention the typo.
 pub fn invocation<I: IntoIterator<Item = String>>(args: I) -> Result<Invocation, String> {
     let args: Vec<String> = args.into_iter().collect();
     let is = |arg: &String, short: &str, long: &str| arg == short || arg == long;

@@ -15,9 +15,7 @@ export interface MappingSettings {
    * Mappings to hear. Never empty — silence is not a choice.
    *
    * The generated union rather than `string[]`, so a name this backend does not
-   * serve cannot be written here at all. It could: this was `readonly string[]`
-   * while the backend's own table was a list of `&str`, and the two agreed only
-   * by everyone remembering to keep them agreeing.
+   * serve cannot be written here at all.
    */
   readonly mapping: readonly Mapping[];
   /** Take the scale comes from, or `null` to let the backend choose. */
@@ -27,8 +25,8 @@ export interface MappingSettings {
    *
    * Only knobs moved away from their default appear. That keeps the URL short
    * and, more usefully, keeps it honest: a link with nothing but `bind=0` in it
-   * says exactly what was changed, where a link carrying all seven values makes
-   * the interesting one impossible to spot.
+   * says exactly what was changed, where a link carrying every value makes the
+   * interesting one impossible to spot.
    *
    * `Partial<Record<KnobName, …>>` rather than `Record<string, …>`: the names
    * are generated from the Rust knob table, so a key this backend never
@@ -85,11 +83,9 @@ export function parseSettings(
 ): MappingSettings {
   const params = new URLSearchParams(query);
 
-  // Kept only if the backend published it. The comment below has always said a
-  // typo should play the default, and until the names were a type this did not
-  // do that — an unknown name went through untouched and the render returned a
-  // 400, so a link with one bad character played nothing at all rather than
-  // playing the rest of what it asked for.
+  // Kept only if the backend published it. An unknown name passed through
+  // would make the render return a 400, so a link with one bad character would
+  // play nothing at all rather than the rest of what it asked for.
   const served = new Set<string>(offered.map((m) => m.name));
   const mapping = (params.get("mapping") ?? "")
     .split(",")

@@ -10,28 +10,13 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Bumped whenever the meaning of a field changes, so a stored voiceprint is
-/// never silently reinterpreted under a newer analyser.
+/// Identifies the analyser, so a stored voiceprint is never silently
+/// reinterpreted under a newer one.
 ///
 /// **Bump this for any change that alters the output — the algorithm as much as
 /// the shape.** A stored voiceprint is a cache of a pure function of the audio,
-/// and this number identifies the function. Changing how onsets are picked
-/// invalidates every stored voiceprint exactly as thoroughly as adding a field
-/// does; the difference is that the shape change fails loudly on deserialise
-/// while the algorithm change is silent, so only this makes it visible.
-///
-/// Caught the hard way: an onset-detector rewrite left every stored take
-/// reporting its old counts, because the shape still parsed.
-///
-/// - 2: `Source` gained `peak` and `clippedFraction`.
-/// - 3: onset detection reworked — peak dominance, CFAR threshold, silence gate.
-/// - 4: added `formants` (F1/F2/F3 by linear prediction).
-/// - 5: added `partials` (the measured harmonic series).
-/// - 6: added `texture` (spectral centroid and flatness per frame).
-/// - 7: `texture` measured above 300 Hz — below it, room rumble dominated
-///   both series and every consonant read as tonal.
-/// - 8: `texture` gained `tiltDbPerOctave` — the slope of the spectrum, which
-///   the centroid alone cannot express.
+/// and this number identifies the function. A shape change fails loudly on
+/// deserialise; an algorithm change is silent, so only this makes it visible.
 pub const SCHEMA_VERSION: u32 = 8;
 
 /// What the recording was before analysis normalised it.
@@ -119,8 +104,8 @@ impl Pitch {
 ///
 /// Two dimensions that matter and a third for context. F1 against F2 is the
 /// space vowels live in: every vowel of a language occupies a region of it, and
-/// a vowel sequence is a path through it. That geometry is the input the harmony
-/// mapping is meant to be derived from.
+/// a vowel sequence is a path through it. That geometry is what the harmony
+/// mappings read.
 ///
 /// `null` wherever the frame gives no usable estimate — unvoiced, silent, or the
 /// fit found nothing in range. There is no such thing as a formant in silence.
@@ -185,8 +170,7 @@ pub struct Voiceprint {
     /// The shape of the noise, per frame.
     ///
     /// Defined everywhere but interesting mostly where the voice is unvoiced —
-    /// the consonants, which are most of ordinary speech and which every other
-    /// field here gates away.
+    /// the consonants, which every other field here gates away.
     pub texture: crate::texture::Texture,
 }
 

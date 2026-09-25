@@ -114,7 +114,7 @@ pub fn brightness(vp: &Voiceprint, voice: &Voice) -> Vec<f32> {
 ///
 /// Same reasoning as the vowel track: an unvoiced frame is a frame with no
 /// measurement, not a frame at zero hertz, and zero would drag the drift down
-/// every time he pronounced a consonant.
+/// at every consonant.
 pub fn filled(hz: &[Option<f32>]) -> Vec<f32> {
     let first = hz.iter().flatten().copied().next().unwrap_or(1.0);
     let mut last = first;

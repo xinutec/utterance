@@ -5,8 +5,8 @@
  *
  * Two dimensions that matter and a third for context. F1 against F2 is the
  * space vowels live in: every vowel of a language occupies a region of it, and
- * a vowel sequence is a path through it. That geometry is the input the harmony
- * mapping is meant to be derived from.
+ * a vowel sequence is a path through it. That geometry is what the harmony
+ * mappings read.
  *
  * `null` wherever the frame gives no usable estimate — unvoiced, silent, or the
  * fit found nothing in range. There is no such thing as a formant in silence.

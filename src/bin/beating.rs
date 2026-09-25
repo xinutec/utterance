@@ -22,9 +22,8 @@
 //! - *A modulation difference* → something is physically there, and whether it
 //!   is above anyone's threshold is still a listening question.
 //!
-//! So this can falsify audibility but not establish it, and after a listening
-//! session that reported "very little difference" the falsifying direction is
-//! the one worth having.
+//! So this can falsify audibility but not establish it — which is the direction
+//! worth having when listeners report "very little difference".
 //!
 //! **Why the analysis bands are wide.** Beating appears as modulation only when
 //! the two partials fall inside *one* band — resolve them into separate bins and
@@ -194,9 +193,8 @@ fn beating(samples: &[f32]) -> f32 {
 ///
 /// **This is the whole validity of the comparison.** The claim is that a derived
 /// scale makes partials lock where a tempered one makes them beat, which is a
-/// statement about one chord under two tunings. On the Tonnetz retuning also
-/// moves the lattice axes, so the two renders would be different chords and any
-/// difference in their beating confounded by that.
+/// statement about one chord under two tunings. A mapping where retuning also
+/// changed which chords are played would confound any difference in beating.
 ///
 /// Matched exhaustively rather than defaulted to true: a mapping added to the
 /// crate has to answer this before it can be measured here, and answering wrong
@@ -205,18 +203,15 @@ fn beating(samples: &[f32]) -> f32 {
     clippy::match_same_arms,
     reason = "Field and Tonnetz both answer true for unrelated reasons, and each \
               arm's comment is the reason. Merging them into one `|` arm would \
-              leave a single comment covering two different arguments — and the \
-              Tonnetz one is a fact about a change that has already caught this \
-              measurement out once."
+              leave a single comment covering two different arguments."
 )]
 fn holds_the_chord_still(mapping: Mapping) -> bool {
     match mapping {
         // Voices stacked at a fixed spacing in scale degrees, so retuning the
         // scale moves the *same* chord. The controlled experiment.
         Mapping::Field => true,
-        // True since `bind` moved from the lattice axes to the sounding pitch.
-        // Before that, retuning rebuilt the geometry and the two renders were
-        // different chord sequences.
+        // `bind` is applied to each sounding pitch, not to the lattice axes, so
+        // retuning leaves the chord sequence alone.
         Mapping::Tonnetz => true,
         // Onsets, not a sustained chord. There are no partials held together
         // long enough to beat, so the measurement has nothing to look at.

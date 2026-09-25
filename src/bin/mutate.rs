@@ -16,18 +16,16 @@
 //! number to keep above a line.
 //!
 //! **Each mutant is judged by its OWN crate's tests**, not the whole workspace.
-//! Partly arithmetic — measured 2026-08-07, `cargo test --workspace` is over ten
-//! minutes here against 220s for analysis, 92s for mapping and 46s for
-//! realisation, so twelve mutants is twenty minutes rather than two hours, and a
-//! tool nobody waits for answers nothing. Mostly, though, it is the sharper
-//! question: these are designated pure cores, and "utterance-mapping's own suite
+//! Partly arithmetic — the workspace suite is several times slower than any one
+//! crate's, and a tool nobody waits for answers nothing. Mostly, though, it is
+//! the sharper question: these are designated pure cores, and "utterance-mapping's own suite
 //! notices when utterance-mapping is wrong" is the claim worth holding. A mutant
 //! that survives its crate and dies in `tests/api.rs` is being caught by
 //! accident, three layers away, and that is worth knowing separately — so a
 //! survivor is worth re-running with `--workspace` by hand before concluding
 //! nothing sees it.
 //!
-//! **Three traps, all of them hit the first time this was done by hand.**
+//! **Three traps.**
 //!
 //! 1. *A pattern that does not apply reports nothing wrong.* The suite passes,
 //!    the mutant is recorded as survived-or-killed on a file that was never

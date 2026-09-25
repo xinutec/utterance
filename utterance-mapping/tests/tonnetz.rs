@@ -3,9 +3,8 @@
 //! `field` already turns a voice into a continuous texture, and these tests do
 //! not repeat that. What is new here is that the harmony *stops moving* while
 //! the mouth does not, and that when it moves it moves by a step rather than a
-//! jump — which together are the whole argument for the mapping, since the
-//! derived tuning has been measured as real and inaudible for want of a chord
-//! that rings.
+//! jump — which together are the whole argument for the mapping, since a
+//! derived tuning is inaudible without a chord that rings.
 
 use utterance_analysis::partials::{Partial, Partials};
 use utterance_analysis::speaker::{Brightness, Span, VowelSpace};
@@ -232,8 +231,8 @@ fn the_voices_are_stacked_upward_and_never_double() {
     let pitches: Vec<f32> = (0..f.voice_count()).map(|v| f.voices[v][150]).collect();
     for pair in pitches.windows(2) {
         // The floor itself, not an approximation of it: `MIN_SEPARATION_CENTS`
-        // is 50, and 1.02 — the ratio this asked for until 2026-08-10 — is 34
-        // cents, which would accept a chord the mapping promises never to build.
+        // is 50, and a looser ratio such as 1.02 (34 cents) would accept a chord
+        // the mapping promises never to build.
         // `no_two_voices_land_inside_the_separation_floor` owns the general case.
         assert!(
             pair[1] > pair[0] * 2f32.powf(50.0 / 1200.0),
@@ -372,21 +371,13 @@ fn a_crowded_chord_stays_inside_the_range_a_person_hears() {
 fn no_two_voices_land_inside_the_separation_floor() {
     // `MIN_SEPARATION_CENTS` is 50 — a quarter tone, below which two tones are
     // heard as one beating rather than as two notes, so a chord that puts a pair
-    // there is quietly a voice short. This is the guarantee the register loop
-    // exists to provide, and until 2026-08-10 nothing asserted it: the `ceil`
-    // that enforces it could be changed to `floor` — which places the voice
-    // BELOW the floor just computed, and was measured producing pairs 182 cents
-    // apart in the wrong order — and the whole suite still passed.
-    //
-    // That line was rewritten from a `while` loop to a closed form the same day
-    // the gap was found, so the property was never tested before OR after the
-    // rewrite, and "bit-identical to the loop" only ever said the two agreed.
+    // there is quietly a voice short. This is the guarantee the register step
+    // exists to provide: its `ceil` changed to `floor` places the voice BELOW
+    // the floor just computed.
     //
     // Swept across the entire knob domain rather than checked at the default,
     // because whether a given chord crowds is an accident of where the lattice
-    // walk happens to go. Measured 2026-08-10: the clamp engages 5,765 times
-    // over this sweep, so it is the arithmetic being exercised and not the
-    // fixture being lucky.
+    // walk happens to go.
     const FLOOR_CENTS: f32 = 50.0;
 
     let vp = swept(240);
@@ -423,8 +414,7 @@ fn no_two_voices_land_inside_the_separation_floor() {
 
     // Non-vacuity. If the chords this sweep builds were all wide open the
     // assertion above would hold for reasons having nothing to do with the
-    // floor. Measured 2026-08-10: the closest pair anywhere in the sweep is 70
-    // cents, so the chords do crowd right up against it.
+    // floor.
     assert!(
         closest < 100.0,
         "no pair in the whole sweep came within a semitone (closest {closest:.1} cents), \

@@ -10,9 +10,7 @@ cd "$(dirname "$0")/.."
 nix develop -c bash -c '
   set -euo pipefail
 
-  if [ ! -d frontend/node_modules ]; then
-    ( cd frontend && npm ci )
-  fi
+  ( cd frontend && pnpm install --frozen-lockfile )
 
   cargo build
 
@@ -22,5 +20,5 @@ nix develop -c bash -c '
   # and holds :4200 against the next run.
   trap "kill $backend 2>/dev/null || true" EXIT INT TERM
 
-  ( cd frontend && npm start )
+  ( cd frontend && pnpm start )
 '

@@ -18,13 +18,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::voiceprint::Voiceprint;
 
-/// Bumped whenever the meaning of a field changes.
+/// Identifies the profiling function; bump it for any change to the output.
 ///
 /// Same contract as [`crate::voiceprint::SCHEMA_VERSION`]: a profile is a cache of a pure
-/// function of the voiceprints it was built from, so this number identifies the function,
-/// and an algorithm change invalidates a stored profile as thoroughly as a shape change.
-/// - 2: added `brightness` (the spectral range this speaker's voiced tone
-///   moves through).
+/// function of the voiceprints it was built from, so an algorithm change invalidates a
+/// stored profile as thoroughly as a shape change.
 pub const PROFILE_VERSION: u32 = 2;
 
 /// Percentiles taken as the low and high edge of a measured range.
@@ -279,8 +277,8 @@ pub struct F0Range {
 
 /// Everything measured about a speaker rather than about one thing they said.
 ///
-/// Both ranges are optional because either can be unmeasurable in material that
-/// is otherwise fine: a whispered take has no f0 at all, and a take can be voiced
+/// Every range is optional because each can be unmeasurable in material that is
+/// otherwise fine: a whispered take has no f0 at all, and a take can be voiced
 /// throughout while the formant fit fails often enough to leave too few frames.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -303,11 +301,11 @@ pub struct SpeakerProfile {
     pub brightness: Option<Brightness>,
 }
 
-/// Measure a speaker from everything they have recorded.
+/// Measure a speaker from the takes given.
 ///
 /// Takes a slice rather than one voiceprint because the profile improves with
-/// material: a speaker reaches the corners of their vowel space over minutes of
-/// varied speech, not reliably within any one take. Frames are pooled across
+/// material: a speaker reaches the corners of their vowel space over several
+/// takes, not reliably within any one. Frames are pooled across
 /// takes rather than averaged per take, so a long recording contributes more than
 /// a short one — which is the right weighting when what is being estimated is
 /// where this person's articulation actually goes.

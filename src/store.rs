@@ -35,9 +35,8 @@ pub enum Role {
     /// Something to render. It contributes nothing to who the speaker is.
     ///
     /// The default, and deliberately so: a recording that never said what it was
-    /// for must not silently start shaping the sound world. Every take stored
-    /// before this distinction existed reads back as material, which is the safe
-    /// direction — the speaker then has to be established on purpose.
+    /// for must not silently start shaping the sound world. The speaker is
+    /// established on purpose, at upload or through [`Store::put_role`].
     #[default]
     Material,
 }
@@ -79,8 +78,8 @@ pub struct RecordingMeta {
     pub clipped: bool,
     /// Whether this take defines the speaker or is only material to render.
     ///
-    /// Defaulted on read, so a store written before the distinction existed
-    /// stays readable and every one of its takes becomes material.
+    /// Defaulted on read, so metadata written without it stays readable and
+    /// reads as material.
     #[serde(default)]
     pub role: Role,
 }
@@ -221,18 +220,12 @@ impl Store {
 
     /// Say what an already-stored take is for.
     ///
-    /// **Why this has to exist, learned by breaking it.** Role was settable only
-    /// at upload, which quietly meant a take could never *become* the
-    /// calibration one. Two consequences, and both were live: every recording
-    /// made before the distinction existed reads back as material, so a store
-    /// that predated it had no calibration take at all and refused to derive a
-    /// voice — the guided vowels sitting in it, unusable, because nothing could
-    /// say what they were. And audio that arrives as a *file* rather than
-    /// through the guided flow could never define the speaker either, which is
-    /// how the second singer's takes arrive.
-    ///
-    /// The remedy on offer was to record the vowels again. That is asking
-    /// someone to redo good work to satisfy a field they cannot see.
+    /// **Why this has to exist.** Settable only at upload, a take could never
+    /// *become* a calibration one: a store whose takes predate roles would have
+    /// no calibration take and refuse to derive a voice, and audio that arrives
+    /// as a *file* rather than through the guided flow could never define the
+    /// speaker. The only remedy would be recording the vowels again — redoing
+    /// good work to satisfy a field nobody can see.
     ///
     /// Rewrites the metadata alone. The audio is untouched and the voiceprint is
     /// a pure function of it, so nothing here can invalidate a measurement —
@@ -246,8 +239,7 @@ impl Store {
         Ok(meta)
     }
 
-    /// A single string field from the stored metadata, whatever else is wrong
-    /// with it.
+    /// A single field from the stored metadata, whatever else is wrong with it.
     fn stored_field(&self, id: &str, key: &str) -> Option<serde_json::Value> {
         let bytes = fs::read(self.dir(id).join(META)).ok()?;
         let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
@@ -420,7 +412,7 @@ fn now_ms() -> u64 {
 ///
 /// ⚠ Atomicity per file, not exclusion between writers. Two processes editing
 /// the SAME take still lose one update; different takes never collide, which is
-/// why utterance keeps a rolling deployment where memview does not (#744).
+/// what makes a rolling deployment safe here.
 fn write(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
     let io = |path: &Path| {
         let path = path.to_path_buf();

@@ -144,9 +144,8 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
     let mut gain = 0.0f32;
 
     // Breath is shaped by a resonator centred on where the note's own energy
-    // sits, recomputed as the spectrum moves. White noise here was the first
-    // thing a listener noticed: it reads as hiss over the piece rather than as
-    // a quality of the tone.
+    // sits, recomputed as the spectrum moves. White noise here reads as hiss
+    // over the piece rather than as a quality of the tone.
     let mut breath_state = (0.0f32, 0.0f32);
     let mut breath_filter = Resonator::silent();
 
@@ -411,7 +410,7 @@ fn normalise(out: &mut [f32]) {
 
 /// A deterministic noise source.
 ///
-/// Seeded from the note's index rather than from a clock, so a render is
+/// Seeded from an index rather than from a clock, so a render is
 /// reproducible — which the whole project depends on, since it is how "the
 /// mapping changed" is told apart from "the renderer wandered". An xorshift is
 /// ample: this is breath, not cryptography.

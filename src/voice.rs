@@ -117,26 +117,25 @@ fn measure_corners(takes: &[(RecordingMeta, Voiceprint)]) -> Vec<MeasuredCorner>
     out
 }
 
-/// Build the current speaker's voice from everything in the store.
+/// Build the current speaker's voice from the store's calibration takes.
 ///
 /// **How the calibration take is chosen: the one that yields the richest scale**,
 /// ties broken by how much evidence it was measured over.
 ///
-/// The obvious criterion — most steady frames — was tried first and is wrong in
-/// a way worth recording. On the first real calibration set it picked an eleven
-/// second *ee*, beautifully measured, whose spectrum yields a scale of the fifth
-/// and nothing else; a five second *ah* in the same session yields eight degrees
-/// close to just intonation. A calibration take exists to define a musical world,
-/// and one defining a world with two notes in it has failed at that job however
-/// well it was measured.
+/// Not the most steady frames, the obvious criterion: that picks a long,
+/// beautifully measured *ee* whose spectrum yields the fifth and nothing else,
+/// over a shorter *ah* yielding eight degrees close to just intonation. A
+/// calibration take exists to define a musical world, and one defining a world
+/// with two notes in it has failed at that job however well it was measured.
 ///
 /// This is a choice, not a measurement, which is why it lives in the composition
 /// root rather than in `utterance-analysis`. It also stands in for a decision nobody
 /// has made: which vowel a speaker's tuning *should* come from is an open
 /// question in `docs/roadmap.md`, and `override_id` is how a caller disagrees.
 ///
-/// Everything else pools across every take, because vowel-space corners and
-/// pitch range improve with material where a harmonic series does not.
+/// Everything else pools across every calibration take, because vowel-space
+/// corners and pitch range improve with material where a harmonic series does
+/// not.
 pub fn calibrate(store: &Store, override_id: Option<&str>) -> Result<Calibrated, AppError> {
     calibrate_with(store, override_id, utterance_mapping::tuning::MIN_DEPTH)
 }
@@ -216,8 +215,8 @@ pub fn calibrate_with(
     // Every take that held a pitch contributes a spectrum to the palette, not
     // just the one the scale came from. A speaker who recorded several vowels
     // handed over several genuinely different spectra from one throat, and using
-    // one of them is how the first renders came out with a tone that never
-    // moved. Ordering happens in the mapping layer, by brightness.
+    // only one gives a tone that never moves. Ordering happens in the mapping
+    // layer, by brightness.
     let palette: Vec<&Partials> = takes
         .iter()
         .map(|(_, v)| &v.partials)

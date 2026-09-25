@@ -7,19 +7,17 @@
 //! and the moment it does, the mapping layer stops being replaceable.
 //!
 //! Analysis is a pure function of the audio bytes. No clock, no randomness, no
-//! ambient configuration. The same input yields the same voiceprint on any
-//! machine, which is what makes fixtures meaningful.
+//! ambient configuration. The same input yields the same voiceprint on the same
+//! toolchain and platform, which is what makes fixtures meaningful.
 
 // **A pure core does not decide to stop.** Analysis is called on a request
 // thread with a recording someone just made, so a panic here is a 500 on a take
-// that took effort to sing. All eight measured zero sites when they went in, so
-// this costs nothing today and exists to keep it that way.
+// that took effort to sing.
 //
-// Deliberately NOT here: `indexing_slicing` (148 sites), `arithmetic_side_
-// effects` (89) and `integer_division` (16), measured across the three crates.
-// This is DSP — `frame[i]` indexed by a loop variable derived from that frame's
-// own `len()` is the normal shape, and a bar firing on it would be blanket-
-// allowed within a week, taking the rest of this list with it.
+// Deliberately NOT here: `indexing_slicing`, `arithmetic_side_effects` and
+// `integer_division`. This is DSP — `frame[i]` indexed by a loop variable
+// derived from that frame's own `len()` is the normal shape, and a bar firing on
+// it would be blanket-allowed, taking the rest of this list with it.
 //
 // Termination is the other half of the bar and is not expressible here; it is
 // `[package.metadata.dev-lint] totality = true` in Cargo.toml.

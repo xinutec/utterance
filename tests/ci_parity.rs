@@ -1,16 +1,12 @@
 //! CI runs the gate's list, or says why it does not.
 //!
 //! `.github/workflows/build.yml` reproduces a subset of `gate.dhall` by hand,
-//! and three one-line breakages in two days came from the same place: the gate
-//! gained a row and the workflow did not. `cargo fmt --check` and
-//! `typecheck:e2e` were gate-only for a while, so they ran on whichever machine
-//! happened to fire the pre-commit hook and on nothing else; and when the table
-//! made `ng build` a row of its own, `fe-verify` had nothing to serve and
-//! Playwright died on `Timed out waiting 60000ms from config.webServer` for two
-//! commits.
+//! and the way that breaks is the gate gaining a row the workflow does not: the
+//! check then runs on whichever machine fires the pre-commit hook and nowhere
+//! else, or a later step finds nothing where an earlier one should have built
+//! it.
 //!
-//! The gate is a machine-readable table now, which is the ingredient that was
-//! missing. This does not *generate* the workflow: three rows are implemented
+//! This does not *generate* the workflow: three rows are implemented
 //! differently here on purpose — the runner has no nix, no dhall and no token
 //! for the private dev-lint repo — and a generator would have to carry those
 //! exceptions as data anyway, so the same list would still have to be right. It
@@ -26,8 +22,8 @@
 //! This is a `cargo test` rather than a gate row of its own, so it runs in both
 //! places at once: in the gate, and in the CI it is checking.
 //!
-//! **`DL-GHA-GATE-PARITY` now asserts the coverage half fleet-wide, and this
-//! stays anyway.** That rule runs from dev-lint, which is one of the two rows a
+//! **`DL-GHA-GATE-PARITY` asserts the coverage half fleet-wide, and this stays
+//! anyway.** That rule runs from dev-lint, which is one of the two rows a
 //! runner cannot run — so on GitHub it is not there, and a `--no-verify` push or
 //! a checkout without the hook would reach CI with nothing having checked the
 //! list. Same argument `fe-verify` is built on. What is genuinely only here is
@@ -184,10 +180,9 @@ fn no_waiver_outlives_its_row() {
     // This is the half nothing else does. `DL-WAIVER-INEFFECTIVE` is the fleet's
     // answer to a marker that suppresses nothing, but the audit only condemns a
     // marker whose rule declared it ran, and the YAML engines do not declare —
-    // so both of these waivers come back "unaudited" rather than judged
-    // (measured 2026-08-07). Until that is closed this is the only thing that
-    // notices, and it would still be worth keeping afterwards, since dev-lint
-    // does not run on a runner at all.
+    // so these waivers come back "unaudited" rather than judged. This is the
+    // only thing that notices, and would stay worth keeping even once that
+    // changes, since dev-lint does not run on a runner at all.
     let rows = gate_rows();
     let claimed: Vec<String> = claims().into_iter().map(|(row, _)| row).collect();
 
@@ -233,8 +228,8 @@ fn ci_runs_the_covered_rows_in_gate_order() {
     // and for failure reporting it is — every row runs whatever came before.
     // That stops being true the moment one row writes an artifact another reads.
     // `frontend build` writes `dist/` and `frontend ui-check` serves it; inverting
-    // those two is exactly the breakage that cost two commits, and in a workflow
-    // nothing else would have noticed.
+    // those two leaves the check nothing to serve, and in a workflow nothing
+    // else would notice.
     let rows = gate_rows();
     for (job, names) in workflow_jobs() {
         let order: Vec<usize> = names

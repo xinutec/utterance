@@ -97,10 +97,10 @@ pub struct VoiceParams {
     pub calibration: Option<String>,
     /// Which mapping or mappings to hear, comma separated.
     ///
-    /// `field` (the default) sounds every frame as a continuous texture;
-    /// `notes` sounds discrete events at onsets; `field,notes` sounds both, so
-    /// a stream of events sits over a texture. The only way to judge any of them
-    /// is against the others.
+    /// `field` (the default) and `tonnetz` sound every frame as a continuous
+    /// texture; `notes` sounds discrete events at onsets; `field,notes` sounds
+    /// both, so a stream of events sits over a texture. The only way to judge
+    /// any of them is against the others.
     #[serde(default)]
     pub mapping: Option<String>,
 }
@@ -132,9 +132,9 @@ pub struct RecordingDetail {
 
 /// `POST /api/recordings?label=…` — body is the raw WAV file.
 ///
-/// Analysis runs synchronously. Half a minute of audio analyses in well under a
-/// second, so a job queue would add a state machine and a polling endpoint to
-/// save nothing anyone would notice.
+/// Analysis runs synchronously. A take analyses in seconds at most, so a job
+/// queue would add a state machine and a polling endpoint to save little anyone
+/// would notice.
 pub async fn upload(
     State(app): State<AppState>,
     Query(params): Query<UploadParams>,
@@ -200,8 +200,9 @@ pub struct RoleBody {
 /// `PUT /api/recordings/{id}/role` — say what an already-stored take is for.
 ///
 /// A whole endpoint for one field, because the field decides whether a take
-/// shapes the speaker's sound world, and until this existed it could only be
-/// set while uploading. See [`crate::store::Store::put_role`] for what that cost.
+/// shapes the speaker's sound world, and a take that arrived as a file or before
+/// roles existed has no other way to be told. See
+/// [`crate::store::Store::put_role`].
 ///
 /// Idempotent, and a `PUT` rather than a `PATCH` for that reason: the body is
 /// the complete new value of the thing being addressed.
@@ -668,7 +669,7 @@ fn build_score(
     // it. Both carry the consonants, so taking them from the first and leaving
     // the second's behind is what stops the noise layer being played twice.
     //
-    // Asked by material rather than by name, so a fourth texture mapping is
+    // Asked by material rather than by name, so a new texture mapping is
     // heard here without this function learning it exists. The clash check above
     // has already refused two of a material, so `find` is the only one.
     let texture = chosen.iter().find(|m| m.makes() == Material::Texture);

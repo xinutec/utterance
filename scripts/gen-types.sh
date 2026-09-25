@@ -12,9 +12,8 @@
 # live and how to make cargo emit them. The rest — generate into a scratch
 # directory and install only on success, refuse a generation that emitted
 # nothing, copy the types and not whatever else landed beside them, compare by
-# content rather than by asking git — is dev-lint#gen-types, shared with the
-# four other repositories that had each grown their own version of it.
-# scripts/check-types.sh is gone with it.
+# content rather than by asking git — is dev-lint#gen-types, shared across the
+# fleet.
 #
 # `--features ts` turns ts-rs on (off in normal builds). `--workspace` so
 # utterance-analysis's voiceprint types export alongside the server's wire types.

@@ -1,7 +1,7 @@
 /**
  * The boundary where a failure stops being HTTP and becomes something to say.
  *
- * Worth testing directly, and it was not until now: `classifyApiError` is the
+ * Worth testing directly: `classifyApiError` is the
  * one function every page's error message goes through, and every branch of it
  * is about a case nobody hits while developing — the backend down, a proxy
  * answering instead of the app, a code from a build that is not this one.
@@ -47,8 +47,8 @@ describe("classifyApiError", () => {
 
   it("survives a body that is not an error body at all", () => {
     // An ingress 502 answers with HTML, and a proxy can send differently-shaped
-    // JSON. Reading `.code` off either used to manufacture a value the compiler
-    // then trusted all the way to the screen.
+    // JSON. Reading `.code` off either would manufacture a value the compiler
+    // then trusts all the way to the screen.
     expect(classifyApiError(answered(502, "<html>Bad Gateway</html>")).kind).toBe("unknown");
     expect(classifyApiError(answered(400, { code: 7, message: 9 })).kind).toBe("unknown");
   });

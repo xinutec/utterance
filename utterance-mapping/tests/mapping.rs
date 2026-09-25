@@ -1,11 +1,10 @@
 //! The mapping taxonomy, held to the promises the enum makes for it.
 //!
-//! Most of what used to need a test here is now a type: a knob cannot claim a
-//! mapping that does not exist, the render cannot dispatch on a misspelled
-//! name, and a variant added without a score does not compile. What remains is
-//! the handful of places where a `&'static str` or a `const` still restates
-//! something the compiler cannot check — and each of those is checked here
-//! rather than left to hold by inspection.
+//! Most of the taxonomy is held by the type: a knob cannot claim a mapping that
+//! does not exist, the render cannot dispatch on a misspelled name, and a
+//! variant added without a score does not compile. What remains is the handful
+//! of places where a `&'static str` or a `const` restates something the
+//! compiler cannot check, and each of those is checked here.
 
 use utterance_mapping::mapping::{CONTINUOUS, Mapping, Material};
 
@@ -44,7 +43,7 @@ fn an_unknown_name_is_not_a_mapping() {
 /// It exists because `Knob::mappings` is a `const` and a const context cannot
 /// filter an array — so the list is written out, and a mapping that started
 /// making a texture without being added to it would quietly stop being reached
-/// by the field knobs. That failure looks like five sliders that do nothing.
+/// by the field knobs. That failure looks like sliders that do nothing.
 #[test]
 fn continuous_is_every_texture_mapping() {
     let derived: Vec<Mapping> = Mapping::ALL

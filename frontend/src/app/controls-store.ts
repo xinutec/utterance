@@ -14,9 +14,8 @@ import { RecordingsApi } from "./recordings-api";
  * anything anyone does here.
  *
  * Failure is deliberately quiet. Without these the studio still renders at the
- * mapping's defaults, which is exactly what it did before there were any
- * controls; only the sliders are missing, and an error banner over a working
- * player would misdescribe that.
+ * mapping's defaults; only the sliders are missing, and an error banner over a
+ * working player would misdescribe that.
  */
 @Injectable({ providedIn: "root" })
 export class ControlsStore {

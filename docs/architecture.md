@@ -35,7 +35,7 @@ rather than another view of pitch.
 The single structural commitment of this repo. These layers live in separate
 crates so that a discarded aesthetic idea never drags analysis code with it.
 
-All three exist. The dependency runs one way only — realisation reads a score,
+The dependency runs one way only — realisation reads a score,
 mapping reads a voiceprint, and neither lower layer may learn that a higher one
 exists. `src` is the composition root and the only crate that depends on all
 three.
@@ -46,13 +46,12 @@ mirror of the rule keeping analysis from knowing what a scale is. By the time a
 score exists every musical decision is already made, which is what lets a
 synthesiser be rewritten without touching a mapping.
 
-**What a score carries is the ceiling on how the music can sound**, and it has
-been widened twice for exactly that reason. It began as four numbers per note
-plus one fixed spectrum, and no synthesiser craft could get past that — a
-spectrum that cannot change produces a tone that does not move. It now carries a
-palette of spectra to travel between, a colour per note, breath, the speaker's
-own detune, a stream of noise events for the consonants, and a `Field`: per-frame
-parameter streams for music that is not made of events at all.
+**What a score carries is the ceiling on how the music can sound.** No
+synthesiser craft gets past it — a spectrum the score cannot change produces a
+tone that does not move. So it carries a palette of spectra to travel between,
+a colour per note, breath, the speaker's own detune, a stream of noise events for
+the consonants, and a `Field`: per-frame parameter streams for music that is not
+made of events at all.
 
 Widening this interface is how the output gets richer. Tinkering downstream of it
 is not.
@@ -82,11 +81,12 @@ can be checked to be reading its input rather than restating its own assumptions
 — a stretched spectrum must *not* make the octave consonant. Whether the output
 sounds good is not a thing any test here decides.
 
-**Mappings coexist rather than replace each other.** Two exist: `compose` reads
-onsets and emits notes, `field` reads every frame and emits a continuously
-sounding texture. They are alternatives over one voiceprint, renderable
-separately or together, because the only way to judge either is against the
-other. Anything a mapping chooses that could reasonably be chosen differently
+**Mappings coexist rather than replace each other.** `field` reads every frame
+and emits a continuously sounding texture; `tonnetz` does the same with its
+harmony quantised to a lattice built from the speaker's own consonances;
+`compose` (the `notes` mapping) reads onsets and emits notes. They are alternatives over one
+voiceprint, renderable separately or a texture and notes together, because the
+only way to judge any of them is against the others. Anything a mapping chooses that could reasonably be chosen differently
 belongs in `params::Params` and is reachable from the render URL — a constant can
 only be changed by editing and rebuilding, and these are meant to be swept by
 whoever is listening. `params::KNOBS` describes each one well enough to be
@@ -130,8 +130,8 @@ The intent for each:
   latter. Separating them needs the stress hierarchy, below.
 - **formants** — F1, F2 and F3, the vocal-tract resonances. F1 against F2 is a
   two-dimensional space in which every vowel of a language occupies a region, so
-  a vowel sequence is a path through it — the geometry the harmony mapping is to
-  be built on. Nearly independent of pitch, which is what makes it a separate
+  a vowel sequence is a path through it — the geometry the harmony mappings are
+  built on. Nearly independent of pitch, which is what makes it a separate
   measurement rather than a view of the same thing. `null` where the fit found
   nothing in that formant's anatomical range: assignment is per-frame with no
   continuity tracking, so a formant that drops out is reported as absent rather
@@ -142,7 +142,8 @@ The intent for each:
   whole. The amplitudes are the payload rather than the frequencies, because a
   voice is very nearly harmonic and what differs between people is which
   partials their tract emphasises. This is what a tuning is derived from.
-- **texture** — spectral centroid and flatness per frame, measured above 300 Hz.
+- **texture** — spectral centroid, flatness and tilt per frame, measured above
+  300 Hz.
   Defined everywhere, interesting mostly where the voice is *unvoiced*: nearly
   three quarters of ordinary speech carries no fundamental, and every other field
   here gates that away. It characterises noise rather than classifying phones —
@@ -167,7 +168,9 @@ that never reached it.
 
 It is measurement rather than aesthetics, which is why it lives in the analysis
 layer: *how high does this person's F2 go* has an answer that can be shown wrong.
-Two properties are worth knowing from outside the module:
+It is built from the takes marked as calibration only, so other people's singing
+uploaded as material never shapes it. Three properties are worth knowing from
+outside the module:
 
 - **Bounds are percentiles, not extremes.** Formant assignment is per-frame with
   no continuity tracking, so a few frames per take land somewhere the speaker
@@ -180,8 +183,7 @@ Two properties are worth knowing from outside the module:
   the third formant's range, pitch, and the brightness the speaker's voiced tone
   moves through. The rule is not about tidiness: normalised against a fixed
   range, a measurement stops meaning *bright for them*; normalised against the
-  take, the difference between two things one person said is normalised away —
-  and that second failure has already shipped once, in the field's pitch drift.
+  take, the difference between two things one person said is normalised away.
 
 Because a profile is a pure function of the voiceprints it is built from, it is a
 cache in the same sense they are, and carries its own version for the same
@@ -194,14 +196,14 @@ kinds of recording we have answer different questions.
 
 **Sustained material** — a held or glided vowel — bounds how badly something
 over-fires. It cannot say what the right answer is, because a continuous sound
-has no discrete events while still changing spectrally throughout. The onset
-detector was first tuned against a synthetic sustained tone, passed cleanly, and
-then reported 22 events in seven seconds of one real held vowel: a generated tone
-has none of the jitter a voice does, so the fixture could not fail.
+has no discrete events while still changing spectrally throughout. And it has to
+be real: a synthetic sustained tone has none of the jitter a voice does, so an
+onset detector that reports 22 events in seven seconds of one real held vowel
+passes it cleanly.
 
-**Speech** is where accuracy has to be judged, and judging it needs labels a
-person supplies by listening. We do not have those yet, so the onset tests assert
-bounds rather than counts, and say so.
+**Speech** is where accuracy has to be judged, and judging it needs ground truth
+the recording does not carry. There is none yet, so the onset tests assert bounds
+rather than counts, and say so.
 
 The rule this leaves behind: **when a test cannot fail, say so in the test.** A
 bound honestly labelled as a bound is useful. The same assertion dressed up as
@@ -221,9 +223,9 @@ between runs.
 full of `sin`, `ln`, `log10` and complex `arg`, and libm implementations differ
 between platforms in the last bits — so byte-identical output *across* machines
 is neither claimed nor tested. The determinism tests compare two runs in the same
-process, which is exactly as far as the claim goes. Committing a golden
-voiceprint and asserting against it would be worth doing, and would have to allow
-a tolerance rather than compare bytes.
+process, which is exactly as far as the claim goes. A golden voiceprint asserted
+against across machines would have to allow a tolerance rather than compare
+bytes.
 
 ## Why no ML
 

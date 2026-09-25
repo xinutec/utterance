@@ -34,7 +34,7 @@ function setUp(url = "/studio") {
   // `started` has to keep answering the way the real one does — it is defined as
   // "whether `start()` has already run", and it is what makes `init()`
   // idempotent. A stub that always said false would leave the guard untested and
-  // the seams wired twice, which is what the first run of this spec did.
+  // the seams wired twice.
   let started = false;
   const start = vi.spyOn(TelemetryCore.prototype, "start").mockImplementation(() => {
     started = true;

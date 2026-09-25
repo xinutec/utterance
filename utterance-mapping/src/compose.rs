@@ -13,10 +13,9 @@
 //!   during the note
 //! - **how breathy**: from how periodic the voice was there
 //!
-//! The last two exist because the first version read four of the roughly ten
-//! streams a voice emits and turned them into notes — the exact failure
-//! `docs/architecture.md` warns about, a controller richer than the thing it
-//! controls. Aperiodicity and formant *movement* are two more of them.
+//! The last two read streams a note otherwise discards — aperiodicity and
+//! formant *movement* — against the failure `docs/architecture.md` warns about,
+//! a controller richer than the thing it controls.
 //!
 //! The weak link remains the first rule. Onsets mean *the spectrum changed
 //! here*, not *a syllable began here*, and until the stress hierarchy exists the
@@ -75,9 +74,9 @@ const FULL_BREATH_APERIODICITY: f32 = 0.6;
 
 /// Most of a note that may be noise.
 ///
-/// Lowered from 0.7 after listening. Breath is meant to keep a tone from
-/// sounding sterile, and at a third of the energy it stops being a quality of
-/// the tone and becomes a hiss laid over it.
+/// Set by listening. Breath is meant to keep a tone from sounding sterile, and
+/// past about a third of the energy it stops being a quality of the tone and
+/// becomes a hiss laid over it.
 const MAX_BREATH: f32 = 0.3;
 
 /// Turn a voiceprint into a score, in the world a [`Voice`] describes.
@@ -180,14 +179,11 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
 /// How much of a note should be breath, from how periodic the phonation was.
 ///
 /// **Median over the voiced frames the note spans**, and every part of that
-/// matters. Reading a single frame at the onset measured the transition into the
-/// note rather than the note: on the first real speech take, frames at and just
-/// after an onset averaged 0.33 aperiodicity while the voiced frames of the same
-/// take averaged 0.066 — five times less. Every note was therefore built with a
-/// third of its energy as noise, which is audible as a hiss over the whole
-/// piece and was the first thing anyone remarked on.
+/// matters. A single frame at the onset measures the transition into the note
+/// rather than the note — on real speech about five times as aperiodic — and
+/// builds every note with a hiss over it.
 ///
-/// Restricting to voiced frames is what fixes it. Unvoiced frames inside a
+/// Voiced frames only, because unvoiced frames inside a
 /// note's span are its consonants, and those are already sounded by the noise
 /// stream; counting them here plays them twice, once as themselves and once as
 /// a wash across the note beside them.
@@ -242,15 +238,12 @@ fn amplitude_at(vp: &Voiceprint, frame: usize, loudest_db: f32) -> f32 {
 /// A vowel's energy sits in harmonics and measures near zero; a fricative's is
 /// spread across everything and measures high.
 ///
-/// Set against the first real speech take by sweeping this and [`NOISE_FLOOR`]
-/// together and counting how many selected runs had a centroid below 1.5 kHz —
-/// too low for any fricative, so almost certainly room rather than voice. The
-/// answer was to be **strict about shape and lenient about level**: at this bar
-/// with a floor of 1.5%, 66 runs came through with none of them low-centred,
-/// where relaxing the shape bar to 0.08 gave 119 runs of which 28 were room
-/// tone. Shape is what identifies a consonant; quietness is a property
-/// consonants genuinely have, so screening hard on level throws away the real
-/// ones first.
+/// Set on real speech by sweeping this and [`NOISE_FLOOR`] together and counting
+/// selected runs centred below 1.5 kHz — too low for any fricative, so room
+/// rather than voice. The answer was to be **strict about shape and lenient
+/// about level**: a looser shape bar lets room tone through in quantity. Shape
+/// is what identifies a consonant; quietness is a property consonants genuinely
+/// have, so screening hard on level throws away the real ones first.
 const NOISE_FLATNESS: f32 = 0.20;
 
 /// Shortest run of noise worth sounding, in frames.
@@ -288,9 +281,9 @@ const MIN_NOISE_BANDWIDTH_HZ: f32 = 250.0;
 
 /// Turn the unvoiced stretches of a take into noise events.
 ///
-/// This is the material every earlier version threw away. Nearly three quarters
-/// of ordinary speech carries no fundamental, and all of it was reaching the
-/// mapping only as a trigger for a note built out of the *following* vowel.
+/// Nearly three quarters of ordinary speech carries no fundamental, and without
+/// this it would reach a mapping only as a trigger for a note built out of the
+/// *following* vowel.
 ///
 /// Each run of consecutive noise-like frames becomes one event, keeping the
 /// speaker's own consonant timing — which is also the fastest structural layer

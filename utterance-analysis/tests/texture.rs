@@ -1,6 +1,6 @@
 //! Noise characterisation against signals whose spectrum is known.
 //!
-//! Both measurements have textbook values on textbook signals, so these are not
+//! The measurements have textbook values on textbook signals, so these are not
 //! a matter of judgement: white noise is flat and a sine is not, and a band of
 //! noise has its centroid in the middle of the band.
 
@@ -31,7 +31,7 @@ fn white(secs: f32) -> Vec<f32> {
         .collect()
 }
 
-/// White noise through a one-pole resonator, giving a band around `centre_hz`.
+/// White noise through a two-pole resonator, giving a band around `centre_hz`.
 fn band(centre_hz: f32, bandwidth_hz: f32, secs: f32) -> Vec<f32> {
     let mut signal = white(secs);
     let theta = 2.0 * std::f32::consts::PI * centre_hz / ANALYSIS_RATE as f32;
@@ -138,10 +138,9 @@ fn is_a_pure_function_of_its_input() {
 
 #[test]
 fn a_fricative_under_room_rumble_still_reads_as_noise() {
-    // The failure that made the first version useless on real speech. Every
-    // recording has low-frequency energy in it — room, proximity, the tail of
-    // the last vowel — and measuring across the whole spectrum let that dominate
-    // both numbers, so genuine consonants came back reading as tonal.
+    // Every recording has low-frequency energy in it — room, proximity, the tail
+    // of the last vowel — and measuring across the whole spectrum lets that
+    // dominate both numbers, so genuine consonants read as tonal.
     let hiss = band(6_000.0, 3_000.0, 1.0);
     let rumble = band(80.0, 40.0, 1.0);
     let mixed: Vec<f32> = hiss
@@ -270,7 +269,7 @@ fn tilt_separates_two_vowels_the_centroid_agrees_about() {
 
 #[test]
 fn the_band_never_reaches_below_its_stated_low_edge() {
-    // `NOISE_BAND_LOW_HZ` is a claim the rest of the system reads: both series
+    // `NOISE_BAND_LOW_HZ` is a claim the rest of the system reads: the series
     // are documented as measured above 300 Hz, and the consonant thresholds
     // downstream were set from a sweep against a real take *on that basis* —
     // room rumble swamping a consonant measure is the mistake this constant
@@ -278,8 +277,7 @@ fn the_band_never_reaches_below_its_stated_low_edge() {
     //
     // The first bin is `ceil(300 / 31.25)` = 10, at 312.5 Hz. Rounding that down
     // instead admits bin 9 at 281.25 Hz, and a tone sitting exactly there is
-    // then measured as if it were part of the noise band. Nothing noticed:
-    // the mutant survived the whole suite on 2026-08-07.
+    // then measured as if it were part of the noise band.
     //
     // The centroid is a power-weighted mean of the bins in the band, so it
     // cannot fall below the band's first bin. That makes this an invariant

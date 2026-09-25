@@ -41,16 +41,11 @@ pub enum AppError {
 
 /// Every failure this server can name.
 ///
-/// **One list, in Rust, because the browser branches on it.** These were
-/// `&'static str` literals built in the two `match`es below and in `webauth`,
-/// and read back in the frontend as bare strings — `err.code === "unplayable"`
-/// sat in the compare page with nothing anywhere checking that the backend
-/// still spells it that way. A code renamed on this side went on compiling on
-/// both, and what reached a listener was the generic wording for a failure the
-/// page knew perfectly well how to explain.
-///
-/// The enum crosses the wire through ts-rs, so the browser reads a union and a
-/// comparison against a code that does not exist stops the build.
+/// **One list, in Rust, because the browser branches on it.** The enum crosses
+/// the wire through ts-rs, so the browser reads a union and a comparison against
+/// a code that does not exist stops the build. As bare strings, a code renamed
+/// here would go on compiling on both sides, and a listener would get the
+/// generic wording for a failure the page knew how to explain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]

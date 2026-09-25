@@ -27,7 +27,6 @@ partials: Partials,
  * The shape of the noise, per frame.
  *
  * Defined everywhere but interesting mostly where the voice is unvoiced —
- * the consonants, which are most of ordinary speech and which every other
- * field here gates away.
+ * the consonants, which every other field here gates away.
  */
 texture: Texture, };

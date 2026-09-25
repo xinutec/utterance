@@ -20,7 +20,7 @@ export interface Difference {
 /**
  * Everything the two sides disagree about, in the order it is published.
  *
- * **The mapping counts as a setting**, and it is now the largest one there is:
+ * **The mapping counts as a setting**, and it is the largest one there is:
  * the field and the lattice are two different pieces of music from one voice,
  * where a knob is a shade of one. Left out, the page would answer "nothing
  * differs" to the most interesting comparison it can make — and since that

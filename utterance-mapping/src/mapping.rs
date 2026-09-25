@@ -1,17 +1,9 @@
 //! The mappings, as a closed set.
 //!
-//! Every other taxonomy in this project is an enum — a take's role, a vowel
-//! corner, a calibration step — and this one was a table of `&str` for longer
-//! than the rest, because it started as one row and a match arm and never
-//! stopped being spelled out by hand. The cost was not hypothetical: the route
-//! chose a mapping with `names.contains(&"tonnetz")`, so a misspelled literal
-//! compiled and quietly fell through to the branch below it, and the table that
-//! promised to be the single source said so itself — *the compiler will not
-//! remind you about the second*.
-//!
-//! It does now. [`Mapping::score_with`] is the dispatch, so a variant added here
-//! fails to compile until it says what it makes and how it sounds, and the route
-//! that combines them never names one.
+//! An enum rather than names, so a misspelling cannot compile.
+//! [`Mapping::score_with`] is the dispatch: a variant added here fails to compile
+//! until it says what it makes and how it sounds, and the route that combines
+//! them never names one.
 
 use serde::{Deserialize, Serialize};
 use utterance_analysis::voiceprint::Voiceprint;
@@ -24,14 +16,14 @@ use crate::voice::Voice;
 ///
 /// A score carries one continuous field and one list of events, so two mappings
 /// making the same material cannot both be heard. Naming the material rather
-/// than writing the clash out as a rule between named pairs means a fourth
+/// than writing the clash out as a rule between named pairs means a new
 /// mapping inherits the answer instead of needing a new line.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum Material {
-    /// The continuously sounding layer. Two mappings make it.
+    /// The continuously sounding layer.
     Texture,
     /// Discrete events at onsets.
     Events,
@@ -123,20 +115,18 @@ impl Mapping {
                  change by keeping two voices and stepping one."
             }
             Mapping::Notes => {
-                "Discrete events at onsets. Closer to a melody, and the weaker of the \
-                 two — kept because comparing them is how either gets judged."
+                "Discrete events at onsets. Closer to a melody, though its rhythm \
+                 follows spectral change rather than syllables."
             }
         }
     }
 
     /// Sound this mapping.
     ///
-    /// **The dispatch lives here and not in the route.** It was three `if`s on
-    /// string equality in `routes::api`, which is the composition root and so
-    /// the one place with no business knowing that a lattice is a kind of
+    /// **The dispatch lives here and not in the route.** `routes::api` is the
+    /// composition root and has no business knowing that a lattice is a kind of
     /// texture. Here the match is exhaustive, so adding a variant is a compile
-    /// error until it has a score to produce — which is exactly the reminder the
-    /// old table admitted it could not give.
+    /// error until it has a score to produce.
     pub fn score_with(self, vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
         match self {
             Mapping::Field => crate::field::score_with(vp, voice, params),

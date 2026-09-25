@@ -104,9 +104,9 @@ fn estimate(window: &[f32], tau_min: usize, tau_max: usize) -> F0Frame {
 
 /// YIN step 1: the squared-difference function d(tau).
 fn difference(x: &[f32], tau_max: usize) -> Vec<f32> {
-    // O(W * tau_max) as written — about 230k operations per frame at our window
-    // and range, which is not the bottleneck. It can become an FFT-based
-    // autocorrelation if it ever is.
+    // O(W * tau_max) — about 180k operations per frame at our window and range,
+    // which is not the bottleneck. It can become an FFT-based autocorrelation if
+    // it ever is.
     let n = x.len() - tau_max;
     (0..tau_max)
         .map(|tau| (0..n).map(|j| (x[j] - x[j + tau]).powi(2)).sum())

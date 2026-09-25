@@ -16,10 +16,9 @@ utterance-analysis = { path = "../utterance-analysis" }
 # serves them, and the generated TypeScript should mirror what the API actually
 # returns rather than what this crate happens to hold.
 #
-# `mapping::Mapping` and `mapping::Material` are the exception, and it is worth
-# saying why. They are not projected on the way out — the API serves the variant
-# itself, so a hand-written wire copy would be the same three names again, which
-# is the duplication this module exists to remove.
+# `mapping::Mapping`, `mapping::Material` and `params::Knob` are the exception:
+# the API serves them unchanged, so a hand-written wire copy would only restate
+# them.
 serde = { version = "1", features = ["derive"] }
 ts-rs = { version = "12", features = ["serde-compat"], optional = true }
 

@@ -10,12 +10,11 @@
 //! synthesiser and the two stop being separable. By the time a score exists,
 //! every musical decision has already been made.
 //!
-//! **What a score carries is the ceiling on how the music can sound.** The first
-//! version held four numbers per note and one fixed spectrum for the whole piece,
-//! and no amount of synthesiser craft could get past that: a spectrum that cannot
-//! change produces a tone that does not move, which is the dead-organ sound of
-//! every naive additive synthesiser. Widening this interface is therefore how the
-//! output gets richer, not tinkering downstream of it.
+//! **What a score carries is the ceiling on how the music can sound.** No amount
+//! of synthesiser craft gets past it: a spectrum the score cannot change produces
+//! a tone that does not move, which is the dead-organ sound of every naive
+//! additive synthesiser. Widening this interface is how the output gets richer,
+//! not tinkering downstream of it.
 
 use serde::{Deserialize, Serialize};
 
@@ -76,10 +75,9 @@ pub struct NoiseEvent {
 ///
 /// **Why this exists.** A note is a quantiser. It takes a continuously varying
 /// measurement and declares one value for its whole span, so every note is a
-/// decision to discard whatever happened during it. The first mapping turned
-/// 46 seconds of voice — 4,600 frames across seven measured streams — into 76
-/// notes of seven fields each, which is under two per cent of what was measured.
-/// No amount of taste in choosing those notes recovers the rest.
+/// decision to discard whatever happened during it: a few dozen notes from
+/// thousands of frames keeps a few per cent of what was measured, and no amount
+/// of taste in choosing those notes recovers the rest.
 ///
 /// Here every frame contributes. The field never stops; silence in the speech is
 /// a quiet field rather than an absent one. That also makes the weakest
@@ -147,17 +145,16 @@ pub struct Score {
     pub detune_cents: f32,
     /// The continuously sounding part, where there is one.
     ///
-    /// `None` falls back to [`Score::events`]. Both exist so a field mapping and
-    /// a note mapping can be compared by ear against the same recording, which
-    /// is the only way any of this gets judged.
+    /// Rendered alongside [`Score::events`]. Both exist so a field mapping and a
+    /// note mapping can be compared by ear against the same recording, which is
+    /// the only way any of this gets judged.
     pub field: Option<Field>,
     /// Discrete notes, for mappings that produce them. Ascending by start time.
     pub events: Vec<Event>,
     /// The consonants, ascending by start time.
     ///
     /// A second stream rather than more notes. In ordinary speech there are more
-    /// of these than there are voiced stretches — the first version of this
-    /// project discarded every one of them, which is most of what made the
+    /// of these than there are voiced stretches, and dropping them makes the
     /// output sound like a reduction of a voice rather than a use of it.
     pub noise: Vec<NoiseEvent>,
 }

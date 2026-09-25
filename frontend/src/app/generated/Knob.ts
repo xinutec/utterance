@@ -12,12 +12,9 @@ import type { Mapping } from "./Mapping";
  * `Params::default`, `Params::sane` and the UI controls cannot disagree, and a knob
  * added to this table appears in the UI with no UI edit.
  *
- * **This is the wire type as well.** `routes::api` used to hold a second `Knob`, field
- * for field, differing only in `String` where this has `&'static str`. The stated
- * reason was that the mapping crate carries no serialisation for a UI — true of a
- * `Score`, which the API projects on the way out, false of this, which it forwards
- * unchanged. A copy required to be identical is not a boundary, it is a second place to
- * forget.
+ * **This is the wire type as well.** The API forwards it unchanged, unlike a `Score`,
+ * which it projects on the way out. A copy required to be identical is not a boundary,
+ * it is a second place to forget.
  */
 export type Knob = { 
 /**
@@ -47,8 +44,6 @@ about: string,
  * the audio is unchanged, so a claim made here is checked.
  *
  * [`Mapping`] rather than a name, so a knob cannot claim one that does not exist.
- * It used to be a `&'static str` compared against another, where a typo made a knob
- * that reached nothing and was therefore never shown.
  */
 mappings: Array<Mapping>, 
 /**
@@ -63,14 +58,9 @@ mappings: Array<Mapping>,
  * the frontend is a second opinion that drifts the first time somebody adds a knob
  * in Rust, and *that* failure shows up as a new control nobody can find.
  *
- * ⚠ **Not a ranking by audible authority.** `bind` stayed primary while its only
- * figure said 18 cents — the smallest in the table — because it is the axis the
- * whole project argues about; `spacing` earns its place on authority alone, with no
- * thesis behind it. Either argument suffices.
- *
- * (That 18 cents was a measurement artefact: it was the field mapping's pitch
- * travel, and on the Tonnetz `bind` moves 1168 cents. Left written down because the
- * decision was right *before* anyone knew, and a rule that only ever agrees with
- * the latest measurement is not a rule.)
+ * ⚠ **Not a ranking by audible authority.** `bind` is primary because it is the
+ * axis the whole project argues about, however little it moves the field; `spacing`
+ * earns its place on authority alone, with no thesis behind it. Either argument
+ * suffices.
  */
 primary: boolean, };

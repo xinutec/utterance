@@ -15,9 +15,9 @@ import { knobValue, withKnob, type MappingSettings } from "./mapping-settings";
 /**
  * The mapping's knobs, as things you can turn.
  *
- * Every one of these was reachable only by editing a URL, which meant the
- * person the music is for could not explore it — and exploring is how the open
- * questions in `docs/roadmap.md` get answered. Whether the speaker's own tuning
+ * Exploring is how the open questions in `docs/roadmap.md` get answered, so the
+ * person the music is for has to be able to reach every knob without editing a
+ * URL. Whether the speaker's own tuning
  * beats equal temperament is not something anyone can settle by argument; it is
  * something you settle by moving a slider and listening twice.
  *
@@ -130,7 +130,7 @@ export class MappingControls {
    * someone assemble a refused combination and press play would teach them that
    * the page is broken rather than that the combination is meaningless. Which
    * mappings are rivals comes from `makes` in what the backend published, so a
-   * fourth mapping needs no change here.
+   * new mapping needs no change here.
    */
   setMappings(names: Mapping[]): void {
     if (names.length === 0) return;

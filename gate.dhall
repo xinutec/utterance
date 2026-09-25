@@ -1,56 +1,25 @@
 {-
 utterance/gate.dhall — this repository's commit gate.
 
-Was `scripts/verify.sh`. Three of its parts moved rather than disappeared.
+Rendered to the committed `gate.json`; `the table matches its Dhall` re-renders
+and diffs it, so running the gate needs no `dhall`. The shared vocabulary —
+`inDevShell`, the clippy target directory, the `ng-build`, `dev-lint` and
+`check-table` rows — comes from dev-lint's schema as `G.` values.
 
-**The lock is now the runner's.** Thirty of the script's seventy-five lines were
-a `mkdir`-based mutex with a pid file and stale-lock detection, because two runs
-share the working tree: the generated-types row regenerates into
-`frontend/src/app/generated` while the other run compares that directory to a
-snapshot, so the second reports drift that does not exist and leaves the loser's
-temp directory inside `generated/` for the next run to report as drift too. That
-reasoning is not utterance's — any table with a regeneration step, a `dist/`, or
-a shared `CARGO_TARGET_DIR` races itself the same way — so `gate` takes one lock
-per worktree for every repository now, still refusing rather than queueing. It
-uses an advisory lock on an open file, which the kernel releases when the process
-dies, so the stale-lock branch this script needed is simply gone.
+The runner takes one lock per worktree and refuses rather than queues, because
+two runs share the working tree: the generated-types row regenerates into
+`frontend/src/app/generated` while comparing it, and a second run would report
+drift that does not exist.
 
-**The build is a row of its own.** `pnpm run ui-check` was `ng build &&
-playwright test`, so the only build in the gate was inside the layout-harness
-step and a build failure was reported as a harness failure. It is now
-`playwright test`, reading what the build row wrote. That is also what lets
-`ng-build` mean something: exactly one thing in the gate writes `dist/`, and it
-has to prove it did — index.html present, non-empty, rewritten by this run, and
-every script it names parseable as an ES module. The script's own note said the
-kqueue teardown abort was "harmless"; it no longer has to be remembered, because
-nothing now judges the build by its exit status.
+Exactly one row writes `dist/`, and `ui-check` reads what it wrote, so a build
+failure is reported as a build failure rather than as a harness one.
 
-**The `&&` chain is gone.** `pnpm run lint && pnpm run typecheck:e2e && pnpm test
-&& pnpm run ui-check` reported one name when four things could be wrong.
-
-Kept verbatim, because it is the best-argued version of this in the fleet: the
-`pnpm install` is unconditional, and not as a speed trade. Deciding *whether* to
-install is the same question as installing — does node_modules match the
+`pnpm install` runs unconditionally, and not as a speed trade. Deciding *whether*
+to install is the same question as installing — does node_modules match the
 lockfile — and pnpm answers it from its own install record while a shell test can
-only guess. The guard this replaced looked for an executable `.bin/eslint`, which
-a half-written tree has: a node_modules missing eslint-visitor-keys passed the
-check and then failed lint with a module-resolution error naming a package nobody
-had touched. 460 ms when there is nothing to do.
-
-The generated `gate.json` is committed; `the table matches its Dhall` re-renders
-and diffs it, so running the gate needs no `dhall`.
-
-**The vocabulary moved into the schema.** `inDevShell`, the clippy target
-directory, the Angular worker cap, and the `ng-build` / `dev-lint` /
-`check-table` rows were spelled out here and in a dozen other tables
-identically — the duplication the shared tools were built to remove, recreated
-one level up. They are `G.` values now. Two consequences the rendered JSON
-shows: every dev-shell row gains `--no-warn-dirty`, because a gate that prints
-"Git tree is dirty" on every row of every run has trained everyone to ignore a
-warning; and dev-lint is pinned to its committed HEAD rather than run out of its
-worktree, which is what stops a neighbour's half-finished edit failing this gate
-for a reason no commit anywhere explains.
-
+only guess: a half-written tree can have an executable `.bin/eslint` and still
+be missing a package lint needs. It costs well under a second when there is
+nothing to do.
 -}
 
 let G = ../dev-lint/gate/schema.dhall
@@ -65,11 +34,6 @@ in  { name = "utterance"
       , {-  Clippy gets its own target directory: clippy-driver and rustc
             fingerprint the workspace differently and evict each other in a
             shared one, forcing a full recompile every time.
-
-            The script read this from `$CARGO_CLIPPY_TARGET_DIR` with the path
-            below as the default. A table's `env` is data, not shell, so there is
-            no expansion — and the override had no other caller, so the default
-            is simply the value now.
         -}
         G.Check::{
         , name = "clippy"
@@ -100,9 +64,6 @@ in  { name = "utterance"
             compiler does not read doc comments, and clippy does not follow the
             links inside them, so a `[`Thing`]` naming something that moved or was
             never public renders as literal text and reads as prose.
-
-            Adopted 2026-09-04, when it found two links resolving to nothing and
-            three aimed at private items — every one of them under a green gate.
         -}
         G.cargoDoc
       , {-  Regenerate the frontend TS from the Rust types and fail on drift.
@@ -156,8 +117,7 @@ in  { name = "utterance"
         , timeout_s = 1800
         }
       , {-  The L2 phone-width layout harness, serving the dist the build row
-            wrote. Placement is load-bearing here rather than presentation:
-            `ui-check` used to build first, and no longer does.
+            wrote — so it must come after that row.
         -}
         G.Check::{
         , name = "frontend ui-check (phone-width layout harness)"
@@ -166,7 +126,7 @@ in  { name = "utterance"
         , {-  Playwright DELETES this at the start of every run, so the run made
               to investigate a failure is the run that erases it — and no option
               turns that off (`preserveOutput` is about PASSING tests). Declaring
-              it here makes the gate copy it aside when this check fails. #1545
+              it here makes the gate copy it aside when this check fails.
           -}
           artifacts = [ "test-results" ]
         , env = G.nonInteractive
@@ -177,10 +137,8 @@ in  { name = "utterance"
             ⚠ This is NOT the same work as the `tests` row above, though it looks
             like it. That row runs cargo in the dev shell against the working
             tree; this one builds the derivation, which resolves dependencies
-            from the committed lockfile and compiles inside /nix/store. The
-            package's own comment says the build runs the tests deliberately, for
-            the external-volume reason — this row is what makes that promise
-            checkable rather than aspirational.
+            from the committed lockfile and compiles inside /nix/store, running
+            the tests there (`doCheck` in flake.nix).
         -}
         G.Check::{
         , name = "the package builds (what this repo publishes)"

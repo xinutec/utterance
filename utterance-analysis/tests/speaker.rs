@@ -422,9 +422,6 @@ fn a_brightness_range_that_runs_backwards_is_refused() {
     // inverted range would not divide by zero — it would divide by a negative,
     // and every brightness would come back mirrored: the darkest frame reported
     // as the brightest, silently and for the whole take.
-    //
-    // Dropping the `high_hz <= low_hz` half of that guard passed the entire
-    // suite on 2026-08-07.
     assert!(
         Brightness::new(3000.0, 300.0).is_none(),
         "a range from 3000 Hz down to 300 Hz was accepted"

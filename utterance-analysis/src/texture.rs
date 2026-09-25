@@ -10,7 +10,7 @@
 //! **This characterises noise rather than classifying phones.** Knowing a frame
 //! is an /s/ is a linguistic label; knowing its energy sits around 7 kHz in a
 //! wide band is a measurement, and it is the one a synthesiser can actually act
-//! on. Two numbers per frame carry it:
+//! on. Three numbers per frame carry it:
 //!
 //! - **centroid** — where the energy sits. The standard correlate of
 //!   brightness, and what separates a hissed *s* from a hushed *sh* from a
@@ -36,9 +36,9 @@ use serde::{Deserialize, Serialize};
 use crate::frame::{self, SPECTRAL_WINDOW};
 use crate::resample::ANALYSIS_RATE;
 
-/// Lowest frequency either measure looks at.
+/// Lowest frequency the measures look at.
 ///
-/// Both are measured above this rather than across everything, and the reason is
+/// Measured above this rather than across everything, and the reason is
 /// empirical: on real speech the unvoiced frames came back with a median
 /// centroid of 153 Hz and a flatness of 0.001 — reading as *tonal* — because a
 /// room's rumble, a microphone's proximity boost and the tail of the previous
@@ -61,9 +61,8 @@ pub const NOISE_BAND_LOW_HZ: f32 = 300.0;
 /// to 5 kHz instead, which is clear of the transition band and still spans four
 /// octaves of the band a voice actually radiates into.
 ///
-/// The same reasoning as [`NOISE_BAND_LOW_HZ`] at the other end, and the same
-/// failure it was written for: a measure whose average is dominated by something
-/// that is not the voice.
+/// The same reasoning as [`NOISE_BAND_LOW_HZ`] at the other end: a measure whose
+/// average is dominated by something that is not the voice.
 pub const TILT_HIGH_HZ: f32 = 5000.0;
 
 /// Floor added to every bin before the flatness ratio.
@@ -76,7 +75,7 @@ const BIN_FLOOR: f32 = 1e-10;
 
 /// Per-frame description of the noise in a recording.
 ///
-/// Both series are measured above [`NOISE_BAND_LOW_HZ`], so they describe the
+/// Every series is measured above [`NOISE_BAND_LOW_HZ`], so it describes the
 /// band consonants occupy rather than the whole spectrum.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -97,7 +96,7 @@ pub struct Texture {
     pub tilt_db_per_octave: Vec<f32>,
 }
 
-/// Measure the centroid and flatness of every frame.
+/// Measure the centroid, flatness and tilt of every frame.
 pub fn track(samples: &[f32]) -> Texture {
     let n = frame::count(samples.len());
     if n == 0 {

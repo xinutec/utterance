@@ -1,11 +1,9 @@
 //! How independent the voice's streams actually are, measured across the store.
 //!
-//! **Why this exists.** The field mapping's own doc once claimed six streams
-//! while `colour` was set from the same normalised F2 that walked the root: two
-//! streams welded into one, and the mapping was therefore simpler than the count
-//! said. That was found by reading the code rather than by listening, which is
-//! luck. The decision it produced — *one stream drives one parameter* — has had
-//! nothing to check it since.
+//! **Why this exists.** *One stream drives one parameter* is only checkable by
+//! measurement: two streams welded together — one a rescaling of the other —
+//! make a mapping simpler than its count of streams says, and nothing about the
+//! code shows it.
 //!
 //! So this reports the correlation between every stream a mapping reads. What a
 //! listener hears as variety is how many things can move **independently**, and
@@ -46,9 +44,8 @@ const PEAK_DROP_DB: f32 = 40.0;
 /// Above this, two streams are reported as one stream counted twice.
 ///
 /// 0.9 leaves room for streams that genuinely share a cause — loudness and
-/// aperiodicity both move at a phrase boundary — while catching the case the
-/// field mapping actually had, where one series *was* the other after a linear
-/// rescaling and the correlation was exactly 1.
+/// aperiodicity both move at a phrase boundary — while catching one series that
+/// *is* the other after a linear rescaling, where the correlation is exactly 1.
 const WELDED: f32 = 0.9;
 
 /// One named per-frame series, as the mapping reads it.

@@ -42,8 +42,8 @@ describe("differences", () => {
   });
 
   it("names the mapping when the two sides hear different ones", () => {
-    // The largest difference the page can express, and the one it used to
-    // report as "nothing differs".
+    // The largest difference the page can express, and one a naive comparison
+    // of the knobs would report as "nothing differs".
     const b: MappingSettings = { ...INITIAL_SETTINGS, mapping: ["tonnetz"] };
     expect(differences(INITIAL_SETTINGS, b, KNOBS)).toEqual([
       { label: "Mapping", name: "mapping", a: "field", b: "tonnetz" },

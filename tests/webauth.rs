@@ -450,12 +450,12 @@ async fn the_authorize_url_escapes_what_it_interpolates() {
 
 // ---- reading the configuration ------------------------------------------
 //
-// `from_env` reads the process environment and so was unreachable from a test:
-// getting at it meant `set_var`, which is `unsafe` in edition 2024 because it
-// races every other thread in the binary, and these tests run in parallel.
-// `from_vars` takes the lookup instead, which puts the decisions below — is a
-// half-set configuration configured, which address does a call go to, who is on
-// the list — in reach without touching the process at all.
+// `from_env` reads the process environment and so is unreachable from a test
+// short of `set_var`, which is `unsafe` in edition 2024 because it races every
+// other thread in the binary. `from_vars` takes the lookup instead, which puts
+// the decisions below — is a half-set configuration configured, which address
+// does a call go to, who is on the list — in reach without touching the
+// process at all.
 
 /// A lookup over a fixed table, standing in for the environment.
 fn vars(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
@@ -543,9 +543,8 @@ fn without_an_internal_url_calls_go_to_the_public_one() {
 
 #[test]
 fn an_internal_url_is_where_the_call_goes_and_the_public_one_is_the_host() {
-    // The failure this prevents cost the fleet's other Nextcloud gate an
-    // afternoon: in-cluster, the public name resolves to the node itself and the
-    // pod's own request hairpins.
+    // In-cluster, the public name resolves to the node itself and the pod's own
+    // request hairpins.
     let mut set = configured();
     set.push((webauth::NC_BASE_URL_ENV, "https://dash.example"));
     set.push((webauth::NC_INTERNAL_URL_ENV, "http://nextcloud.nc.svc/"));

@@ -158,11 +158,9 @@ impl WebAuth {
     ///
     /// Split out because everything below is real decisions — whether a partial
     /// configuration counts as configured, which URL a call goes to, who is on
-    /// the list — and calling `std::env::var` inside them put every one of those
-    /// decisions out of reach of a test. The only way to reach them was
-    /// `set_var`, which edition 2024 made `unsafe` for good reason: it races
-    /// every other thread in the binary, and the tests run in parallel. The same
-    /// trap used to sit in `tests/cli.rs`.
+    /// the list — and calling `std::env::var` inside them would put every one of
+    /// those decisions out of reach of a test, short of `set_var`, which edition
+    /// 2024 made `unsafe` because it races every other thread in the binary.
     pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Option<Self> {
         let secret = var(SESSION_SECRET_ENV).filter(|s| !s.is_empty());
         let client_id = var(CLIENT_ID_ENV).filter(|s| !s.is_empty());
@@ -216,7 +214,7 @@ impl WebAuth {
     /// Public because it is a statement about the deployment rather than an
     /// implementation detail — and because getting it wrong is a failure that
     /// only appears at the end of a sign-in, as a refused connection, on a
-    /// cluster. It cost the fleet's other Nextcloud gate an afternoon.
+    /// cluster.
     pub fn server_call(&self, path: &str) -> (String, Option<String>) {
         let url = format!("{}{path}", self.nc_internal_url);
         if self.nc_internal_url == self.nc_base_url {
@@ -586,10 +584,10 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
 
 /// A 302 with an optional cookie.
 ///
-/// `Secure` is set on every cookie here, unlike the fleet's other Nextcloud
-/// gate, because this app is served over TLS. That means sign-in does not work
-/// over plain http — which is the point: a session cookie that travels in clear
-/// text on a shared network is the thing the gate was raised against.
+/// `Secure` is set on every cookie here, because this app is served over TLS.
+/// That means sign-in does not work over plain http — which is the point: a
+/// session cookie that travels in clear text on a shared network is the thing
+/// the gate was raised against.
 fn redirect(location: &str, set_cookie: Option<String>) -> Response {
     let mut response = Response::builder()
         .status(StatusCode::FOUND)

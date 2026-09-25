@@ -10,9 +10,11 @@ import { filter } from 'rxjs';
 
 export type { UpdateOutcome };
 
-/** Marks that we have already auto-reloaded out of an unrecoverable service worker
- *  state. Session-scoped so it survives that very reload. Unchanged from when this
- *  logic lived here, so a tab mid-recovery across the upgrade still sees its mark. */
+/**
+ * Marks that we have already auto-reloaded out of an unrecoverable service
+ * worker state. Session-scoped so it survives that very reload. Keep the key
+ * stable: a tab mid-recovery across an upgrade must still see its mark.
+ */
 const RECOVERY_KEY = 'utterance.sw-recovery-attempted';
 
 /**
@@ -20,10 +22,9 @@ const RECOVERY_KEY = 'utterance.sw-recovery-attempted';
  * `@xinutec/ui-harness/sw-updates`; this is the adapter.
  *
  * ⚠ **ngsw alone caches a build that never learns a newer one exists.** That is
- * why the update path arrives in the same change as the service worker
- * (dev-lint#1384): adding the first without the second is how an app starts
- * serving yesterday's build indefinitely, which is worse than serving none
- * because it looks fine.
+ * why the update path ships with the service worker: without it an app serves
+ * yesterday's build indefinitely, which is worse than serving none because it
+ * looks fine.
  *
  * The policy is shared and unit-tested against a fake. What is here is the
  * Angular wiring — that `SwUpdate.versionUpdates` really feeds it, filtered to

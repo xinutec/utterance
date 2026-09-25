@@ -58,8 +58,8 @@ pub enum NoPlane {
 
 impl fmt::Display for NoPlane {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Every message names the density knob, because it is the one that
-        // caused this in every case seen so far and the only one that undoes it.
+        // Every message names the density knob: it is what prunes a scale this
+        // far, and lowering it is what undoes it.
         match self {
             NoPlane::TooFewIntervals { interior } => write!(
                 f,
@@ -160,18 +160,15 @@ fn is_consonance(candidates: &[Degree], cents: f32) -> bool {
 /// ⚠ **A triangle has three intervals and the third is `a - b`, which the scale never
 /// measured.** The roughness curve is swept as one spectrum against a shifted copy of
 /// itself, so every degree is a good interval *from the tonic* and says nothing about
-/// how two degrees sound against each other. Picking the two deepest and stopping gave
-/// this speaker axes of 884 and 702, putting **182 cents inside every chord the mapping
-/// had ever played** — not a degree, not near one, and close to where the roughness
-/// curve peaks. A sixteen-cent tuning difference was being looked for underneath a
-/// whole-tone clash.
+/// how two degrees sound against each other. Picking the two deepest and stopping can
+/// put an interval near the roughness peak inside every chord — axes of 884 and 702
+/// cents give 182 between them.
 ///
 /// So a pair is judged by its worst interval, a chord being as rough as the roughest
 /// thing in it: pairs whose difference is also a consonance are preferred, and among
-/// those the one whose *shallowest* of the three minima is deepest. On the voice this
-/// was found with, that changes the answer from a major sixth and a fifth to **a fifth
-/// and a major third** — the classical Tonnetz, arrived at from one speaker's spectrum
-/// rather than assumed.
+/// those the one whose *shallowest* of the three minima is deepest. On a real voice
+/// that yields a fifth and a third — the classical Tonnetz, arrived at from one
+/// speaker's spectrum rather than assumed.
 ///
 /// **Falls back to the deepest independent pair** when no pair has a consonant
 /// difference: a lattice with a rough interval in every chord is worse than one
@@ -314,7 +311,6 @@ impl Triangle {
     /// cell and the cells touching it, ordered by how far they sit from the
     /// triangle's middle. Extra voices thicken the chord outward from what it
     /// already is rather than starting a second one somewhere else.
-    ///
     pub fn ring(&self, wanted: usize) -> Vec<(i32, i32)> {
         let corners = self.corners();
         let centre = (
@@ -368,9 +364,7 @@ pub fn triangle_at(x: f32, y: f32) -> Triangle {
 /// **What makes a chord ring long enough to have a tuning.** Without this the
 /// harmony changes the instant a formant estimate wobbles across a line, which
 /// is several times a second on real speech — and a chord that never holds still
-/// for a second cannot be heard as being in one tuning rather than another. That
-/// is measured rather than supposed: `docs/roadmap.md` records the derived scale
-/// as real and currently inaudible for exactly this reason.
+/// for a second cannot be heard as being in one tuning rather than another.
 ///
 /// `hold` is how far past a boundary the mouth must travel before the harmony
 /// follows, as a fraction of a cell. At 0 this is [`triangle_at`]; at 1 the
@@ -398,13 +392,11 @@ pub fn settle(previous: Triangle, x: f32, y: f32, hold: f32) -> Triangle {
 
 /// The harmony's walk across the lattice, holding in space *and* in time.
 ///
-/// **Why [`settle`] alone is not enough, measured rather than supposed.** `hold` is
-/// hysteresis in space — how far past a boundary the mouth must travel — and even at the
-/// top of its range it leaves an artifact it cannot reach. On `what I need vocal 4` at
-/// `hold = 1.0` the mapping spends 99% of its time in rings of a second or more and has
-/// a *median* ring of 0.04 s: a chord sitting still for twenty-two seconds, flicking to
-/// a neighbour for two frames and back. The mouth genuinely crossed the boundary, so the
-/// spatial rule is right to let it; what is wrong is that it came straight back.
+/// **Why [`settle`] alone is not enough.** `hold` is hysteresis in space — how far past
+/// a boundary the mouth must travel — and even at the top of its range it leaves an
+/// artifact it cannot reach: a chord held for many seconds, flicking to a neighbour for
+/// two frames and back. The mouth genuinely crossed the boundary, so the spatial rule is
+/// right to let it; what is wrong is that it came straight back.
 ///
 /// So this adds hysteresis in time. A frame that wants to leave starts a count, and the
 /// harmony follows only once the wanting has lasted `frames` in a row. The two compose:
@@ -434,8 +426,7 @@ impl Walk {
     /// Advance one frame and report the triangle the harmony is in.
     ///
     /// `frames` is the minimum dwell, counted in frames. Zero and one both mean
-    /// *commit as soon as the spatial rule allows*, which is what this did
-    /// before there was a clock in it.
+    /// *commit as soon as the spatial rule allows*.
     pub fn step(&mut self, x: f32, y: f32, hold: f32, frames: usize) -> Triangle {
         let candidate = settle(self.here, x, y, hold);
         if candidate == self.here {

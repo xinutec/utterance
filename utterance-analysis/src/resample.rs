@@ -73,9 +73,7 @@ fn blackman(u: f64) -> f64 {
     if u.abs() > 1.0 {
         return 0.0;
     }
-    // Shift to [0, 1] for the standard form. Spelled as a midpoint because
-    // clippy's `manual_midpoint` rejects `(u + 1.0) * 0.5` from Rust 1.98 on;
-    // the two are bit-identical across this window's domain.
+    // Map [-1, 1] onto [0, 1] for the standard form.
     let x = f64::midpoint(u, 1.0);
     let two_pi_x = 2.0 * std::f64::consts::PI * x;
     0.42 - 0.5 * two_pi_x.cos() + 0.08 * (2.0 * two_pi_x).cos()

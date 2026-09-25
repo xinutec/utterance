@@ -1,16 +1,14 @@
 //! Harmony as a walk across the speaker's own harmonic lattice.
 //!
 //! The other continuous mapping, and the answer to the thing `field` cannot do.
-//! There, five voices are stacked at a fixed distance in scale degrees and the
+//! There, the voices are stacked at a fixed distance in scale degrees and the
 //! whole stack slides as the vowel moves: every moment is the same chord at a
-//! different pitch, and it is never in one place long enough to be heard as
-//! being in a tuning at all. Measured rather than supposed — `docs/roadmap.md`
-//! records the derived scale as real and currently inaudible, because a chord
-//! has to ring for about a second before anyone can hear whether its partials
-//! lock or beat.
+//! different pitch, never in one place long enough to be heard as being in a
+//! tuning at all. A chord has to ring for about a second before anyone can hear
+//! whether its partials lock or beat.
 //!
 //! **What changes here.** The two dimensions of vowel space become the two
-//! dimensions of a lattice spanned by the speaker's two deepest consonances (see
+//! dimensions of a lattice spanned by two of the speaker's own consonances (see
 //! [`crate::lattice`]), and the position on it is *quantised to a triangle*.
 //! Two consequences, and the second is the point:
 //!
@@ -59,11 +57,10 @@ const CELLS_PER_REACH: f32 = 3.0;
 /// near enough for two voices' partials to beat against each other, which is
 /// the whole point of holding a chord still.
 ///
-/// Set by measuring against the other mapping rather than by taste. At half
-/// this, the default chord occupied 113–237 Hz where the field mapping's
-/// occupied 122–928: five voices inside one octave at the bottom of a man's
-/// range, which is mud whatever its tuning. Two mappings meant to be compared
-/// have to sit in the same register or the comparison is about register.
+/// Set against the field mapping's register rather than by taste: much closer
+/// and the default chord crowds into one octave at the bottom of a low voice,
+/// which is mud whatever its tuning. Two mappings meant to be compared have to
+/// sit in the same register or the comparison is about register.
 const CLOSE_POSITION_CENTS: f32 = 300.0;
 
 /// Widest the chord is allowed to be laid out across, in cents.
@@ -169,20 +166,9 @@ pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<V
 pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Field> {
     let params = params.sane();
     // **The lattice is laid out on the speaker's own scale, and `bind` is
-    // applied to the notes it produces rather than to its axes.**
-    //
-    // Binding the axes was the first arrangement and it made `bind` untestable
-    // here. A point's pitch is `x·a + y·b`, so moving an axis moves a chord near
-    // the tonic by a few cents and one three cells out by fifty or more — and
-    // once that folds into an octave, far enough out it is a different note. Two
-    // renders differing in `bind` were therefore two different chord sequences,
-    // and comparing their tuning was comparing nothing.
-    //
-    // Measured: `src/bin/beating.rs` had equal temperament beating *less* than
-    // the derived scale on this mapping, the reverse of the claim and of what
-    // the field mapping shows, because the structural change swamped the tuning.
-    // Applied per sounding pitch, `bind` moves every note by at most a quarter
-    // tone and leaves the chord it belongs to alone.
+    // applied to the notes it produces rather than to its axes** — see
+    // `params::bind_cents_toward_equal` for why binding the axes would make two
+    // renders differing in `bind` two different chord sequences.
     let lattice = Lattice::from_tuning(&voice.tuning).ok()?;
     let path = harmonic_path(vp, voice, params)?;
 
@@ -201,9 +187,9 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
     for i in 0..frames {
         let here = path[i];
 
-        // His prosody, as a slow transposition of everything — measured against
-        // the speaker's habitual pitch rather than this take's own median, for
-        // the reason recorded in `field`.
+        // The speaker's prosody, as a slow transposition of everything —
+        // measured against their habitual pitch rather than this take's own
+        // median, for the reason recorded in `field`.
         let drift_octaves = (drift[i] / voice.tonic_hz).max(0.01).log2() * params.drift;
         let base = voice.tonic_hz * 2f32.powf(drift_octaves);
 
@@ -255,13 +241,9 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
             // rest of the chord gets a say, and it is a floor rather than a
             // layout.
             //
-            // Whole octaves up until it clears, counted rather than stepped. As a
-            // loop this terminated only because the floats happened to be finite,
-            // which is a precondition established three frames away — `previous`
-            // is [`f32::NEG_INFINITY`] for the first voice, and `gap` is capped
-            // above — and stated nowhere. Counting says the same thing with the
-            // bound in the arithmetic. Octaves either way, so a voice stays a
-            // whole number of them from its pitch class.
+            // Whole octaves up until it clears, computed in closed form so the
+            // bound is in the arithmetic rather than in a loop condition. Octaves,
+            // so a voice stays a whole number of them from its pitch class.
             let floor = previous + MIN_SEPARATION_CENTS;
             let cents = if placed < floor {
                 placed + 1200.0 * ((floor - placed) / 1200.0).ceil()

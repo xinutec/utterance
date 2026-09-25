@@ -1,18 +1,13 @@
 //! **`index.html` must revalidate; the hashed bundle may be kept forever.**
 //!
-//! WHY THIS IS A TEST AND NOT A CURL. Six apps were given this header on
-//! 2026-08-14 and the task was closed as "all fixed, deployed and curled". No
-//! standing check went with it, so when three more names were measured on
-//! 2026-09-07 — utterance among them, live since 2026-07-28 — nothing had ever
-//! asked them the question. A header verified by hand once is a header nobody
-//! is watching.
+//! A test and not a curl, because a header verified by hand once is a header
+//! nobody is watching.
 //!
 //! What goes wrong without it: with no `Cache-Control` a client falls back to
 //! HEURISTIC freshness, roughly a tenth of the document's age, and may keep
 //! `index.html` for days without asking. That document names the content-hashed
 //! bundle, so the new `main-*.js` is never fetched either and the deploy is
-//! invisible. An Android `WebView` ran several builds behind for hours with a
-//! missing button as the only symptom.
+//! invisible.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -109,14 +104,10 @@ async fn the_content_hashed_bundle_may_be_kept() {
     assert_eq!(cc, "public, max-age=31536000, immutable");
 }
 
-/// ⚠ **A 304 is not an error, and the difference is not cosmetic.** The guard
-/// in `cache_control_for` was first written as `!status.is_success()`, which
-/// also caught `304 Not Modified` — and a 304 must carry the headers a 200
-/// would, so the client can refresh what it already holds. Without them every
-/// revalidated asset became a full re-fetch. In `messages` the symptom was a
-/// thread that landed 271px above the bottom, because images arrived and grew
-/// the page after it had scrolled: a scroll bug with no visible connection to a
-/// cache header. This test is the cheap version of that accident.
+/// ⚠ **A 304 is not an error, and the difference is not cosmetic.** A guard
+/// written as `!status.is_success()` also catches `304 Not Modified` — and a 304
+/// must carry the headers a 200 would, so the client can refresh what it already
+/// holds. Without them every revalidated asset becomes a full re-fetch.
 #[tokio::test]
 async fn a_revalidated_asset_is_still_told_it_may_be_kept() {
     let harness = TestApp::new();
@@ -159,15 +150,14 @@ async fn a_revalidated_asset_is_still_told_it_may_be_kept() {
 
 /// **A missing FILE must 404, not be handed the page.**
 ///
-/// #1478, measured 2026-09-08: `GET /media/nope.woff2` came back `200 text/html`
-/// — the SPA shell, to a browser that asked for a font. It renders broken icons
+/// Handed the SPA shell, a browser that asked for a font renders broken icons
 /// and reports nothing at all, so the failure is silent on both sides; the wrong
 /// answer being a 200 is exactly what makes this invisible.
 ///
 /// The rule is a dot in the last path segment: `/recordings` is a route and
 /// `/main-ABC123.js` is a file. A heuristic, and the alternative — enumerating
 /// the bundle's own asset names — would have to be rebuilt whenever `ng build`
-/// changes a hash. `tasks` and memview's console both landed this same fix.
+/// changes a hash.
 #[tokio::test]
 async fn a_missing_asset_is_a_404_and_not_the_page() {
     let (status, _) = TestApp::new().cache_control("/media/nope.woff2").await;

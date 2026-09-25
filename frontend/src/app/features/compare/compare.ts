@@ -57,7 +57,7 @@ type Side = "a" | "b";
  *   hear is still visible — which is the difference between "this knob does
  *   nothing" and "this knob does something I cannot hear yet".
  * - **The chart says where.** Clicking moves both players there. Nobody has to
- *   hunt through 46 seconds for the four that differ.
+ *   hunt through a whole take for the seconds that differ.
  */
 @Component({
   selector: "app-compare",
@@ -101,8 +101,8 @@ export class Compare implements OnInit {
    *
    * Held apart from {@link error} because it survives differently: an error is
    * cleared by trying again, while this is a property of the settings and stays
-   * true until one of them moves. Without it, pressing play after a refusal
-   * cleared the explanation and pointed both players at a URL that fails.
+   * true until one of them moves. Otherwise pressing play after a refusal
+   * would clear the explanation and point both players at a URL that fails.
    */
   readonly unplayable = signal<string | null>(null);
 
@@ -123,9 +123,7 @@ export class Compare implements OnInit {
    * True once the *audio* no longer matches the settings.
    *
    * Keyed on the take actually on screen rather than on `recordingId`, which
-   * stays null until someone opens the take picker — so this used to be
-   * permanently false, and the one hint that a re-render was needed never
-   * appeared.
+   * stays null until someone opens the take picker.
    */
   readonly stale = computed(() => {
     const id = this.chosen();
@@ -145,10 +143,9 @@ export class Compare implements OnInit {
   readonly mostDifferent = computed(() => {
     const [a, b] = [this.scoreA(), this.scoreB()];
     if (!a || !b) return null;
-    // Across every panel rather than a chosen few. The first version looked at
-    // level, colour and breath — all three of which are byte-identical under
-    // `bind`, so it confidently offered second zero for the comparison the page
-    // exists to make.
+    // Across every panel rather than a chosen few: level, colour and breath
+    // are all byte-identical under `bind`, the comparison the page exists to
+    // make.
     return mostDifferentAt(a, b);
   });
 
@@ -167,10 +164,9 @@ export class Compare implements OnInit {
   //
   // **Why this page of all of them.** A comparison is the project's unit of
   // evidence — every open question in `docs/roadmap.md` is settled by two
-  // renders and a pair of ears — and until this existed a comparison could only
-  // be passed on as a description of which controls to move. Two people in two
-  // rooms then listen to two slightly different things and disagree about a
-  // result neither of them heard.
+  // renders and a pair of ears. Passed on as a description of which controls to
+  // move, two people in two rooms listen to two slightly different things and
+  // disagree about a result neither of them heard.
   //
   // `a` and `b` each carry a whole settings query, url-encoded inside this one,
   // so the encoding is `settingsQuery` in both directions and there is no second
@@ -264,10 +260,9 @@ export class Compare implements OnInit {
    *
    * **Scores follow the settings; audio waits to be asked for.** Deriving a
    * score is about fifty milliseconds — it is the mapping and nothing else —
-   * where rendering it to audio is seconds of synthesis. Tying both to a button
-   * meant moving a slider changed nothing on screen, and since the staleness
-   * warning was also broken there was no sign that anything needed pressing:
-   * the page looked as though the knobs did nothing at all.
+   * where rendering it to audio is seconds of synthesis. Tied to a button, a
+   * moving slider would change nothing on screen and the page would look as
+   * though the knobs did nothing at all.
    *
    * Responses are matched against the request that asked for them, so a burst
    * of changes during a drag cannot leave an older answer on screen.
@@ -326,10 +321,6 @@ export class Compare implements OnInit {
     this.loading.set(false);
   }
 
-  private fail(err: unknown): void {
-    this.loading.set(false);
-    this.error.set(err instanceof ApiError ? err.message : String(err));
-  }
 
   // ---- playback -----------------------------------------------------------
   //

@@ -292,8 +292,7 @@ fn a_steady_vowel_gives_a_note_whose_colour_holds() {
 
 #[test]
 fn a_less_periodic_voice_gives_a_breathier_note() {
-    // Aperiodicity was measured from the first commit and read by nothing until
-    // now — one of the streams the mapping was throwing away.
+    // Aperiodicity is one of the streams a note would otherwise throw away.
     let mut clean = take(&[0], &[MIDDLE], 100, true);
     clean.pitch.aperiodicity.fill(0.02);
     let mut breathy = take(&[0], &[MIDDLE], 100, true);
@@ -356,8 +355,8 @@ fn make_noisy(vp: &mut Voiceprint, from: usize, to: usize, centroid_hz: f32, fla
 
 #[test]
 fn a_consonant_becomes_a_noise_event() {
-    // The material every earlier version discarded: nearly three quarters of
-    // ordinary speech carries no fundamental.
+    // Nearly three quarters of ordinary speech carries no fundamental, and this
+    // is where it is heard.
     let mut vp = take(&[0], &[MIDDLE], 100, true);
     make_noisy(&mut vp, 40, 60, 7000.0, 0.8);
 

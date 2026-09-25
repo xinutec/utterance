@@ -29,14 +29,13 @@
 //! phase sequence is applied to all eight streams together — every correlation
 //! between them. What it destroys is the arrangement in time and nothing else.
 //!
-//! **Why not a block shuffle.** That was the first control here and it was
-//! wrong in a way worth leaving on the record. Permuting one-second blocks
-//! manufactures a discontinuity at every block edge, so a one-second kernel
-//! lands on a fabricated boundary once a second and a sixteen-second kernel
-//! averages them all away. Its strength therefore varied with the very axis the
-//! tool measures along, and real material duly "lost" at 1 s and "won" at 16 s —
-//! a result that was a property of the control. A control whose bias runs along
-//! the axis under test cannot settle anything on that axis.
+//! **Why not a block shuffle.** Permuting one-second blocks manufactures a
+//! discontinuity at every block edge, so a one-second kernel lands on a
+//! fabricated boundary once a second and a sixteen-second kernel averages them
+//! all away. Its strength varies with the very axis the tool measures along, and
+//! real material "loses" at 1 s and "wins" at 16 s as a property of the control.
+//! A control whose bias runs along the axis under test cannot settle anything on
+//! that axis.
 //!
 //! **A surrogate that keeps the drift is what makes the answer mean something.**
 //! Slow structure and slow *trend* are different claims: a take that simply gets

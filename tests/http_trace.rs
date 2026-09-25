@@ -100,10 +100,9 @@ impl<'a> MakeWriter<'a> for Captured {
 
 #[tokio::test]
 async fn a_refused_request_is_still_logged() {
-    // The defect this was deployed with, found by reading the log rather than
-    // by reasoning about it: tracing was applied *inside* the sign-in gate, so
-    // a 401 short-circuited before anything recorded it — and the requests
-    // worth seeing most, the refused ones, were the only ones missing.
+    // Tracing applied *inside* the sign-in gate lets a 401 short-circuit before
+    // anything records it — and the requests worth seeing most, the refused
+    // ones, would be the only ones missing.
     let dir = std::env::temp_dir().join(format!("utterance-trace-test-{}", std::process::id()));
     let router = utterance::routes::router_with(
         AppState::new(

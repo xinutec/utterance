@@ -6,11 +6,9 @@
 //! not from the sound. `frontend/src/app/features/calibration/steps.ts` puts it
 //! plainly — a take per step makes the label free and exact.
 //!
-//! **The ids therefore have to agree across two languages, and the agreement was
-//! by convention.** The frontend wrote `"vowel-ee"` and the backend would have
-//! matched `"vowel-ee"`, with nothing to notice a rename on either side; the
-//! failure would be silent and total — an unrecognised step is simply a take
-//! that stops counting, and the plot would go back to generic landmarks without
+//! **The ids therefore have to agree across two languages.** A rename on one
+//! side would fail silently and totally — an unrecognised step is simply a take
+//! that stops counting, and the plot goes back to generic landmarks without
 //! saying why. The enum is exported to TypeScript by ts-rs, so `steps.ts` types
 //! its ids against this list and a disagreement is a build error.
 
@@ -45,6 +43,7 @@ impl CalibrationStep {
     /// without ever having passed through the guided flow. Such a take still
     /// contributes to the pooled profile — it just cannot claim to *be* a
     /// particular vowel, which is the one thing a label would have to earn.
+    ///
     /// Deserialised rather than matched by hand, so the ids exist once. A
     /// `match` on string literals here would be a second copy of the rename
     /// attribute above, free to disagree with it — and the disagreement would

@@ -1,9 +1,9 @@
 //! The command line, such as it is.
 //!
-//! Small, and worth a test for one reason: the failure it replaces was silent.
-//! The program ignored every argument, so `utterance --help` started a server, sat
-//! there looking hung, and then failed to bind because one was already running.
-//! Nothing about that says "this program has no options".
+//! Small, and worth a test for one reason: the failure it guards is silent. A
+//! program that ignores its arguments starts a server on `utterance --help`,
+//! sits there looking hung, and then fails to bind because one is already
+//! running.
 
 use utterance::config::{DEFAULT_BIND_ADDR, DEFAULT_DATA_DIR, Invocation, invocation};
 
@@ -38,10 +38,10 @@ fn the_help_quotes_the_defaults_the_code_actually_uses() {
     let Ok(Invocation::Print(text)) = invocation(args(&["--help"])) else {
         panic!("no help");
     };
-    // Against the constants themselves, not against `from_env`. Reading them
-    // back through `from_env` proved less: it answers with the environment when
-    // one is set, so the assertion held for a help text quoting nothing in
-    // particular as long as the matching variable happened to be exported.
+    // Against the constants themselves, not against `from_env`, which answers
+    // with the environment when one is set — so the assertion would hold for a
+    // help text quoting nothing in particular as long as the matching variable
+    // happened to be exported.
     assert!(
         text.contains(DEFAULT_BIND_ADDR),
         "help does not quote the real default address {DEFAULT_BIND_ADDR}"
@@ -62,8 +62,8 @@ fn version_answers_with_the_version() {
 
 #[test]
 fn an_argument_it_does_not_know_is_refused_rather_than_ignored() {
-    // The behaviour being fixed. Ignoring an unknown flag means a typo silently
-    // does something else, confidently.
+    // Ignoring an unknown flag means a typo silently does something else,
+    // confidently.
     let refused = invocation(args(&["--sereve"])).expect_err("a typo was accepted");
     assert!(refused.contains("--sereve"), "{refused}");
     // ...and says what it does accept, since being told "no" without being told
@@ -73,9 +73,9 @@ fn an_argument_it_does_not_know_is_refused_rather_than_ignored() {
 
 #[test]
 fn every_argument_is_read_rather_than_only_the_first() {
-    // The defect clippy caught: a loop that matches and returns inspects one
-    // argument and drops the rest, so a typo after a good flag disappears —
-    // which is the very behaviour this module exists to remove.
+    // A loop that matches and returns inspects one argument and drops the rest,
+    // so a typo after a good flag would disappear — the very behaviour this
+    // module exists to remove.
     let refused =
         invocation(args(&["--version", "--sereve"])).expect_err("a trailing typo was accepted");
     assert!(refused.contains("--sereve"), "{refused}");

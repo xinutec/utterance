@@ -5,7 +5,7 @@
  *
  * A score carries one continuous field and one list of events, so two mappings
  * making the same material cannot both be heard. Naming the material rather
- * than writing the clash out as a rule between named pairs means a fourth
+ * than writing the clash out as a rule between named pairs means a new
  * mapping inherits the answer instead of needing a new line.
  */
 export type Material = "texture" | "events";

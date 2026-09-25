@@ -221,7 +221,7 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
     }
 }
 
-/// Peak frequency and amplitude for each harmonic of `f0`, index by harmonic
+/// Peak frequency and amplitude for each harmonic of `f0`, indexed by harmonic
 /// number. Index 0 is always `None` so `k` indexes harmonic `k`.
 fn harmonics(magnitude: &[f32], f0: f32, bin_hz: f32) -> Vec<Option<(f32, f32)>> {
     let mut found = vec![None; MAX_PARTIAL + 1];

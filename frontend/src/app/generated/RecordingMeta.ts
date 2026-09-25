@@ -45,7 +45,7 @@ clipped: boolean,
 /**
  * Whether this take defines the speaker or is only material to render.
  *
- * Defaulted on read, so a store written before the distinction existed
- * stays readable and every one of its takes becomes material.
+ * Defaulted on read, so metadata written without it stays readable and
+ * reads as material.
  */
 role: Role, };

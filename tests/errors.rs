@@ -1,6 +1,6 @@
 //! The error codes, held to the one thing about them the compiler cannot check.
 //!
-//! Everything else is now a type: a route cannot invent a code, `webauth` and
+//! Everything else is a type: a route cannot invent a code, `webauth` and
 //! the API share one list, and the browser reads that list as a union so a
 //! comparison against a code that does not exist stops its build. What is left
 //! is `ErrorCode::name`, which restates the serde attribute because the log line

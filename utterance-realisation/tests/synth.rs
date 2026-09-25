@@ -203,9 +203,9 @@ fn writes_a_wav_the_analyser_can_read_back() {
 ///
 /// The RMS of the signal's first difference over the RMS of the signal.
 /// Differencing is a high-pass, so the ratio rises with energy at the top of the
-/// spectrum. Counting zero crossings was tried first and is useless here: it
-/// reports whichever partial is strongest and does not move at all under a tilt
-/// that changes every partial's level but not their ranking.
+/// spectrum. Counting zero crossings would be useless here: it reports whichever
+/// partial is strongest and does not move at all under a tilt that changes every
+/// partial's level but not their ranking.
 fn brightness(samples: &[f32]) -> f32 {
     let rms = |xs: &[f32]| (xs.iter().map(|v| v * v).sum::<f32>() / xs.len().max(1) as f32).sqrt();
     let slope: Vec<f32> = samples.windows(2).map(|w| w[1] - w[0]).collect();
@@ -228,7 +228,7 @@ fn bright() -> Vec<f32> {
 #[test]
 fn a_note_changes_colour_across_its_length() {
     // The reason the score carries two colours. A spectrum that holds still is
-    // the dead-organ sound the whole widening was for.
+    // the dead-organ sound of naive additive synthesis.
     let s = Score {
         duration_s: 2.0,
         palette: vec![dark(), bright()],
@@ -272,11 +272,8 @@ fn a_note_darkens_as_it_decays() {
 /// How periodic a slice is: correlation with itself shifted by one period.
 ///
 /// A tone repeats exactly and scores near 1; noise does not repeat and scores
-/// near 0. Brightness was the measure here first and is the wrong one — it
-/// answered "is there white noise in this", and once breath was shaped to sit
-/// where the tone's own energy sits, adding it stopped changing the brightness
-/// at all. That is the improvement, not a regression, so the test had to start
-/// measuring the thing it was actually about.
+/// near 0. Not brightness: breath is shaped to sit where the tone's own energy
+/// sits, so adding it barely changes the brightness at all.
 fn periodicity(samples: &[f32], hz: f32) -> f32 {
     let lag = (RENDER_RATE as f32 / hz).round() as usize;
     let n = samples.len() - lag;
@@ -312,9 +309,9 @@ fn breath_puts_noise_in_the_tone() {
 
 #[test]
 fn breath_is_shaped_rather_than_white() {
-    // The defect a listener heard first: unfiltered noise reads as tape hiss
-    // laid over the music rather than as a quality of the tone. Shaped breath
-    // sits where the note's own energy sits, so it barely moves the brightness.
+    // Unfiltered noise reads as tape hiss laid over the music rather than as a
+    // quality of the tone. Shaped breath sits where the note's own energy sits,
+    // so it barely moves the brightness.
     let clean = score(vec![note(0.0, 1.0, 200.0)], 1.0, dark());
     let breathy = Score {
         events: vec![Event {
@@ -364,7 +361,7 @@ fn detune_pulls_partials_off_their_exact_harmonics() {
 #[test]
 fn a_palette_of_one_still_renders() {
     // The state a speaker is in after a single calibration take. It should sound
-    // like the old fixed timbre, not like silence.
+    // like one fixed timbre, not like silence.
     let s = score(vec![note(0.0, 0.5, 300.0)], 0.5, dark());
     let peak = synth::render(&s).iter().fold(0.0f32, |m, v| m.max(v.abs()));
     assert!(
@@ -587,10 +584,8 @@ fn an_event_that_outlasts_the_score_is_clipped_to_the_buffer() {
     // This is not a malformed score. A mapping that rounds a duration up, or a
     // consonant measured on the take's last frame, produces one.
     //
-    // Nothing in the repository covered it — measured 2026-08-07 by deleting the
-    // clamp: all 116 root-package tests passed, including the 43 in `tests/api.rs`
-    // that render real audio end to end. A clipped event still has to *sound*,
-    // which is the second assertion; returning early would satisfy the first.
+    // A clipped event still has to *sound*, which is the second assertion;
+    // returning early would satisfy the first.
     let mut s = score(vec![note(0.40, 10.0, 220.0)], 0.5, vec![1.0]);
     s.noise.push(noise_event(0.45, 10.0, 5000.0, 3000.0));
 
@@ -617,9 +612,6 @@ fn the_buffer_holds_every_sample_the_duration_asks_for() {
     // the WAV header, the player's scrub bar, and the analysis of a rendering.
     // Off by one sample every render is a length that disagrees with the score
     // that produced it.
-    //
-    // Dropping the `.ceil()` passed the whole suite on 2026-08-07 — 27 tests
-    // that render audio, none asserting how much of it there is.
     for duration_s in [0.5001f32, 0.10005, 1.333] {
         let rendered = synth::render(&score(vec![note(0.0, 0.05, 220.0)], duration_s, vec![1.0]));
         let held_s = rendered.len() as f32 / RENDER_RATE as f32;
@@ -642,8 +634,6 @@ fn a_note_with_no_pitch_makes_no_sound() {
     // an event. A partial series multiplied by zero is a series of partials all
     // at 0 Hz, which is not silence — it is a constant, a DC offset that the
     // normalisation then scales the whole piece down to make room for.
-    //
-    // The guard exists; nothing asserted it, and removing it passed the suite.
     for hz in [0.0f32, -110.0] {
         let rendered = synth::render(&score(vec![note(0.0, 0.5, hz)], 0.5, vec![1.0]));
         assert!(

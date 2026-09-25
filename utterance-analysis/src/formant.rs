@@ -8,8 +8,8 @@
 //!
 //! For this project specifically, F1 against F2 is a two-dimensional space in
 //! which every vowel of a language occupies a region, and vowel sequences are
-//! trajectories through it — the raw geometry the harmony mapping is meant to be
-//! built on (see `docs/architecture.md`).
+//! trajectories through it — the geometry the harmony mappings are built on (see
+//! `docs/architecture.md`).
 
 use crate::frame::{self, SPECTRAL_WINDOW};
 use crate::lpc;

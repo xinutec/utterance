@@ -3,18 +3,16 @@
 #
 #   nix develop --command scripts/coverage.sh
 #
-# NOT part of scripts/verify.sh, and deliberately not gated on a threshold.
+# NOT part of the gate, and deliberately not thresholded.
 # Coverage says which lines a test executed, not whether it would notice them
 # being wrong — a suite that calls everything and asserts nothing scores well.
 # Treat a number here as a place to go looking, and settle the question by
 # breaking the code on purpose and checking that something fails.
 #
 # Two numbers are reported for Rust because the honest one depends on what you
-# count. src/bin/* are research tools run by hand — `authority` measures what
-# each knob does, `beating` measures roughness, `dwell` chord ring time,
-# `streams` correlations between the analysis streams — and main.rs is wiring.
-# None are shipped logic and none are tested; left in the denominator they hide
-# how well the parts that ARE shipped are covered.
+# count. src/bin/* are research tools run by hand and main.rs is wiring. None
+# are shipped logic and none are tested; left in the denominator they hide how
+# well the parts that ARE shipped are covered.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -61,9 +59,8 @@ echo "== frontend =="
 # --coverage-include is load-bearing: v8 reports only files the specs imported,
 # so without it a file with no test at all is absent from the report rather than
 # counted as zero, and the total flatters itself by the size of what it omits.
-# Measured 2026-08-03: 85.91% reported, 22.12% once every app file was counted.
 #
-# Components read 0% here and are not untested — the 21 Playwright specs in
+# Components read 0% here and are not untested — the Playwright specs in
 # frontend/e2e exercise them in a real browser, which this instrument cannot
 # see. It measures the vitest run alone.
 ( cd frontend && pnpm exec ng test --watch=false --coverage \

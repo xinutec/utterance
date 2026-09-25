@@ -61,8 +61,8 @@ describe("asking for the knob table", () => {
 
   it("asks once however many components ask it to", () => {
     // The table is a property of the running backend, so it cannot change while
-    // the page is open. Re-fetching per component is what blanked the sliders on
-    // every tab switch before this store existed.
+    // the page is open. Re-fetching per component would blank the sliders on
+    // every tab switch.
     const { store, stub } = storeWith(() => of(CONTROLS));
     store.ensure();
     store.ensure();
@@ -87,9 +87,9 @@ describe("asking for the knob table", () => {
 
 describe("when the backend is not there", () => {
   it("stays empty rather than throwing", () => {
-    // Without the table the studio still renders at the mapping's defaults —
-    // which is what it did before there were any controls. Only the sliders are
-    // missing, so there is nothing here worth an error banner.
+    // Without the table the studio still renders at the mapping's defaults.
+    // Only the sliders are missing, so there is nothing here worth an error
+    // banner.
     const { store } = storeWith(refusal);
     expect(() => {
       store.ensure();

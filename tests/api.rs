@@ -408,11 +408,10 @@ fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
             //
             // **Three formants, and a source shallower than the textbook.** A
             // real *ah* measured through this same code gives eight scale
-            // degrees; this fixture with two formants and a 1/k source gave
-            // four, of which the two deepest were the fourth and the fifth —
-            // the one pair of intervals that spans no harmonic lattice, so the
-            // mapping built on that geometry had nothing to stand on. The
-            // fixture was quietly less of a voice than any voice.
+            // degrees; two formants and a 1/k source give four, of which the
+            // two deepest are the fourth and the fifth — the one pair of
+            // intervals that spans no harmonic lattice, so the mapping built on
+            // that geometry would have nothing to stand on.
             //
             // A glottal source really does fall at about 6 dB per octave once
             // radiation is counted, so the slope here is not physics: it stands
@@ -681,10 +680,10 @@ const DENSITY_TOO_HIGH: &str = "density=0.5";
 
 #[tokio::test]
 async fn a_scale_too_thin_for_a_lattice_says_so_rather_than_rendering_silence() {
-    // The failure this replaces was silent and looked exactly like a bug: the
-    // lattice mapping declines a scale that points one way only, a score with no
-    // field in it renders to consonants over silence, and the response is a
-    // perfectly good 200 full of nothing.
+    // Without the refusal the failure is silent and looks exactly like a bug:
+    // the lattice mapping declines a scale that points one way only, a score
+    // with no field in it renders to consonants over silence, and the response
+    // is a perfectly good 200 full of nothing.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -916,10 +915,10 @@ async fn every_published_knob_changes_what_is_rendered() {
 
 #[tokio::test]
 async fn every_setting_a_slider_can_reach_either_sounds_or_says_why_not() {
-    // The generalisation of a real failure. `density` past about a quarter of its
-    // travel prunes this speaker's scale below a plane, and the lattice mapping
-    // answered with a perfectly good 200 containing no field — audible as
-    // nothing, and reported as success. The test above sweeps one value per
+    // `density` past about a quarter of its travel prunes this speaker's scale
+    // below a plane, and a lattice mapping that answered with a perfectly good
+    // 200 containing no field would be audible as nothing and reported as
+    // success. The test above sweeps one value per
     // knob, which is the wrong shape for this: what a published range promises
     // is that *every* position on the slider means something, and the ends are
     // exactly where nobody drags by hand.
@@ -1406,12 +1405,9 @@ async fn a_store_with_nothing_but_material_says_to_calibrate() {
 
 #[tokio::test]
 async fn a_stored_take_can_be_told_what_it_is_for() {
-    // The gap this closes, and it was live rather than theoretical. Role could
-    // only be set while uploading, so a take could never *become* the
-    // calibration one — and every recording made before the distinction existed
-    // reads back as material. A store that predated it therefore held the guided
-    // vowels and refused to derive a voice from them, with no way to say what
-    // they were short of recording them again.
+    // Settable only at upload, a take could never *become* a calibration one,
+    // so a store of takes that predate roles would hold the guided vowels and
+    // refuse to derive a voice from them, short of recording them again.
     let app = TestApp::new();
     let (_, body) = upload_material(&app, "vowel-ah", wav_fixture_moving_vowel(8.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();

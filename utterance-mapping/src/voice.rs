@@ -7,7 +7,7 @@
 //! measured against — none of which should change between two things the same
 //! person said.
 //!
-//! **Why this is a type rather than five arguments.** A derived scale is only
+//! **Why this is a type rather than loose arguments.** A derived scale is only
 //! consonant for tones carrying the spectrum it was derived from; tune to one
 //! spectrum and synthesise another and the roughness minima stop lining up with
 //! the notes. Building both from the same measurement in one place makes that

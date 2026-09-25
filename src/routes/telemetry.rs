@@ -1,10 +1,9 @@
 //! Client activity trace: what the browser sees and the API does not.
 //!
 //! **Why this exists, and it is not analytics.** The per-request trace already
-//! logs every API call, and for a long time that was treated as enough. It is
-//! not: a press that hits a cache, a knob dragged, a control that was disabled,
-//! a page that rendered wrong — none of it reaches the server, so none of it can
-//! be diagnosed afterwards. This app is used by one person in another house, and
+//! logs every API call, and that is not enough: a press that hits a cache, a
+//! knob dragged, a control that was disabled, a page that rendered wrong — none
+//! of it reaches the server, so none of it can be diagnosed afterwards. This app is used by one person in another house, and
 //! the only report available is "I pressed the button and nothing happened".
 //!
 //! The events fold into the **same** log stream as the API requests, so a
@@ -16,10 +15,10 @@
 //! **There is no storage here.** These are logs, not data. The endpoint moves
 //! the client's events into the backend log and forgets them.
 //!
-//! Ported from the `life` app, which has had this since 2026-07-17. The only
-//! differences are that there is no per-request user to attribute to — this
-//! deployment is one account — and that the gate is middleware rather than an
-//! extractor, so the session is checked before a handler is reached at all.
+//! The same design as the `life` app's, except that there is no per-request
+//! user to attribute to — this deployment is one account — and the gate is
+//! middleware rather than an extractor, so the session is checked before a
+//! handler is reached at all.
 
 use axum::Json;
 use axum::http::StatusCode;

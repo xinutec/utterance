@@ -68,10 +68,9 @@ const OFFSET_SUPPRESSION_DB: f32 = 3.0;
 /// Frames examined on each side of a candidate when deciding whether the level
 /// is rising or falling through it (100 ms each way).
 ///
-/// Long enough to span a natural vocal release. At 30 ms it was not: a voice
-/// stops over a couple of hundred milliseconds, so the level barely moves across
-/// any single 30 ms step and the gate read the whole decay as "steady" —
-/// leaving three phantom events at the tail of a real sustained vowel.
+/// Long enough to span a natural vocal release. A voice stops over a couple of
+/// hundred milliseconds, so across a shorter span the level barely moves and the
+/// gate reads the whole decay as "steady", leaving phantom events at the tail.
 const GATE_SPAN: usize = 10;
 
 /// How many local median-absolute-deviations above the local median a peak must
@@ -254,16 +253,12 @@ pub fn pick(flux: &[f32]) -> Vec<usize> {
 
 /// Whether `i` is the largest flux value within [`PEAK_WINDOW`] frames either side.
 ///
-/// The condition that does most of the work, and the one the first version got
-/// wrong: it asked only whether a frame exceeded its two immediate neighbours,
-/// which every small wobble on a noisy curve satisfies. Sustained phonation is
-/// full of such wobbles — cycle-to-cycle jitter — so the detector generated a
-/// candidate every few frames and left the threshold to sort them out, which no
-/// threshold can do reliably.
-///
-/// Requiring dominance over a real span asks the right question: an onset is a
-/// spike that stands out from its surroundings, not merely a point that happens
-/// to sit above the two samples touching it.
+/// The condition that does most of the work. Exceeding the two immediate
+/// neighbours is not enough: every small wobble on a noisy curve does that, and
+/// sustained phonation is full of them — cycle-to-cycle jitter — so the detector
+/// would generate a candidate every few frames and leave the threshold to sort
+/// them out, which no threshold can do reliably. An onset is a spike that stands
+/// out from its surroundings.
 fn is_local_maximum(flux: &[f32], i: usize) -> bool {
     let lo = i.saturating_sub(PEAK_WINDOW);
     let hi = (i + PEAK_WINDOW + 1).min(flux.len());
@@ -275,7 +270,7 @@ fn is_local_maximum(flux: &[f32], i: usize) -> bool {
 /// The value a peak at `i` must exceed to count as an onset.
 ///
 /// `median + k · MAD`, floored. Adapting to the local *level* alone is not
-/// enough — that was the original mistake. A sustained vowel sits at a low flux
+/// enough. A sustained vowel sits at a low flux
 /// level but is constantly jittery (cycle-to-cycle pitch and amplitude
 /// variation, slow drift in the vowel), so a fixed offset above the local median
 /// is cleared by noise dozens of times over a few seconds. Measured on a real

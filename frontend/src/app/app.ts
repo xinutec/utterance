@@ -90,14 +90,8 @@ export class App {
    *
    * Held here rather than read from `routerLinkActive`, so that which item is
    * current and which is announced to a screen reader are one fact instead of a
-   * class and an attribute that have to agree.
-   *
-   * **Not because the directive fails inside a menu.** It was replaced on that
-   * belief and the belief was wrong: measured against a `mat-menu`, both the
-   * bare and class-carrying forms report `isActive` correctly once the menu
-   * opens. What went wrong in the original markup was never established. This
-   * version is kept because it works and says what it means, not because the
-   * directive could not.
+   * class and an attribute that have to agree. (The directive does work inside
+   * a `mat-menu`; that is not the reason.)
    */
   private readonly url = toSignal(
     this.router.events.pipe(

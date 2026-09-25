@@ -1,14 +1,12 @@
 //! How long a chord actually rings, measured across every take in the store.
 //!
-//! **Why this exists, and why the number it replaces was misleading.** The
-//! Tonnetz mapping was built to make the derived tuning audible, and the figure
-//! reported for it was the *fraction* of a take spent holding one chord — 55%,
-//! against the field mapping's 26%. That is the wrong statistic. The perceptual
-//! threshold recorded in `docs/roadmap.md` is about a single chord ringing for
-//! roughly a second, because that is how long a 5–14 Hz beat between two voices'
-//! partials needs to establish. A fraction cannot see the difference between
-//! eight seconds of held harmony and eighty chords of a hundred milliseconds,
-//! and only the first of those is audible as a tuning.
+//! **Why durations and not a fraction.** The Tonnetz mapping was built to make
+//! the derived tuning audible, and the perceptual threshold is a single chord
+//! ringing for roughly a second, because that is how long a 5–14 Hz beat
+//! between two voices' partials needs to establish. The *fraction* of a take
+//! spent holding one chord cannot see the difference between eight seconds of
+//! held harmony and eighty chords of a hundred milliseconds, and only the first
+//! of those is audible as a tuning.
 //!
 //! So this measures *durations*, one per ring, and reports the distribution.
 //! It reads [`utterance_mapping::tonnetz::harmonic_path`] — the mapping's own
@@ -43,7 +41,7 @@ const PEAK_DROP_DB: f32 = 40.0;
 
 /// How long one chord must ring before its tuning is perceptible, in seconds.
 ///
-/// From the `bind` post-mortem in `docs/roadmap.md`: the five strongest partial
+/// From the `bind` measurement (`beating.rs`): the five strongest partial
 /// coincidences beat at 4.8–14.3 Hz when the tuning is equal-tempered and at
 /// 0.01–0.26 Hz when it is the speaker's own, and telling those apart takes
 /// about a second of stable chord. This is the number the whole question turns

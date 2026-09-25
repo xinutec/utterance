@@ -36,7 +36,7 @@ const MAX_ROOT_ITERATIONS: usize = 200;
 /// Convergence tolerance for the root solver, in the complex plane.
 const ROOT_TOLERANCE: f64 = 1e-10;
 
-/// Apply pre-emphasis in place of the caller's buffer.
+/// Pre-emphasised copy of `x`.
 pub fn pre_emphasise(x: &[f32]) -> Vec<f32> {
     let mut out = Vec::with_capacity(x.len());
     out.push(x.first().copied().unwrap_or(0.0));
