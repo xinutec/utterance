@@ -87,7 +87,10 @@ impl Voice {
     /// degrees the scale *has*, and that happens when the scale is derived. A
     /// mapping handed a finished tuning can move its degrees but cannot conjure
     /// the ones the derivation already discarded.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the calibration's knobs, each named; the doc above says why density is one of them"
+    )]
     pub fn from_calibration_with(
         tuning_from: &Partials,
         palette_from: &[&Partials],

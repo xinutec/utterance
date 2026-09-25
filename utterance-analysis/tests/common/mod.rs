@@ -8,7 +8,10 @@
 
 // Each test binary compiles this module in full but uses only the generators it
 // needs, so anything another binary uses reads as dead code here.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "each test binary uses only the generators it needs"
+)]
 
 use utterance_analysis::resample::ANALYSIS_RATE;
 
