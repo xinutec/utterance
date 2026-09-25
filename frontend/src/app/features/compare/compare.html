@@ -88,9 +88,24 @@
       the piece. Click the chart to move both.
     </p>
 
-    <audio #playerA preload="auto" [src]="srcA" (timeupdate)="onTimeUpdate()" (ended)="onEnded()"></audio>
+    <audio
+      #playerA
+      preload="auto"
+      [src]="srcA"
+      (canplay)="onReady('a')"
+      (error)="onFailed('a')"
+      (timeupdate)="onTimeUpdate()"
+      (ended)="onEnded()"
+    ></audio>
     @if (urlB(); as srcB) {
-      <audio #playerB preload="auto" [src]="srcB" (ended)="onEnded()"></audio>
+      <audio
+        #playerB
+        preload="auto"
+        [src]="srcB"
+        (canplay)="onReady('b')"
+        (error)="onFailed('b')"
+        (ended)="onEnded()"
+      ></audio>
     }
   }
 

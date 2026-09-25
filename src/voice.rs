@@ -31,20 +31,32 @@ const MIN_CALIBRATION_FRAMES: usize = 300;
 /// take was bad, and a bad take that never stops counting is worse than no
 /// re-record button at all. Steps are told apart by their label, which the
 /// guided flow sets from the step id.
-fn calibration_set(stored: Vec<(RecordingMeta, Voiceprint)>) -> Vec<(RecordingMeta, Voiceprint)> {
-    let mut newest: BTreeMap<String, (RecordingMeta, Voiceprint)> = BTreeMap::new();
-    for (meta, voiceprint) in stored {
+fn calibration_set(stored: Vec<RecordingMeta>) -> Vec<RecordingMeta> {
+    let mut newest: BTreeMap<String, RecordingMeta> = BTreeMap::new();
+    for meta in stored {
         if meta.role != Role::Calibration {
             continue;
         }
         match newest.get(&meta.label) {
-            Some((held, _)) if held.created_at_ms >= meta.created_at_ms => {}
+            Some(held) if held.created_at_ms >= meta.created_at_ms => {}
             _ => {
-                newest.insert(meta.label.clone(), (meta, voiceprint));
+                newest.insert(meta.label.clone(), meta);
             }
         }
     }
     newest.into_values().collect()
+}
+
+/// The calibration set with each take's voiceprint.
+///
+/// Chosen from the metadata first, so only the takes that define the speaker
+/// have their voiceprints read and parsed — every render, score and summary
+/// request passes through here, and material can be most of the store.
+fn calibration_takes(store: &Store) -> Result<Vec<(RecordingMeta, Voiceprint)>, AppError> {
+    Ok(calibration_set(store.list()?)
+        .into_iter()
+        .filter_map(|m| store.voiceprint(&m.id).ok().map(|v| (m, v)))
+        .collect())
 }
 
 /// A speaker's world, plus which recording it came from.
@@ -74,12 +86,7 @@ pub struct MeasuredCorner {
 ///
 /// An empty list is ordinary: it means the guided vowels have not been recorded.
 pub fn corners(store: &Store) -> Result<Vec<MeasuredCorner>, AppError> {
-    let metas = store.list()?;
-    let stored: Vec<(RecordingMeta, Voiceprint)> = metas
-        .into_iter()
-        .filter_map(|m| store.voiceprint(&m.id).ok().map(|v| (m, v)))
-        .collect();
-    Ok(measure_corners(&calibration_set(stored)))
+    Ok(measure_corners(&calibration_takes(store)?))
 }
 
 /// Measure every corner the calibration set has a take for.
@@ -146,18 +153,12 @@ pub fn calibrate_with(
     override_id: Option<&str>,
     min_depth: f32,
 ) -> Result<Calibrated, AppError> {
-    let metas = store.list()?;
-    let stored: Vec<(RecordingMeta, Voiceprint)> = metas
-        .into_iter()
-        .filter_map(|m| store.voiceprint(&m.id).ok().map(|v| (m, v)))
-        .collect();
-
     // **Only the takes that say they define the speaker.** A store fills up with
     // other people's singing — material to render — and pooling it here would
     // measure a vowel space, a pitch range and a timbre belonging to nobody. The
     // whole claim of the project is that *this* speaker's spectrum gives *this*
     // speaker's scale, and it is worth nothing if the spectrum is a crowd.
-    let takes = calibration_set(stored);
+    let takes = calibration_takes(store)?;
 
     if takes.is_empty() {
         return Err(AppError::NeedsCalibration(

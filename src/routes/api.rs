@@ -85,6 +85,23 @@ fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
     (start <= end && start < total).then_some((start, end))
 }
 
+/// Run `work` on tokio's blocking pool rather than on an async worker.
+///
+/// **Every handler that touches the store, analysis or synthesis goes through
+/// here.** Analysis and rendering are seconds of CPU and the store is file IO,
+/// and the pod gets as many async workers as CPU cores in its limit — two. Two
+/// renders run inline occupy both, and every other request waits behind them:
+/// measured with two workers, `/healthz` took 1.4 s during two renders against
+/// 1 ms idle, past a probe's default one-second timeout.
+///
+/// A panic inside `work` is resumed here, so it fails the request exactly as it
+/// would have run inline.
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
+    tokio::task::spawn_blocking(work)
+        .await
+        .unwrap_or_else(|e| std::panic::resume_unwind(e.into_panic()))
+}
+
 /// Query string of the endpoints that need a speaker's musical world.
 #[derive(Debug, Deserialize)]
 pub struct VoiceParams {
@@ -144,26 +161,29 @@ pub async fn upload(
         return Err(AppError::BadRequest("request body was empty".into()));
     }
 
-    let voiceprint = utterance_analysis::analyse_wav(&body)?;
-    let meta = app.store.put(
-        &body,
-        params.label.as_deref().unwrap_or_default(),
-        &voiceprint,
-        params.role,
-    )?;
-    tracing::info!(
-        "stored {} ({:.1}s, {:.0}% voiced, {} onsets)",
-        meta.id,
-        meta.duration_s,
-        meta.voiced_fraction * 100.0,
-        meta.onset_count
-    );
-    Ok(Json(RecordingDetail { meta, voiceprint }))
+    blocking(move || {
+        let voiceprint = utterance_analysis::analyse_wav(&body)?;
+        let meta = app.store.put(
+            &body,
+            params.label.as_deref().unwrap_or_default(),
+            &voiceprint,
+            params.role,
+        )?;
+        tracing::info!(
+            "stored {} ({:.1}s, {:.0}% voiced, {} onsets)",
+            meta.id,
+            meta.duration_s,
+            meta.voiced_fraction * 100.0,
+            meta.onset_count
+        );
+        Ok(Json(RecordingDetail { meta, voiceprint }))
+    })
+    .await
 }
 
 /// `GET /api/recordings` — every stored recording, newest first.
 pub async fn list(State(app): State<AppState>) -> Result<Json<Vec<RecordingMeta>>, AppError> {
-    Ok(Json(app.store.list()?))
+    blocking(move || Ok(Json(app.store.list()?))).await
 }
 
 /// `GET /api/recordings/{id}` — one recording with its voiceprint.
@@ -171,10 +191,13 @@ pub async fn detail(
     State(app): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<RecordingDetail>, AppError> {
-    Ok(Json(RecordingDetail {
-        meta: app.store.meta(&id)?,
-        voiceprint: app.store.voiceprint(&id)?,
-    }))
+    blocking(move || {
+        Ok(Json(RecordingDetail {
+            meta: app.store.meta(&id)?,
+            voiceprint: app.store.voiceprint(&id)?,
+        }))
+    })
+    .await
 }
 
 /// `GET /api/recordings/{id}/audio` — the original file, for playback.
@@ -183,7 +206,7 @@ pub async fn audio(
     Path(id): Path<String>,
     headers: axum::http::HeaderMap,
 ) -> Result<Response, AppError> {
-    let bytes = app.store.audio(&id)?;
+    let bytes = blocking(move || app.store.audio(&id)).await?;
     Ok(audio_response(
         bytes,
         headers.get(header::RANGE).and_then(|v| v.to_str().ok()),
@@ -211,7 +234,7 @@ pub async fn put_role(
     Path(id): Path<String>,
     Json(body): Json<RoleBody>,
 ) -> Result<Json<RecordingMeta>, AppError> {
-    Ok(Json(app.store.put_role(&id, body.role)?))
+    blocking(move || Ok(Json(app.store.put_role(&id, body.role)?))).await
 }
 
 /// `DELETE /api/recordings/{id}`.
@@ -219,8 +242,11 @@ pub async fn delete(
     State(app): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Deleted>, AppError> {
-    app.store.delete(&id)?;
-    Ok(Json(Deleted { id }))
+    blocking(move || {
+        app.store.delete(&id)?;
+        Ok(Json(Deleted { id }))
+    })
+    .await
 }
 
 #[derive(Debug, Serialize)]
@@ -323,8 +349,9 @@ pub struct SpeakerCorners {
 pub async fn speaker_corners(
     State(app): State<AppState>,
 ) -> Result<Json<SpeakerCorners>, AppError> {
+    let corners = blocking(move || voice::corners(&app.store)).await?;
     Ok(Json(SpeakerCorners {
-        corners: voice::corners(&app.store)?
+        corners: corners
             .into_iter()
             .map(|c| SpeakerCorner {
                 step: c.step,
@@ -403,8 +430,10 @@ pub async fn voice_summary(
     // summary and the render have to agree about what was asked for, so a name
     // this refuses there cannot quietly succeed here.
     let chosen = chosen_mappings(&params)?;
-    let calibrated =
-        voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)?;
+    let calibrated = blocking(move || {
+        voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)
+    })
+    .await?;
 
     // Bound here as well as in the mappings, because this is the scale someone
     // is shown while deciding whether they like it. Showing the derived degrees
@@ -494,7 +523,7 @@ pub async fn score(
     Query(params): Query<VoiceParams>,
     Query(query): Query<KnobQuery>,
 ) -> Result<Json<ScoreView>, AppError> {
-    let (score, tuning) = build_score(&app, &id, &params, &query)?;
+    let (score, tuning) = blocking(move || build_score(&app, &id, &params, &query)).await?;
 
     let (colour, breath, level, voices, gains, step_s) = match &score.field {
         Some(field) => {
@@ -593,20 +622,24 @@ pub async fn render(
     Query(query): Query<KnobQuery>,
     headers: axum::http::HeaderMap,
 ) -> Result<Response, AppError> {
-    let (score, tuning) = build_score(&app, &id, &params, &query)?;
-    tracing::info!(
-        "rendered {} as {} notes, {} consonants and {} field voices in a {}-degree scale",
-        id,
-        score.events.len(),
-        score.noise.len(),
-        score
-            .field
-            .as_ref()
-            .map_or(0, utterance_mapping::score::Field::voice_count),
-        tuning.degrees.len(),
-    );
-
-    let bytes = utterance_realisation::wav::encode(&utterance_realisation::synth::render(&score));
+    let bytes = blocking(move || {
+        let (score, tuning) = build_score(&app, &id, &params, &query)?;
+        tracing::info!(
+            "rendered {} as {} notes, {} consonants and {} field voices in a {}-degree scale",
+            id,
+            score.events.len(),
+            score.noise.len(),
+            score
+                .field
+                .as_ref()
+                .map_or(0, utterance_mapping::score::Field::voice_count),
+            tuning.degrees.len(),
+        );
+        Ok::<_, AppError>(utterance_realisation::wav::encode(
+            &utterance_realisation::synth::render(&score),
+        ))
+    })
+    .await?;
     Ok(audio_response(
         bytes,
         headers.get(header::RANGE).and_then(|v| v.to_str().ok()),

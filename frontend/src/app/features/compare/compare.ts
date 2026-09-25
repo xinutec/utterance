@@ -93,7 +93,15 @@ export class Compare implements OnInit {
 
   readonly scoreA = signal<ScoreView | null>(null);
   readonly scoreB = signal<ScoreView | null>(null);
-  readonly loading = signal(false);
+  /**
+   * Sides whose player has been pointed at a new render and cannot play it yet.
+   *
+   * Cleared by the elements' own `canplay` and `error`, because the render is
+   * fetched by the `<audio>` element after `load()` has returned — seconds of
+   * synthesis that nothing else on the page can see.
+   */
+  private readonly waiting = signal<ReadonlySet<Side>>(new Set());
+  readonly loading = computed(() => this.waiting().size > 0);
   readonly error = signal<string | null>(null);
 
   /**
@@ -309,16 +317,39 @@ export class Compare implements OnInit {
     // already on screen is the better thing to leave there.
     if (!id || this.unplayable()) return;
 
-    this.loading.set(true);
     this.error.set(null);
-    const [qa, qb] = [this.queryA(), this.queryB()];
+    const urlA = this.api.renderUrl(id, this.queryA());
+    const urlB = this.api.renderUrl(id, this.queryB());
+
+    // Only a side whose URL changes is waited on: an element handed the URL it
+    // already holds loads nothing, and would never report that it can play.
+    const pending = new Set<Side>();
+    if (urlA !== this.urlA()) pending.add("a");
+    if (urlB !== this.urlB()) pending.add("b");
+    this.waiting.set(pending);
 
     // Both URLs set together, so the two players never describe different
     // settings from each other for even a moment.
-    this.urlA.set(this.api.renderUrl(id, qa));
-    this.urlB.set(this.api.renderUrl(id, qb));
+    this.urlA.set(urlA);
+    this.urlB.set(urlB);
     this.playhead.set(0);
-    this.loading.set(false);
+  }
+
+  /** A player has enough of its render to start. */
+  onReady(side: Side): void {
+    this.settle(side);
+  }
+
+  /** A player could not load its render. */
+  onFailed(side: Side): void {
+    this.settle(side);
+    this.error.set(`the render for ${side.toUpperCase()} could not be loaded`);
+  }
+
+  private settle(side: Side): void {
+    const rest = new Set(this.waiting());
+    rest.delete(side);
+    this.waiting.set(rest);
   }
 
 
