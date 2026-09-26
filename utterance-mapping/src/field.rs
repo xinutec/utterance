@@ -37,7 +37,7 @@
 
 use utterance_analysis::voiceprint::Voiceprint;
 
-use crate::compose::compose_noise;
+use crate::compose::field_score;
 use crate::params::{self, Params};
 use crate::score::{Field, Score};
 use crate::streams::{self, DRIFT_FRAMES, LEVEL_FRAMES, ROOT_FRAMES};
@@ -54,7 +54,7 @@ pub const VOICES: usize = 5;
 /// Never silent: a field that stops is a sequence of events again, and the
 /// silences in speech are part of its shape rather than gaps in it. Low enough
 /// to be heard as a rest.
-const FLOOR: f32 = 0.02;
+pub(crate) const FLOOR: f32 = 0.02;
 
 /// Build the continuously sounding field for a take.
 ///
@@ -130,15 +130,7 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
             let octave = (step / choices) as f32;
             voices[v][i] = base * 2f32.powf(octave) * degree.ratio;
 
-            // Upper voices fade in as the speaker gets louder, so a quiet
-            // passage is a thinner texture and not merely a softer one.
-            let reach = (level[i] * params.voices as f32) - v as f32;
-            // ...and a moving mouth lifts them further, so a busy passage is a
-            // busier texture. Weighted up the stack for the same reason the
-            // voicing is: applied to every voice equally it would be loudness.
-            let stirred = 1.0 + params.articulation * stir[i].clamp(0.0, 1.0) * (v as f32 / top);
-            gains[v][i] =
-                (level[i] * reach.clamp(0.0, 1.0) * stirred).max(if v == 0 { FLOOR } else { 0.0 });
+            gains[v][i] = voice_gain(level[i], stir[i], v, &params, 1.0);
         }
 
         colour[i] = bright[i].clamp(0.0, 1.0);
@@ -155,10 +147,6 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
 }
 
 /// A whole score for this take: the field, plus the speaker's consonants.
-///
-/// The consonants come from the same place the note mapping gets them. They are
-/// events by nature — a consonant is a thing that happens at a moment — so they
-/// stay a list whether the pitched material is a field or a stream of notes.
 pub fn score(vp: &Voiceprint, voice: &Voice) -> Score {
     score_with(vp, voice, Params::default())
 }
@@ -166,13 +154,20 @@ pub fn score(vp: &Voiceprint, voice: &Voice) -> Score {
 /// The same, with the knobs set explicitly.
 pub fn score_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
     let params = params.sane();
-    let loudest = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    Score {
-        duration_s: vp.source.duration_s,
-        palette: voice.palette.clone(),
-        detune_cents: voice.detune_cents,
-        noise: compose_noise(vp, loudest, params.consonants),
-        field: compose_with(vp, voice, params),
-        events: Vec::new(),
-    }
+    field_score(vp, voice, params, compose_with(vp, voice, params))
+}
+
+/// How loud voice `v` of a continuous field is at one frame.
+///
+/// Upper voices fade in as the speaker gets louder, so a quiet passage is a
+/// thinner texture and not merely a softer one; a moving mouth lifts them
+/// further, weighted up the stack, since applied to every voice equally it would
+/// be loudness. `weight` is any per-voice balance a mapping adds on top. Shared
+/// by both continuous mappings, so they differ in their harmony and nothing
+/// else — the only way comparing them says anything.
+pub(crate) fn voice_gain(level: f32, stir: f32, v: usize, params: &Params, weight: f32) -> f32 {
+    let top = (params.voices - 1).max(1) as f32;
+    let reach = (level * params.voices as f32) - v as f32;
+    let stirred = 1.0 + params.articulation * stir.clamp(0.0, 1.0) * (v as f32 / top);
+    (level * reach.clamp(0.0, 1.0) * stirred * weight).max(if v == 0 { FLOOR } else { 0.0 })
 }

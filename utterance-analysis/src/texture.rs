@@ -29,11 +29,10 @@
 //! everywhere, and deciding where they are *interesting* is the mapping layer's
 //! business rather than this one's.
 
-use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use serde::{Deserialize, Serialize};
 
-use crate::frame::{self, SPECTRAL_WINDOW};
+use crate::frame::SPECTRAL_WINDOW;
 use crate::resample::ANALYSIS_RATE;
 
 /// Lowest frequency the measures look at.
@@ -96,9 +95,10 @@ pub struct Texture {
     pub tilt_db_per_octave: Vec<f32>,
 }
 
-/// Measure the centroid, flatness and tilt of every frame.
-pub fn track(samples: &[f32]) -> Texture {
-    let n = frame::count(samples.len());
+/// Measure the centroid, flatness and tilt of every frame, from its spectrum
+/// ([`crate::frame::spectra`]).
+pub fn track(spectra: &[Vec<Complex32>]) -> Texture {
+    let n = spectra.len();
     if n == 0 {
         return Texture {
             centroid_hz: Vec::new(),
@@ -107,10 +107,7 @@ pub fn track(samples: &[f32]) -> Texture {
         };
     }
 
-    let mut planner = FftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(SPECTRAL_WINDOW);
-    let window = frame::hann(SPECTRAL_WINDOW);
-    let bins = SPECTRAL_WINDOW / 2 + 1; // real input: the upper half mirrors.
+    let bins = SPECTRAL_WINDOW / 2 + 1;
     let bin_hz = ANALYSIS_RATE as f32 / SPECTRAL_WINDOW as f32;
     let lowest = ((NOISE_BAND_LOW_HZ / bin_hz).ceil() as usize).min(bins - 1);
     let highest = ((TILT_HIGH_HZ / bin_hz).floor() as usize).min(bins - 1);
@@ -127,19 +124,12 @@ pub fn track(samples: &[f32]) -> Texture {
     let mut centroid_hz = vec![0.0f32; n];
     let mut flatness = vec![0.0f32; n];
     let mut tilt_db_per_octave = vec![0.0f32; n];
-    let mut buf = vec![Complex32::new(0.0, 0.0); SPECTRAL_WINDOW];
 
-    for i in 0..n {
-        let frame_samples = frame::windowed(samples, i, SPECTRAL_WINDOW);
-        for (b, (s, w)) in buf.iter_mut().zip(frame_samples.iter().zip(&window)) {
-            *b = Complex32::new(s * w, 0.0);
-        }
-        fft.process(&mut buf);
-
+    for (i, spectrum) in spectra.iter().enumerate() {
         // Power rather than magnitude: flatness is defined on the power
         // spectrum, and using magnitudes would report every frame flatter than
         // it is.
-        let power: Vec<f32> = buf[lowest..bins]
+        let power: Vec<f32> = spectrum[lowest..bins]
             .iter()
             .map(|c| c.norm_sqr() + BIN_FLOOR)
             .collect();
@@ -157,7 +147,7 @@ pub fn track(samples: &[f32]) -> Texture {
         };
 
         // Geometric over arithmetic mean, taken in the log domain: the direct
-        // product of five hundred bins underflows to zero long before it means
+        // product of a few hundred bins underflows to zero long before it means
         // anything.
         let log_mean = power.iter().map(|p| p.ln()).sum::<f32>() / power.len() as f32;
         let arithmetic_mean = total / power.len() as f32;

@@ -30,7 +30,9 @@
 
 use utterance_analysis::voiceprint::Voiceprint;
 
-use crate::score::{Event, NoiseEvent, Score};
+use crate::params::Params;
+use crate::score::{Event, Field, NoiseEvent, Score};
+use crate::streams;
 use crate::voice::Voice;
 
 /// Octaves the register spans above the tonic.
@@ -86,11 +88,11 @@ const MAX_BREATH: f32 = 0.3;
 /// make the same sentence produce a different piece depending on how much of the
 /// speaker's range it happened to use.
 pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
-    compose_with(vp, voice, crate::params::Params::default())
+    compose_with(vp, voice, Params::default())
 }
 
 /// The same, with the knobs set explicitly.
-pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: crate::params::Params) -> Score {
+pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
     let params = params.sane();
     let tuning = crate::params::bind_toward_equal(&voice.tuning, params.bind);
     // The octave duplicates the tonic, so it is not a separate choice.
@@ -100,7 +102,7 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: crate::params::Param
         return empty(vp, voice);
     }
 
-    let loudest = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let loudest = streams::loudest_db(vp);
 
     let onsets = &vp.events.onset_frames;
     let mut events = Vec::new();
@@ -155,12 +157,34 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: crate::params::Param
         duration_s: vp.source.duration_s,
         palette: voice.palette.clone(),
         detune_cents: voice.detune_cents,
-        noise: compose_noise(vp, loudest, params.consonants),
+        noise: compose_noise(vp, params.consonants),
         // This mapping produces notes, not a field. Emitting both would sound
         // both at once; they are alternatives to be judged against each other,
         // which is what the mapping layer is for.
         field: None,
         events,
+    }
+}
+
+/// A score whose pitched material is a continuous field, plus the speaker's
+/// consonants.
+///
+/// The consonants come from the same place the note mapping gets them: they are
+/// events by nature — a consonant is a thing that happens at a moment — so they
+/// stay a list whether the pitched material is a field or a stream of notes.
+pub(crate) fn field_score(
+    vp: &Voiceprint,
+    voice: &Voice,
+    params: Params,
+    field: Option<Field>,
+) -> Score {
+    Score {
+        duration_s: vp.source.duration_s,
+        palette: voice.palette.clone(),
+        detune_cents: voice.detune_cents,
+        noise: compose_noise(vp, params.consonants),
+        field,
+        events: Vec::new(),
     }
 }
 
@@ -224,13 +248,9 @@ fn vowel_near(vp: &Voiceprint, frame: usize) -> Option<(f32, f32)> {
 }
 
 /// Loudness at a frame, relative to the loudest moment in the take.
-///
-/// From dBFS to a linear 0..1 by way of the take's own peak, so a quietly
-/// recorded take produces the same dynamics as a loud one — the shape of the
-/// envelope is the measurement, not the level it was recorded at.
 fn amplitude_at(vp: &Voiceprint, frame: usize, loudest_db: f32) -> f32 {
     let db = vp.rms_db.get(frame).copied().unwrap_or(f32::NEG_INFINITY);
-    10f32.powf((db - loudest_db) / 20.0)
+    streams::relative_amplitude(db, loudest_db)
 }
 
 /// Flatness above which a frame counts as noise rather than tone.
@@ -288,10 +308,11 @@ const MIN_NOISE_BANDWIDTH_HZ: f32 = 250.0;
 /// Each run of consecutive noise-like frames becomes one event, keeping the
 /// speaker's own consonant timing — which is also the fastest structural layer
 /// in speech, and the only one the note stream cannot carry.
-pub fn compose_noise(vp: &Voiceprint, loudest_db: f32, level: f32) -> Vec<NoiseEvent> {
+pub fn compose_noise(vp: &Voiceprint, level: f32) -> Vec<NoiseEvent> {
     if level <= 0.0 {
         return Vec::new();
     }
+    let loudest_db = streams::loudest_db(vp);
     let flatness = &vp.texture.flatness;
     let centroid = &vp.texture.centroid_hz;
     let voiced = &vp.pitch.hz;

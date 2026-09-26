@@ -22,10 +22,7 @@
 //! question has no answer there. Resolving it needs a cue flux does not carry: the stress
 //! hierarchy (`docs/roadmap.md`).
 
-use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
-
-use crate::frame::{self, SPECTRAL_WINDOW};
 
 /// Minimum gap between reported onsets, in frames (50 ms).
 ///
@@ -103,39 +100,30 @@ const THRESHOLD_FLOOR: f32 = 0.06;
 /// the measurement, and the onset list is one thresholding of it. A mapping that
 /// wants different sensitivity should re-pick from the curve rather than ask the
 /// analyser to re-run.
-pub fn flux(samples: &[f32]) -> Vec<f32> {
-    let n = frame::count(samples.len());
-    if n == 0 {
+///
+/// Reads the frames' spectra ([`crate::frame::spectra`]) and levels
+/// ([`crate::energy::track`]), which the caller has already computed.
+pub fn flux(spectra: &[Vec<Complex32>], level_db: &[f32]) -> Vec<f32> {
+    if spectra.is_empty() {
         return Vec::new();
     }
-
-    let mut planner = FftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(SPECTRAL_WINDOW);
-    let window = frame::hann(SPECTRAL_WINDOW);
-    let bins = SPECTRAL_WINDOW / 2 + 1; // real input: the upper half mirrors.
-
-    let mut out = vec![0.0f32; n];
-    let mut prev = vec![0.0f32; bins];
-    let mut buf = vec![Complex32::new(0.0, 0.0); SPECTRAL_WINDOW];
-    let level_db = crate::energy::track(samples);
-
-    for (i, slot) in out.iter_mut().enumerate() {
-        let frame_samples = frame::windowed(samples, i, SPECTRAL_WINDOW);
-        for (b, (s, w)) in buf.iter_mut().zip(frame_samples.iter().zip(&window)) {
-            *b = Complex32::new(s * w, 0.0);
-        }
-        fft.process(&mut buf);
-
-        // Half-wave rectified: only increases in a bin signal an onset. A
-        // decrease is a sound ending, which is a different event.
-        let mut sum = 0.0f32;
-        for (k, p) in prev.iter_mut().enumerate().take(bins) {
-            let mag = buf[k].norm();
-            sum += (mag - *p).max(0.0);
-            *p = mag;
-        }
-        *slot = sum * offset_gate(&level_db, i) * silence_gate(&level_db, i);
-    }
+    let floor = noise_floor(level_db);
+    let mut prev: Vec<f32> = vec![0.0; spectra[0].len()];
+    let mut out: Vec<f32> = spectra
+        .iter()
+        .enumerate()
+        .map(|(i, spectrum)| {
+            // Half-wave rectified: only increases in a bin signal an onset. A
+            // decrease is a sound ending, which is a different event.
+            let mut sum = 0.0f32;
+            for (bin, p) in spectrum.iter().zip(prev.iter_mut()) {
+                let mag = bin.norm();
+                sum += (mag - *p).max(0.0);
+                *p = mag;
+            }
+            sum * offset_gate(level_db, i) * silence_gate(level_db, floor, i)
+        })
+        .collect();
 
     // Frame 0 has no predecessor, so its flux is the whole spectrum appearing at
     // once. That is an artefact of where the recording starts, not an onset.
@@ -156,8 +144,7 @@ pub fn flux(samples: &[f32]) -> Vec<f32> {
 /// alone: the beginning of a sound is the moment its level is still crossing up from the
 /// floor, so testing that one frame would attenuate every real onset. What matters is
 /// whether sound is present just after.
-fn silence_gate(level_db: &[f32], i: usize) -> f32 {
-    let floor = noise_floor(level_db);
+fn silence_gate(level_db: &[f32], floor: f32, i: usize) -> f32 {
     let hi = (i + GATE_SPAN).min(level_db.len());
     let present = level_db[i..hi]
         .iter()

@@ -34,7 +34,8 @@
 
 use utterance_analysis::voiceprint::Voiceprint;
 
-use crate::compose::compose_noise;
+use crate::compose::field_score;
+use crate::field::voice_gain;
 use crate::lattice::{Lattice, Triangle, Walk};
 use crate::params::{self, Params};
 use crate::score::{Field, Score};
@@ -86,12 +87,6 @@ const MIN_SEPARATION_CENTS: f32 = 50.0;
 /// something the mouth decides, which is a different knob wearing this one's
 /// name.
 const LEAN: f32 = 0.6;
-
-/// Quietest the field ever falls, relative to its loudest moment.
-///
-/// The same floor `field` keeps, and for the same reason: a field that stops is
-/// a sequence of events again.
-const FLOOR: f32 = 0.02;
 
 /// Build the lattice field for a take.
 pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
@@ -253,20 +248,11 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
             previous = cents;
             voices[v][i] = base * 2f32.powf(cents / 1200.0);
 
-            // Loudness and articulation behave exactly as in `field`, so the two
-            // mappings differ in their harmony and in nothing else — which is
-            // the only way comparing them says anything.
-            let reach = (level[i] * params.voices as f32) - v as f32;
-            let stirred = 1.0 + params.articulation * stir[i].clamp(0.0, 1.0) * (v as f32 / top);
             // Weight tipped toward the top of the chord or the bottom of it,
             // pivoting on the middle so the chord's overall loudness is left to
             // the energy envelope where it belongs.
             let weighted = (1.0 + LEAN * lean * (v as f32 / top - 0.5) * 2.0).max(0.0);
-            gains[v][i] = (level[i] * reach.clamp(0.0, 1.0) * stirred * weighted).max(if v == 0 {
-                FLOOR
-            } else {
-                0.0
-            });
+            gains[v][i] = voice_gain(level[i], stir[i], v, &params, weighted);
         }
 
         colour[i] = bright[i].clamp(0.0, 1.0);
@@ -290,13 +276,5 @@ pub fn score(vp: &Voiceprint, voice: &Voice) -> Score {
 /// The same, with the knobs set explicitly.
 pub fn score_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
     let params = params.sane();
-    let loudest = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    Score {
-        duration_s: vp.source.duration_s,
-        palette: voice.palette.clone(),
-        detune_cents: voice.detune_cents,
-        noise: compose_noise(vp, loudest, params.consonants),
-        field: compose_with(vp, voice, params),
-        events: Vec::new(),
-    }
+    field_score(vp, voice, params, compose_with(vp, voice, params))
 }

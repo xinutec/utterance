@@ -3,9 +3,15 @@
 mod common;
 
 use common::bursts;
-use utterance_analysis::frame::HOP;
-use utterance_analysis::onset::{flux, pick};
+use utterance_analysis::energy;
+use utterance_analysis::frame::{self, HOP};
+use utterance_analysis::onset::{self, pick};
 use utterance_analysis::resample::ANALYSIS_RATE;
+
+/// Flux over a signal, from the spectra and levels `analyse` would pass it.
+fn flux(x: &[f32]) -> Vec<f32> {
+    onset::flux(&frame::spectra(x), &energy::track(x))
+}
 
 fn onset_times(x: &[f32]) -> Vec<f32> {
     pick(&flux(x))

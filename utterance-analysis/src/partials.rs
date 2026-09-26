@@ -151,7 +151,7 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
 
     let mut planner = FftPlanner::<f32>::new();
     let fft = planner.plan_fft_forward(PARTIAL_WINDOW);
-    let window = blackman(PARTIAL_WINDOW);
+    let window = frame::blackman(PARTIAL_WINDOW);
     let bin_hz = ANALYSIS_RATE as f32 / PARTIAL_WINDOW as f32;
 
     // Per harmonic, every frame's observation of it.
@@ -268,21 +268,6 @@ fn interpolate(magnitude: &[f32], peak: usize, bin_hz: f32) -> (f32, f32) {
     };
     let amplitude = b - 0.25 * (a - c) * offset;
     ((peak as f32 + offset) * bin_hz, amplitude)
-}
-
-/// Blackman window of length `n`.
-///
-/// Chosen over the Hamming used for linear prediction because its sidelobes fall
-/// away far faster. Here the quantity of interest is one partial's amplitude
-/// beside another's, and a strong harmonic leaking into its neighbour's bins
-/// would be read as that neighbour being louder than it is.
-fn blackman(n: usize) -> Vec<f32> {
-    (0..n)
-        .map(|i| {
-            let x = 2.0 * std::f32::consts::PI * i as f32 / n as f32;
-            0.42 - 0.5 * x.cos() + 0.08 * (2.0 * x).cos()
-        })
-        .collect()
 }
 
 /// Median of an unsorted slice, or `None` when there is nothing to take.

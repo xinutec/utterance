@@ -171,8 +171,8 @@ impl Store {
         let dir = self.checked_dir(id)?;
 
         let current = matches!(
-            self.read_json::<Voiceprint>(id, VOICEPRINT),
-            Ok(vp) if vp.schema_version == voiceprint::SCHEMA_VERSION
+            self.read_json::<Written>(id, VOICEPRINT),
+            Ok(w) if w.schema_version == voiceprint::SCHEMA_VERSION
         );
         if current && self.read_json::<RecordingMeta>(id, META).is_ok() {
             return Ok(());
@@ -357,6 +357,17 @@ impl Store {
             detail: format!("{name}: {e}"),
         })
     }
+}
+
+/// Just enough of a stored voiceprint to know which analyser wrote it.
+///
+/// Every `meta` and `voiceprint` read checks this first, and a listing checks it
+/// for every take, so it must not build the whole document: serde skips the
+/// thousands of per-frame values instead of allocating them.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Written {
+    schema_version: u32,
 }
 
 const AUDIO: &str = "audio.wav";

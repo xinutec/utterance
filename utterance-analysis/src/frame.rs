@@ -5,6 +5,9 @@
 //! interpolation. Analyses that need different amounts of context around a frame
 //! vary their *window*, never their hop.
 
+use rustfft::FftPlanner;
+use rustfft::num_complex::Complex32;
+
 use crate::resample::ANALYSIS_RATE;
 
 /// Samples between consecutive frames — 10 ms, i.e. 100 frames per second.
@@ -58,6 +61,30 @@ pub fn windowed(samples: &[f32], i: usize, window: usize) -> Vec<f32> {
         .collect()
 }
 
+/// The Hann-windowed [`SPECTRAL_WINDOW`] spectrum of every frame, non-negative
+/// bins only (real input: the upper half mirrors).
+///
+/// Computed once per recording and shared by every measurement that reads the
+/// short-time spectrum, so the same FFT is never run twice.
+pub fn spectra(samples: &[f32]) -> Vec<Vec<Complex32>> {
+    let fft = FftPlanner::<f32>::new().plan_fft_forward(SPECTRAL_WINDOW);
+    let window = hann(SPECTRAL_WINDOW);
+    let bins = SPECTRAL_WINDOW / 2 + 1;
+    let mut buf = vec![Complex32::new(0.0, 0.0); SPECTRAL_WINDOW];
+    (0..count(samples.len()))
+        .map(|i| {
+            for (b, (s, w)) in buf
+                .iter_mut()
+                .zip(windowed(samples, i, SPECTRAL_WINDOW).iter().zip(&window))
+            {
+                *b = Complex32::new(s * w, 0.0);
+            }
+            fft.process(&mut buf);
+            buf[..bins].to_vec()
+        })
+        .collect()
+}
+
 /// Periodic Hann window of length `n`.
 ///
 /// Periodic (divisor `n`) rather than symmetric (`n - 1`): these windows feed an
@@ -82,6 +109,21 @@ pub fn hamming(n: usize) -> Vec<f32> {
         .map(|i| {
             let x = 2.0 * std::f32::consts::PI * (i as f32) / (n as f32);
             0.54 - 0.46 * x.cos()
+        })
+        .collect()
+}
+
+/// Blackman window of length `n`.
+///
+/// Used for measuring partials: its sidelobes fall away far faster than
+/// Hamming's, and there the quantity of interest is one partial's amplitude
+/// beside another's — a strong harmonic leaking into its neighbour's bins would
+/// be read as that neighbour being louder than it is.
+pub fn blackman(n: usize) -> Vec<f32> {
+    (0..n)
+        .map(|i| {
+            let x = 2.0 * std::f32::consts::PI * (i as f32) / (n as f32);
+            0.42 - 0.5 * x.cos() + 0.08 * (2.0 * x).cos()
         })
         .collect()
 }

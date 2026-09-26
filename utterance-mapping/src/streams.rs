@@ -128,12 +128,26 @@ pub fn filled(hz: &[Option<f32>]) -> Vec<f32> {
         .collect()
 }
 
+/// The take's loudest frame, in dBFS.
+pub fn loudest_db(vp: &Voiceprint) -> f32 {
+    vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+}
+
+/// A level in dBFS as a linear amplitude relative to `loudest_db`.
+///
+/// Relative to the take's own peak, so a quietly recorded take produces the same
+/// dynamics as a loud one — the shape of the envelope is the measurement, not
+/// the level it was recorded at.
+pub fn relative_amplitude(db: f32, loudest_db: f32) -> f32 {
+    10f32.powf((db - loudest_db) / 20.0)
+}
+
 /// The energy envelope as a linear 0..1, relative to the take's loudest moment.
 pub fn level(vp: &Voiceprint) -> Vec<f32> {
-    let loudest = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let loudest = loudest_db(vp);
     vp.rms_db
         .iter()
-        .map(|db| 10f32.powf((db - loudest) / 20.0).clamp(0.0, 1.0))
+        .map(|&db| relative_amplitude(db, loudest).clamp(0.0, 1.0))
         .collect()
 }
 

@@ -106,7 +106,11 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
     let voiced: Vec<bool> = pitch_frames.iter().map(|f| f.hz.is_some()).collect();
     let formant_frames = formant::track(samples, &voiced);
 
-    let flux = onset::flux(samples);
+    // One short-time spectrum and one level track, read by every measurement
+    // that needs them.
+    let spectra = frame::spectra(samples);
+    let rms_db = energy::track(samples);
+    let flux = onset::flux(&spectra, &rms_db);
     let onset_frames = onset::pick(&flux);
     let hop_s = frame::HOP as f32 / ANALYSIS_RATE as f32;
 
@@ -114,7 +118,7 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
     // recording has exactly one answer about its fundamental.
     let pitch_hz: Vec<Option<f32>> = pitch_frames.iter().map(|f| f.hz).collect();
     let partials = partials::measure(samples, &pitch_hz);
-    let texture = texture::track(samples);
+    let texture = texture::track(&spectra);
 
     Voiceprint {
         schema_version: voiceprint::SCHEMA_VERSION,
@@ -133,7 +137,7 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
             f2: formant_frames.iter().map(|f| f.f2).collect(),
             f3: formant_frames.iter().map(|f| f.f3).collect(),
         },
-        rms_db: energy::track(samples),
+        rms_db,
         events: Events {
             onset_times_s: onset_frames.iter().map(|&i| i as f32 * hop_s).collect(),
             onset_frames,

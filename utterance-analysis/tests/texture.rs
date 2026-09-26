@@ -6,8 +6,14 @@
 
 mod common;
 
+use utterance_analysis::frame;
 use utterance_analysis::resample::ANALYSIS_RATE;
-use utterance_analysis::texture;
+use utterance_analysis::texture::{self, Texture};
+
+/// Texture over a signal, from the spectra `analyse` would pass it.
+fn track(x: &[f32]) -> Texture {
+    texture::track(&frame::spectra(x))
+}
 
 /// Median of a series, ignoring the edge frames whose window is half padding.
 fn steady_median(values: &[f32]) -> f32 {
@@ -57,8 +63,8 @@ fn band(centre_hz: f32, bandwidth_hz: f32, secs: f32) -> Vec<f32> {
 #[test]
 fn white_noise_is_flat_and_a_tone_is_not() {
     // The definition of the measure: 1 for white noise, 0 for a pure tone.
-    let noise = texture::track(&white(1.0));
-    let tone = texture::track(&common::sine(440.0, ANALYSIS_RATE, 1.0));
+    let noise = track(&white(1.0));
+    let tone = track(&common::sine(440.0, ANALYSIS_RATE, 1.0));
 
     let noise_flatness = steady_median(&noise.flatness);
     let tone_flatness = steady_median(&tone.flatness);
@@ -76,8 +82,8 @@ fn white_noise_is_flat_and_a_tone_is_not() {
 fn a_vowel_is_far_more_tonal_than_a_fricative() {
     // The distinction the mapping actually needs: this is what separates the
     // material that carries pitch from the material that carries texture.
-    let vowel = texture::track(&common::vowel(120.0, 1.0));
-    let fricative = texture::track(&band(6_000.0, 2_000.0, 1.0));
+    let vowel = track(&common::vowel(120.0, 1.0));
+    let fricative = track(&band(6_000.0, 2_000.0, 1.0));
 
     assert!(
         steady_median(&fricative.flatness) > steady_median(&vowel.flatness) * 3.0,
@@ -90,7 +96,7 @@ fn a_vowel_is_far_more_tonal_than_a_fricative() {
 #[test]
 fn the_centroid_lands_inside_the_band_it_measures() {
     for centre in [1_000.0f32, 3_000.0, 6_000.0] {
-        let measured = steady_median(&texture::track(&band(centre, 800.0, 1.0)).centroid_hz);
+        let measured = steady_median(&track(&band(centre, 800.0, 1.0)).centroid_hz);
         assert!(
             (measured - centre).abs() < centre * 0.35,
             "a band at {centre} Hz measured a centroid of {measured:.0} Hz"
@@ -102,8 +108,8 @@ fn the_centroid_lands_inside_the_band_it_measures() {
 fn a_hissed_s_reads_brighter_than_a_hushed_sh() {
     // The two most common fricatives in English sit about an octave apart, and
     // telling them apart is most of what makes consonants sound individual.
-    let ess = steady_median(&texture::track(&band(7_000.0, 3_000.0, 1.0)).centroid_hz);
-    let esh = steady_median(&texture::track(&band(3_500.0, 1_500.0, 1.0)).centroid_hz);
+    let ess = steady_median(&track(&band(7_000.0, 3_000.0, 1.0)).centroid_hz);
+    let esh = steady_median(&track(&band(3_500.0, 1_500.0, 1.0)).centroid_hz);
     assert!(ess > esh * 1.4, "s {ess:.0} Hz against sh {esh:.0} Hz");
 }
 
@@ -112,7 +118,7 @@ fn silence_reports_no_energy_anywhere_rather_than_a_confident_zero() {
     // A geometric mean collapses to zero if any bin does, so without a floor a
     // digitally silent frame reports itself as perfectly tonal — the most
     // confident possible answer about nothing at all.
-    let quiet = texture::track(&vec![0.0; ANALYSIS_RATE as usize]);
+    let quiet = track(&vec![0.0; ANALYSIS_RATE as usize]);
     assert!(
         quiet.flatness.iter().all(|&f| f > 0.5),
         "silence read as tonal"
@@ -122,7 +128,7 @@ fn silence_reports_no_energy_anywhere_rather_than_a_confident_zero() {
 
 #[test]
 fn every_series_matches_the_frame_grid() {
-    let t = texture::track(&common::vowel(140.0, 0.7));
+    let t = track(&common::vowel(140.0, 0.7));
     assert_eq!(t.centroid_hz.len(), t.flatness.len());
     assert!(!t.centroid_hz.is_empty());
 }
@@ -130,8 +136,8 @@ fn every_series_matches_the_frame_grid() {
 #[test]
 fn is_a_pure_function_of_its_input() {
     let signal = common::vowel(130.0, 0.5);
-    let a = texture::track(&signal);
-    let b = texture::track(&signal);
+    let a = track(&signal);
+    let b = track(&signal);
     assert_eq!(a.centroid_hz, b.centroid_hz);
     assert_eq!(a.flatness, b.flatness);
 }
@@ -150,7 +156,7 @@ fn a_fricative_under_room_rumble_still_reads_as_noise() {
         .map(|(h, r)| h * 0.2 + r * 0.8)
         .collect();
 
-    let t = texture::track(&mixed);
+    let t = track(&mixed);
     let flat = steady_median(&t.flatness);
     let centre = steady_median(&t.centroid_hz);
     assert!(
@@ -167,7 +173,7 @@ fn a_fricative_under_room_rumble_still_reads_as_noise() {
 fn nothing_below_the_band_reaches_either_measure() {
     // A pure low tone carries no information about consonants, and must not be
     // able to move a measurement that is about them.
-    let t = texture::track(&common::sine(120.0, ANALYSIS_RATE, 1.0));
+    let t = track(&common::sine(120.0, ANALYSIS_RATE, 1.0));
     assert!(
         steady_median(&t.centroid_hz) > texture::NOISE_BAND_LOW_HZ,
         "a 120 Hz tone moved a measurement that starts at 300 Hz"
@@ -208,7 +214,7 @@ fn tilt_reads_a_known_slope_in_decibels_per_octave() {
     // that only orders things correctly can be wrong by a factor and never say
     // so, and the unit is what a mapping would normalise against.
     for poles in [1usize, 2, 3] {
-        let measured = steady_median(&texture::track(&sloped(poles, 1.0)).tilt_db_per_octave);
+        let measured = steady_median(&track(&sloped(poles, 1.0)).tilt_db_per_octave);
         let expected = -6.0 * poles as f32;
         assert!(
             (measured - expected).abs() < 1.5,
@@ -227,7 +233,7 @@ fn tilt_measures_the_voice_and_not_the_resampler() {
     //
     // White noise is the signal that catches it: genuinely flat, so anything the
     // measurement finds is the machinery.
-    let flat = steady_median(&texture::track(&white(1.0)).tilt_db_per_octave);
+    let flat = steady_median(&track(&white(1.0)).tilt_db_per_octave);
     assert!(
         flat.abs() < 2.0,
         "white noise reads as {flat:.1} dB/octave, so the fit is measuring the filter"
@@ -240,8 +246,8 @@ fn tilt_separates_two_vowels_the_centroid_agrees_about() {
     // read. Two bands with the same centre have the same centroid by
     // construction, and a spectrum that falls away from it steeply is a different
     // sound from one that does not.
-    let narrow = texture::track(&band(1_200.0, 200.0, 1.0));
-    let wide = texture::track(&band(1_200.0, 2_000.0, 1.0));
+    let narrow = track(&band(1_200.0, 200.0, 1.0));
+    let wide = track(&band(1_200.0, 2_000.0, 1.0));
 
     let centroids = (
         steady_median(&narrow.centroid_hz),
@@ -284,7 +290,7 @@ fn the_band_never_reaches_below_its_stated_low_edge() {
     // rather than a tolerance, and 281.25 Hz is the signal that makes a lower
     // edge show up in it.
     let below = common::sine(281.25, ANALYSIS_RATE, 0.5);
-    let t = texture::track(&below);
+    let t = track(&below);
     assert!(!t.centroid_hz.is_empty(), "no frames to measure");
 
     for (i, &hz) in t.centroid_hz.iter().enumerate() {
