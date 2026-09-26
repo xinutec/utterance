@@ -1,29 +1,16 @@
-//! The analysis frame grid.
-//!
-//! One grid for the whole voiceprint: every per-frame series (f0, energy, flux)
-//! is indexed by the same frame number, so they can be read side by side without
-//! interpolation. Analyses that need different amounts of context around a frame
-//! vary their *window*, never their hop.
+//! The analysis frame grid: every per-frame series shares one frame number.
+//! Analyses vary their *window*, never their hop.
 
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 
 use crate::resample::ANALYSIS_RATE;
 
-/// Samples between consecutive frames — 10 ms, i.e. 100 frames per second.
-///
-/// The speech-analysis convention: short enough to place a plosive burst, long
-/// enough that 30 seconds stays a few thousand frames rather than a few hundred
-/// thousand.
+/// Samples between consecutive frames — 10 ms, the speech-analysis convention.
 pub const HOP: usize = ANALYSIS_RATE as usize / 100;
 
-/// Window for pitch estimation, 64 ms.
-///
-/// Set by the lowest f0 we track. YIN searches lags out to one period of the
-/// lowest voice — 229 samples at 70 Hz — and its difference function needs the
-/// window to be at least twice the longest lag it examines, so the search is
-/// capped at `window / 2` (see `f0::estimate`). 1024 leaves that cap comfortably
-/// above 229. Anything shorter silently loses the bottom of a low male range.
+/// Window for pitch estimation, 64 ms: YIN's lag search reaches one period at
+/// 70 Hz (229 samples) and needs a window twice the longest lag.
 pub const PITCH_WINDOW: usize = 1024;
 
 /// Window for spectral analysis, 32 ms. Shorter than the pitch window because
@@ -41,11 +28,7 @@ pub fn time_s(i: usize) -> f32 {
 }
 
 /// Copy the `window`-sample window centred on frame `i`, zero-padded at the
-/// signal edges.
-///
-/// Centred rather than left-aligned so a frame's measurements describe the audio
-/// *at* its timestamp. A left-aligned window reports every event half a window
-/// late, which is invisible in a plot and fatal once onsets drive rhythm.
+/// edges. Centred, so measurements describe the audio *at* the timestamp.
 pub fn windowed(samples: &[f32], i: usize, window: usize) -> Vec<f32> {
     let center = (i * HOP) as isize;
     let start = center - (window as isize) / 2;
@@ -62,10 +45,7 @@ pub fn windowed(samples: &[f32], i: usize, window: usize) -> Vec<f32> {
 }
 
 /// The Hann-windowed [`SPECTRAL_WINDOW`] spectrum of every frame, non-negative
-/// bins only (real input: the upper half mirrors).
-///
-/// Computed once per recording and shared by every measurement that reads the
-/// short-time spectrum, so the same FFT is never run twice.
+/// bins only — computed once and shared.
 pub fn spectra(samples: &[f32]) -> Vec<Vec<Complex32>> {
     let fft = FftPlanner::<f32>::new().plan_fft_forward(SPECTRAL_WINDOW);
     let window = hann(SPECTRAL_WINDOW);
@@ -85,10 +65,8 @@ pub fn spectra(samples: &[f32]) -> Vec<Vec<Complex32>> {
         .collect()
 }
 
-/// Periodic Hann window of length `n`.
-///
-/// Periodic (divisor `n`) rather than symmetric (`n - 1`): these windows feed an
-/// FFT, where the periodic form is the one that sums to a constant under overlap.
+/// Periodic Hann window of length `n` — the form that sums to a constant under
+/// overlap.
 pub fn hann(n: usize) -> Vec<f32> {
     (0..n)
         .map(|i| {
@@ -98,12 +76,8 @@ pub fn hann(n: usize) -> Vec<f32> {
         .collect()
 }
 
-/// Hamming window of length `n`.
-///
-/// Used for linear prediction rather than the Hann above: its lower first
-/// sidelobe keeps energy from one harmonic of the source out of the
-/// autocorrelation of its neighbours, which is what the pole fit is trying to
-/// see past.
+/// Hamming window of length `n`, for linear prediction: its low first sidelobe
+/// keeps one harmonic out of its neighbours' autocorrelation.
 pub fn hamming(n: usize) -> Vec<f32> {
     (0..n)
         .map(|i| {
@@ -113,12 +87,8 @@ pub fn hamming(n: usize) -> Vec<f32> {
         .collect()
 }
 
-/// Blackman window of length `n`.
-///
-/// Used for measuring partials: its sidelobes fall away far faster than
-/// Hamming's, and there the quantity of interest is one partial's amplitude
-/// beside another's — a strong harmonic leaking into its neighbour's bins would
-/// be read as that neighbour being louder than it is.
+/// Blackman window of length `n`, for partials: fast-falling sidelobes, so a
+/// strong harmonic does not inflate its neighbour.
 pub fn blackman(n: usize) -> Vec<f32> {
     (0..n)
         .map(|i| {

@@ -1,12 +1,6 @@
 /**
- * The seam where wire data becomes what the page believes.
- *
- * Everything under this is covered — the API boundary by `recordings-api.spec`,
- * the rendering by the layout harness — and this was the gap between them. What
- * lives here is not fetching but *policy*: which take opens by itself, which
- * failures are worth covering the screen with, and what stops being true when a
- * take is deleted. None of it is visible in a type, and all of it is the kind of
- * thing that breaks quietly.
+ * The store's policy — which take opens by itself, which failures cover the
+ * screen, what a delete invalidates — none of it visible in a type.
  */
 
 import { TestBed } from "@angular/core/testing";
@@ -50,12 +44,8 @@ function corner(step: SpeakerCorner["step"]): SpeakerCorner {
 }
 
 /**
- * A stand-in for the HTTP service, one spy per method.
- *
- * Every method answers synchronously with `of(...)`, so a test reads the signals
- * straight after the call rather than waiting. That is honest here: the store
- * holds no timers and no `async` of its own — it subscribes and assigns — so
- * nothing under test depends on the delay a real request would add.
+ * A stand-in for the HTTP service, answering synchronously: the store has no
+ * timers of its own, so nothing depends on the delay.
  */
 function defaults() {
   return {
@@ -102,9 +92,7 @@ describe("opening a take by itself", () => {
   });
 
   it("leaves a take alone once one is open", () => {
-    // Otherwise every refresh — and one follows each upload, role change and
-    // delete — would drag the page back to the top of the list while somebody
-    // is reading a take further down.
+    // Or every refresh would jump the page back to the top of the list.
     const stub = api();
     const store = storeWith(stub);
     store.select(meta("b"));
@@ -129,9 +117,7 @@ describe("what a failure is allowed to cover the screen with", () => {
   });
 
   it("swallows the corners' failure and keeps the ones it had", () => {
-    // The corners are the vowel chart's reference grid. Losing them is not worth
-    // an error banner over a take that was just recorded successfully — the
-    // chart falls back to generic positions and says so on its face.
+    // The corners' failure is not worth a banner; the chart says it is generic.
     const stub = api();
     const store = storeWith(stub);
     store.refresh();
@@ -144,8 +130,7 @@ describe("what a failure is allowed to cover the screen with", () => {
   });
 
   it("stops waiting when a request fails", () => {
-    // A store left busy after a failure is a page with a spinner over it and an
-    // error under the spinner, and every button disabled.
+    // A store left busy is a spinner over an error, with every button disabled.
     const store = storeWith(api({ get: vi.fn(() => refusal("rejected", "too short")) }));
     store.select(meta("a"));
     expect(store.busy()).toBe(false);
@@ -164,8 +149,7 @@ describe("deleting", () => {
     const stub = api();
     const store = storeWith(stub);
     store.select(meta("a"));
-    // The list is empty afterwards, so nothing is opened in its place and the
-    // assertion is about the delete rather than about the refresh behind it.
+    // The list is empty afterwards, so the assertion is about the delete.
     stub.list.mockImplementation(() => of([]));
     store.remove(meta("a"));
     expect(store.selected()).toBeNull();
@@ -181,9 +165,7 @@ describe("deleting", () => {
 
 describe("changing what a take is for", () => {
   it("re-reads the open take, because its role changed what it means", () => {
-    // The role decides which takes the speaker is derived from, so it changes
-    // the scale, the vowel space and the tonic. A row that quietly disagreed
-    // with the voice on screen would be worse than a reload.
+    // The role changes the scale, vowel space and tonic, so the list reloads.
     const stub = api();
     const store = storeWith(stub);
     store.select(meta("a"));

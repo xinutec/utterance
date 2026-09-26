@@ -5,14 +5,12 @@
  */
 export type Pitch = { 
 /**
- * Fundamental per frame; `null` where the frame is unvoiced.
- *
- * Nullable rather than zero-filled so a consumer cannot average an unvoiced
- * frame into a phrase's mean pitch without noticing.
+ * Fundamental per frame; `null` where unvoiced, so a mean cannot silently
+ * include it.
  */
 hz: Array<number | null>, 
 /**
- * YIN's normalised difference at the chosen lag. Present for every frame,
- * voiced or not — it is the continuous measurement behind the decision.
+ * YIN's normalised difference at the chosen lag, for every frame — the
+ * continuous measurement behind the voicing decision.
  */
 aperiodicity: Array<number>, };

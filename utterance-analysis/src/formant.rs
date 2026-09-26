@@ -1,15 +1,8 @@
 //! Formant tracking: where the vocal tract resonates, frame by frame.
 //!
-//! Formants are what makes one vowel a different vowel from another, and they
-//! are close to independent of pitch — the same person saying the same vowel high
-//! or low moves f0 a long way and F1/F2 barely at all. That independence is why
-//! this measurement is worth having: it is a description of what the speaker is
-//! *doing* with their mouth, separable from the note they are on.
-//!
-//! For this project specifically, F1 against F2 is a two-dimensional space in
-//! which every vowel of a language occupies a region, and vowel sequences are
-//! trajectories through it — the geometry the harmony mappings are built on (see
-//! `docs/architecture.md`).
+//! Formants make one vowel differ from another and barely move with pitch, so
+//! they describe what the mouth is doing apart from the note. F1 against F2 is
+//! the space vowels occupy, and what the harmony mappings are built on.
 
 use crate::frame::{self, SPECTRAL_WINDOW};
 use crate::lpc;
@@ -23,19 +16,13 @@ const F_MIN_HZ: f32 = 90.0;
 /// 8 kHz Nyquist where poles are unreliable.
 const F_MAX_HZ: f32 = 5_000.0;
 
-/// Widest pole accepted as a formant.
-///
-/// A vocal-tract resonance is narrow — a few tens of hertz to a couple of
-/// hundred. A very wide pole is the fit describing the general shape of the
-/// spectrum rather than a resonance in it, and admitting those is how spurious
-/// formants appear in silence and in fricatives.
+/// Widest pole accepted as a formant: a resonance is tens to a couple of hundred
+/// hertz wide, and a wider pole is the fit describing the spectrum's overall
+/// shape — how spurious formants appear in silence and fricatives.
 const BANDWIDTH_MAX_HZ: f32 = 400.0;
 
-/// The first three formants of one frame.
-///
-/// `None` where the frame gives no usable estimate — unvoiced, silent, or the
-/// fit simply produced nothing in range. Never a sentinel: a frame with no
-/// second formant must not average into a mapping as 0 Hz.
+/// The first three formants of one frame, `None` where there is no usable
+/// estimate — never a sentinel 0 Hz to average into a mapping.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct FormantFrame {
     pub f1: Option<f32>,
@@ -50,12 +37,8 @@ pub struct Resonance {
     pub bandwidth_hz: f32,
 }
 
-/// Track formants across every frame.
-///
-/// `voiced` gates the estimate: linear prediction assumes a source driving a
-/// filter, and in an unvoiced frame there is no periodic source, so whatever
-/// poles come back describe noise. Reporting them would be inventing vowels in
-/// the gaps between them.
+/// Track formants across every frame. `voiced` gates the estimate: without a
+/// periodic source the poles describe noise, and would invent vowels.
 pub fn track(samples: &[f32], voiced: &[bool]) -> Vec<FormantFrame> {
     (0..frame::count(samples.len()))
         .map(|i| {
@@ -68,12 +51,8 @@ pub fn track(samples: &[f32], voiced: &[bool]) -> Vec<FormantFrame> {
         .collect()
 }
 
-/// Plausible range for each formant, in Hz, across adult speakers.
-///
-/// Wide enough to cover any speaker and any vowel, narrow enough to be
-/// informative. These are anatomy: F1 is set mostly by how open the jaw is and
-/// F2 by where the tongue sits, and neither can reach far outside these bounds
-/// on a human vocal tract.
+/// Plausible range for each formant, in Hz, across adult speakers — anatomy
+/// limits how far jaw and tongue move them.
 const RANGES: [(f32, f32); 3] = [(200.0, 1_100.0), (600.0, 3_000.0), (1_500.0, 4_000.0)];
 
 /// Formants of a single windowed frame.
@@ -81,26 +60,19 @@ pub fn estimate(window: &[f32]) -> FormantFrame {
     assign(&resonances(window))
 }
 
-/// Fit resonances to formant slots, lowest first, respecting each slot's range.
+/// Fit resonances to formant slots, lowest first, within each slot's range.
 ///
-/// Taking the three lowest resonances in order is the obvious rule and it fails
-/// in a specific, visible way: when a genuine formant is missed for a frame —
-/// merged with its neighbour, or too damped to survive the bandwidth filter —
-/// every formant above it shifts down a slot, and F2 is reported at a frequency
-/// no F2 can occupy. Measured on a real glided vowel, that put F2 at 3.4 kHz in
-/// a fifth of frames.
-///
-/// Requiring each slot's candidate to lie in that formant's anatomical range
-/// turns those into `None`. Reporting nothing where the fit failed is worth more
-/// than reporting a number known to be impossible, because a mapping downstream
-/// can skip a gap but cannot detect a plausible-looking lie.
+/// Taking the three lowest in order fails when one is missed: everything above
+/// shifts down a slot, and on a real glide that put F2 at 3.4 kHz in a fifth of
+/// frames. Out-of-range becomes `None` — a mapping can skip a gap, but cannot
+/// detect a plausible-looking lie.
 fn assign(resonances: &[Resonance]) -> FormantFrame {
     let mut slots: [Option<f32>; 3] = [None; 3];
     let mut next = 0;
 
     for resonance in resonances {
-        // Advance past slots this resonance is already too high for, so a missing
-        // F1 does not consume the F2 slot with an F2-range value.
+        // Skip slots this resonance is too high for, so a missing F1 does not
+        // take the F2 slot.
         while next < RANGES.len() && resonance.frequency_hz > RANGES[next].1 {
             next += 1;
         }
@@ -135,11 +107,9 @@ pub fn resonances(window: &[f32]) -> Vec<Resonance> {
     let rate = f64::from(ANALYSIS_RATE);
     let mut found: Vec<Resonance> = lpc::roots(&coefficients)
         .into_iter()
-        // One of each conjugate pair. A pole on the real axis is not a
-        // resonance — it is the fit describing spectral slope.
+        // One of each conjugate pair; a real pole is spectral slope.
         .filter(|z| z.im > 0.0)
-        // Outside the unit circle means an unstable fit, numerically rather than
-        // physically; those poles describe nothing real.
+        // Outside the unit circle: an unstable fit, describing nothing.
         .filter(|z| z.norm() < 1.0)
         .map(|z| Resonance {
             frequency_hz: (z.arg() * rate / (2.0 * std::f64::consts::PI)) as f32,

@@ -24,23 +24,13 @@ const DIFFERENCE_SHARE = 0.3;
 const SILENT_ALPHA = 0.4;
 
 /**
- * Two scores on one time axis, with the difference between them drawn beneath
- * each stream.
+ * Two scores on one time axis, with the difference drawn beneath each stream.
  *
- * **The difference trace is the instrument here, not the two curves.** Two
- * renders being compared are usually *nearly* the same — that is what makes
- * them hard to tell apart and worth comparing. Drawn against the full range of
- * the data, "nearly the same" is a single line: the second curve lands on the
- * first and hides it, which reads as a broken chart. Each panel therefore
- * carries its own difference, scaled to its own largest gap and captioned with
- * what that gap actually is, so a ten-cent difference fills the strip and says
- * "up to 93 cents" rather than vanishing into an axis two octaves tall.
- *
- * Panels where the two are byte-identical say **identical** in so many words.
- * Silence there would be indistinguishable from a drawing fault.
- *
- * Canvas rather than SVG, like the voiceprint chart: a thousand points per
- * stream across five panels is more DOM than a page can carry.
+ * **The difference trace is the instrument.** Compared renders are nearly the
+ * same, so on the data's full range the curves overlap into one line. Each
+ * panel's difference is scaled to its own largest gap and captioned with it —
+ * "up to 93 cents" fills the strip — and identical panels say **identical**.
+ * Canvas, for thousands of points per panel.
  */
 @Component({
   selector: "app-compare-chart",
@@ -65,7 +55,7 @@ export class CompareChart implements AfterViewInit, OnDestroy {
 
   constructor() {
     effect(() => {
-      // Read every input so the effect re-runs when any of them moves.
+      // Read every input, so the effect re-runs when any moves.
       const inputs = [this.a(), this.b(), this.playhead(), this.audible()] as const;
       if (this.observer) this.draw(...inputs);
     });
@@ -130,13 +120,10 @@ export class CompareChart implements AfterViewInit, OnDestroy {
       const tracesB = panel.traces(b);
       const scale = bounds([...tracesA, ...tracesB], panel.key);
 
-      // Each side keeps its own colour whichever is playing — only the draw
-      // order changes. Carried as a pair rather than as parallel `order` and
-      // `colours` tuples, which would be the same fact spelled twice.
+      // Each side keeps its colour; only the draw order changes.
       const sideA = [tracesA, theme.accent] as const;
       const sideB = [tracesB, theme.warm] as const;
-      // The silent side first and faded, so the side being heard is on top and
-      // never hidden by the one that is not.
+      // The silent side first and faded, so the audible one is on top.
       const layers = audible === "a" ? [sideB, sideA] : [sideA, sideB];
       layers.forEach(([traces, colour], i) => {
         ctx.globalAlpha = i === 0 ? SILENT_ALPHA : 1;
@@ -157,7 +144,7 @@ export class CompareChart implements AfterViewInit, OnDestroy {
       ctx.globalAlpha = 1;
     });
 
-    // The playhead last, over everything, so it is never hidden by a series.
+    // The playhead last, over everything.
     const x = (playhead / this.duration()) * width;
     ctx.strokeStyle = theme.ink;
     ctx.globalAlpha = 0.55;
@@ -185,8 +172,7 @@ export class CompareChart implements AfterViewInit, OnDestroy {
 
     const verdict = summarise(difference, panel.unit);
     ctx.textAlign = "right";
-    // "identical" is the one that must not be missed, so it is the one drawn in
-    // full-strength ink rather than in the caption grey.
+    // "identical" in full-strength ink: it must not be missed.
     ctx.fillStyle = verdict === "identical" ? theme.ink : theme.muted;
     ctx.fillText(verdict, width, top + 11);
     ctx.textAlign = "left";
@@ -217,12 +203,8 @@ export class CompareChart implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * How far apart the two sides are, filled and scaled to its own largest gap.
-   *
-   * Scaled to itself rather than to the panel above it, which is the whole point:
-   * the differences worth hunting for are the ones too small to see against the
-   * data. The caption carries the absolute size so the scaling cannot mislead
-   * anyone into thinking a small difference is a large one.
+   * How far apart the two sides are, filled and scaled to its own largest gap,
+   * with the caption giving the real size.
    */
   private difference(
     ctx: CanvasRenderingContext2D,
@@ -249,14 +231,11 @@ export class CompareChart implements AfterViewInit, OnDestroy {
 }
 
 /**
- * The range a panel is drawn against, shared by both sides and every trace.
- *
- * Shared is essential: scaled independently, two series an octave apart would be
- * drawn on top of each other and the chart would report no difference at all.
+ * The range a panel is drawn against, shared by both sides — scaled apart, two
+ * series an octave apart would overlap.
  */
 function bounds(traces: readonly (readonly number[])[], key: string): readonly [number, number] {
-  // Colour and breath are defined on 0..1, and pinning them there keeps a small
-  // real difference small rather than magnifying it to fill the panel.
+  // Colour and breath pinned to 0..1, so a small difference stays small.
   if (key === "colour" || key === "breath") return [0, 1];
 
   let lo = Infinity;
@@ -268,6 +247,6 @@ function bounds(traces: readonly (readonly number[])[], key: string): readonly [
     }
   }
   if (!Number.isFinite(lo)) return [0, 1];
-  // A flat pair still needs a panel's worth of height to sit in the middle of.
+  // A flat pair still needs some height.
   return hi > lo ? [lo, hi] : [lo - 0.5, lo + 0.5];
 }

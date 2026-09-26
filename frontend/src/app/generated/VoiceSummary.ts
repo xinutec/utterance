@@ -10,11 +10,8 @@ export type VoiceSummary = {
  */
 tonicHz: number, degrees: Array<ScaleDegree>, 
 /**
- * Spectra the tone moves between, ordered dark to bright.
- *
- * One per calibration take that held a pitch — the speaker's own vowels,
- * which is what gives the output a timbre that moves rather than one fixed
- * colour.
+ * Spectra the tone moves between, ordered dark to bright: one per
+ * calibration take that held a pitch.
  */
 palette: Array<Array<number>>, 
 /**
@@ -32,11 +29,8 @@ takes: number,
 /**
  * Why the mapping asked for cannot be played in this scale, if it cannot.
  *
- * **Here rather than only on the render, because of when it is needed.**
- * The render is fetched by an `<audio>` element, which is handed a URL and
- * reports a failure as a broken player with no message — so a refusal that
- * only lives there is a refusal nobody reads. This summary is fetched by
- * script, under the same settings, before the player is pointed anywhere.
- * The render refuses too; this is what makes the refusal legible.
+ * Here as well as on the render because the render is fetched by an
+ * `<audio>` element, which shows a failure as a broken player with no
+ * message. This is fetched by script first, so the refusal can be read.
  */
 refusal: string | null, };

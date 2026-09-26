@@ -1,16 +1,11 @@
-//! Rendering, checked against what the score asked for.
-//!
-//! Nothing here judges how it sounds. What it can check is that the synthesiser
-//! plays what the score says and adds nothing of its own: the right frequency,
-//! for the right length, at the right moment, without clicks and without
-//! aliasing.
+//! Rendering, checked against what the score asked for: the right frequency,
+//! length and moment, without clicks or aliasing, and nothing added.
 
 use utterance_mapping::score::{Event, Field, NoiseEvent, Score};
 use utterance_realisation::synth::{self, RENDER_RATE};
 use utterance_realisation::wav;
 
-/// A score with one fixed spectrum, so a test that is not about colour need not
-/// mention it.
+/// A score with one fixed spectrum, for tests that are not about colour.
 fn score(events: Vec<Event>, duration_s: f32, spectrum: Vec<f32>) -> Score {
     Score {
         duration_s,
@@ -34,8 +29,7 @@ fn note(start_s: f32, duration_s: f32, hz: f32) -> Event {
     }
 }
 
-/// Zero crossings in the rising direction — a cheap frequency estimate that
-/// needs no FFT and is exact enough for a pure tone.
+/// Rising zero crossings: a frequency estimate exact enough for a pure tone.
 fn rising_crossings(samples: &[f32]) -> usize {
     samples
         .windows(2)
@@ -57,8 +51,7 @@ fn renders_the_pitch_the_score_asked_for() {
 
 #[test]
 fn renders_a_pitch_no_sampled_instrument_could_play() {
-    // The reason this crate is additive at all: 582 cents above 200 Hz is a
-    // septimal tritone, and it has to come out exactly there.
+    // Why the crate is additive: 582 cents above 200 Hz must come out exactly.
     let hz = 200.0 * 2f32.powf(582.0 / 1200.0);
     let s = score(vec![note(0.0, 1.0, hz)], 1.0, vec![1.0]);
     let crossings = rising_crossings(&synth::render(&s)) as f32;
@@ -84,9 +77,7 @@ fn places_a_note_where_the_score_puts_it() {
 
 #[test]
 fn starts_and_ends_without_a_click() {
-    // A sinusoid switched on mid-cycle is a step, and a step is a click. The
-    // envelope is the only thing preventing it, so this checks the edges rather
-    // than the middle.
+    // A sinusoid switched on mid-cycle clicks; the envelope's edges prevent it.
     let s = score(vec![note(0.0, 0.5, 300.0)], 0.5, vec![1.0]);
     let rendered = synth::render(&s);
 
@@ -104,15 +95,12 @@ fn starts_and_ends_without_a_click() {
 
 #[test]
 fn refuses_to_alias_partials_above_nyquist() {
-    // A rich timbre on a high note puts most of its harmonics past Nyquist. If
-    // they were rendered they would fold back down as inharmonic noise, and be
-    // heard as the tuning being wrong rather than as the synthesiser being wrong.
+    // Harmonics past Nyquist would alias down and sound like a wrong tuning.
     let timbre: Vec<f32> = (1..=24).map(|k| 1.0 / k as f32).collect();
     let s = score(vec![note(0.0, 0.5, 5000.0)], 0.5, timbre);
     let rendered = synth::render(&s);
 
-    // Everything that survives is a multiple of 5 kHz below 22.05 kHz, i.e.
-    // 5, 10, 15 and 20 kHz — all well above the 1 kHz an alias would land near.
+    // What survives is 5, 10, 15 and 20 kHz, far from where an alias would land.
     let low_energy: f32 = rendered
         .windows(45)
         .step_by(45)
@@ -188,8 +176,7 @@ fn is_a_pure_function_of_its_input() {
 
 #[test]
 fn writes_a_wav_the_analyser_can_read_back() {
-    // The loop closes here: anything this project renders must be something it
-    // could also analyse, or the output is not really audio.
+    // Anything rendered must be analysable, or it is not really audio.
     let s = score(vec![note(0.0, 1.0, 440.0)], 1.0, vec![1.0]);
     let bytes = wav::encode(&synth::render(&s));
 
@@ -199,13 +186,8 @@ fn writes_a_wav_the_analyser_can_read_back() {
     assert_eq!(rate, RENDER_RATE);
 }
 
-/// How bright a slice sounds, without an FFT.
-///
-/// The RMS of the signal's first difference over the RMS of the signal.
-/// Differencing is a high-pass, so the ratio rises with energy at the top of the
-/// spectrum. Counting zero crossings would be useless here: it reports whichever
-/// partial is strongest and does not move at all under a tilt that changes every
-/// partial's level but not their ranking.
+/// How bright a slice sounds: RMS of the first difference (a high-pass) over
+/// RMS of the signal. Zero crossings would only follow the strongest partial.
 fn brightness(samples: &[f32]) -> f32 {
     let rms = |xs: &[f32]| (xs.iter().map(|v| v * v).sum::<f32>() / xs.len().max(1) as f32).sqrt();
     let slope: Vec<f32> = samples.windows(2).map(|w| w[1] - w[0]).collect();
@@ -227,8 +209,7 @@ fn bright() -> Vec<f32> {
 
 #[test]
 fn a_note_changes_colour_across_its_length() {
-    // The reason the score carries two colours. A spectrum that holds still is
-    // the dead-organ sound of naive additive synthesis.
+    // The reason the score carries two colours: a static spectrum sounds dead.
     let s = Score {
         duration_s: 2.0,
         palette: vec![dark(), bright()],
@@ -254,9 +235,7 @@ fn a_note_changes_colour_across_its_length() {
 
 #[test]
 fn a_note_darkens_as_it_decays() {
-    // Damping rises with frequency in every real resonator, so the attack is the
-    // brightest moment. Without it a decaying note keeps its attack brightness
-    // all the way down, which reads as synthetic long before anyone says why.
+    // Damping rises with frequency, so the attack is the brightest moment.
     let s = score(vec![note(0.0, 2.0, 150.0)], 2.0, bright());
     let rendered = synth::render(&s);
     let fifth = rendered.len() / 5;
@@ -269,11 +248,9 @@ fn a_note_darkens_as_it_decays() {
     );
 }
 
-/// How periodic a slice is: correlation with itself shifted by one period.
-///
-/// A tone repeats exactly and scores near 1; noise does not repeat and scores
-/// near 0. Not brightness: breath is shaped to sit where the tone's own energy
-/// sits, so adding it barely changes the brightness at all.
+/// How periodic a slice is: correlation with itself one period later — near 1
+/// for a tone, near 0 for noise. Not brightness, which shaped breath barely
+/// moves.
 fn periodicity(samples: &[f32], hz: f32) -> f32 {
     let lag = (RENDER_RATE as f32 / hz).round() as usize;
     let n = samples.len() - lag;
@@ -284,8 +261,7 @@ fn periodicity(samples: &[f32], hz: f32) -> f32 {
 
 #[test]
 fn breath_puts_noise_in_the_tone() {
-    // Silence between the harmonics is what makes pure additive synthesis sound
-    // sterile. A breathy note must be measurably less periodic than a clean one.
+    // A breathy note must be measurably less periodic than a clean one.
     let pitched = score(vec![note(0.0, 1.0, 200.0)], 1.0, dark());
     let breathy = Score {
         events: vec![Event {
@@ -309,9 +285,7 @@ fn breath_puts_noise_in_the_tone() {
 
 #[test]
 fn breath_is_shaped_rather_than_white() {
-    // Unfiltered noise reads as tape hiss laid over the music rather than as a
-    // quality of the tone. Shaped breath sits where the note's own energy sits,
-    // so it barely moves the brightness.
+    // Unfiltered noise is tape hiss; shaped breath barely moves the brightness.
     let clean = score(vec![note(0.0, 1.0, 200.0)], 1.0, dark());
     let breathy = Score {
         events: vec![Event {
@@ -332,9 +306,7 @@ fn breath_is_shaped_rather_than_white() {
 
 #[test]
 fn detune_pulls_partials_off_their_exact_harmonics() {
-    // Perfectly locked partials are what a computer makes and nothing else does.
-    // Detuned ones beat against each other, so the envelope of a sustained note
-    // stops being flat.
+    // Detuned partials beat, so a sustained note's envelope stops being flat.
     let flat = score(vec![note(0.0, 2.0, 200.0)], 2.0, bright());
     let detuned = Score {
         detune_cents: 10.0,
@@ -360,8 +332,7 @@ fn detune_pulls_partials_off_their_exact_harmonics() {
 
 #[test]
 fn a_palette_of_one_still_renders() {
-    // The state a speaker is in after a single calibration take. It should sound
-    // like one fixed timbre, not like silence.
+    // After a single calibration take: one fixed timbre, not silence.
     let s = score(vec![note(0.0, 0.5, 300.0)], 0.5, dark());
     let peak = synth::render(&s).iter().fold(0.0f32, |m, v| m.max(v.abs()));
     assert!(
@@ -372,8 +343,7 @@ fn a_palette_of_one_still_renders() {
 
 #[test]
 fn an_empty_palette_renders_silence_rather_than_guessing() {
-    // Inventing a spectrum would put energy where the speaker's tract put none,
-    // and report success while doing it.
+    // Inventing a spectrum would put energy where the tract put none.
     let s = Score {
         duration_s: 1.0,
         palette: Vec::new(),
@@ -417,8 +387,7 @@ fn a_consonant_sounds_where_the_score_puts_it() {
 
 #[test]
 fn a_bright_consonant_renders_brighter_than_a_dark_one() {
-    // The whole point of measuring the centroid: the speaker's own s and sh must
-    // come out as different sounds, not as one generic hiss.
+    // The speaker's own s and sh must come out as different sounds.
     let ess = synth::render(&noise_score(
         vec![noise_event(0.0, 0.4, 7000.0, 3000.0)],
         0.5,
@@ -437,9 +406,8 @@ fn a_bright_consonant_renders_brighter_than_a_dark_one() {
 
 #[test]
 fn a_narrow_band_is_not_louder_than_a_wide_one() {
-    // A resonator's gain rises sharply as its band narrows. Without the
-    // compensation, a whistled consonant would arrive many times louder than an
-    // airy one carrying the same measured energy.
+    // A resonator's gain rises as its band narrows; without compensation a
+    // whistled consonant would drown an airy one of the same energy.
     let narrow = synth::render(&noise_score(
         vec![noise_event(0.0, 0.4, 3000.0, 250.0)],
         0.5,
@@ -459,8 +427,7 @@ fn a_narrow_band_is_not_louder_than_a_wide_one() {
 
 #[test]
 fn notes_and_consonants_sound_together() {
-    // They are separate streams in the score and must both reach the output —
-    // the failure this guards is one silently overwriting the other.
+    // Separate streams in the score, and both must reach the output.
     let both = Score {
         noise: vec![noise_event(0.0, 0.4, 6000.0, 3000.0)],
         ..score(vec![note(0.0, 0.4, 200.0)], 0.5, vec![1.0, 0.5])
@@ -500,7 +467,7 @@ fn field_score(f: Field, duration_s: f32) -> Score {
 
 #[test]
 fn a_field_sounds_for_its_whole_length() {
-    // Where a note stream leaves silence between events, a field does not stop.
+    // A field does not stop between events.
     let s = field_score(field(100, vec![vec![220.0; 100]]), 1.0);
     let rendered = synth::render(&s);
     let loud_at = |t: f32| {
@@ -516,10 +483,8 @@ fn a_field_sounds_for_its_whole_length() {
 
 #[test]
 fn a_voice_that_moves_glides_without_clicking() {
-    // Phase has to be accumulated rather than recomputed from elapsed time. With
-    // `sin(2*pi*f*t)` and a moving f, the waveform jumps at every frame boundary
-    // — a click a hundred times a second, which is itself a tone at the frame
-    // rate and the single most audible way to get this wrong.
+    // Phase is accumulated: `sin(2πft)` with a moving f jumps at every frame
+    // boundary, a click a hundred times a second.
     let sweep: Vec<f32> = (0..200).map(|i| 200.0 + i as f32).collect();
     let s = field_score(field(200, vec![sweep]), 2.0);
     let rendered = synth::render(&s);
@@ -528,8 +493,7 @@ fn a_voice_that_moves_glides_without_clicking() {
         .windows(2)
         .map(|w| (w[1] - w[0]).abs())
         .fold(0.0f32, f32::max);
-    // One sample of a full-scale 400 Hz tone steps by at most this much; a
-    // phase discontinuity would be a large fraction of full scale.
+    // One sample of a full-scale 400 Hz tone steps by at most this much.
     let smooth = std::f32::consts::TAU * 400.0 / RENDER_RATE as f32 * 3.0;
     assert!(
         biggest_step < smooth,
@@ -539,7 +503,7 @@ fn a_voice_that_moves_glides_without_clicking() {
 
 #[test]
 fn every_voice_of_a_field_reaches_the_output() {
-    // Five voices must be five voices, not the first one played louder.
+    // Five voices must be five voices, not one played louder.
     let one = field_score(field(100, vec![vec![220.0; 100]]), 1.0);
     let three = field_score(
         field(
@@ -575,17 +539,9 @@ fn a_field_is_deterministic() {
 
 #[test]
 fn an_event_that_outlasts_the_score_is_clipped_to_the_buffer() {
-    // The buffer is `score.duration_s` long and an event carries its own
-    // duration, so the two can disagree — and nothing upstream reconciles them.
-    // Both `sum_note` and `sum_noise` then index `out[start..end]`, which is an
-    // out-of-bounds slice unless `end` is clamped: a panic, in a crate that
-    // denies panics crate-wide and carries the totality opt-in.
-    //
-    // This is not a malformed score. A mapping that rounds a duration up, or a
-    // consonant measured on the take's last frame, produces one.
-    //
-    // A clipped event still has to *sound*, which is the second assertion;
-    // returning early would satisfy the first.
+    // An event can outlast the score's buffer — a duration rounded up, a
+    // consonant on the last frame — and `out[start..end]` must be clamped, not
+    // panic. The clipped event must still sound, or returning early would pass.
     let mut s = score(vec![note(0.40, 10.0, 220.0)], 0.5, vec![1.0]);
     s.noise.push(noise_event(0.45, 10.0, 5000.0, 3000.0));
 
@@ -605,13 +561,8 @@ fn an_event_that_outlasts_the_score_is_clipped_to_the_buffer() {
 
 #[test]
 fn the_buffer_holds_every_sample_the_duration_asks_for() {
-    // `duration_s` is a measured length, so it is almost never a whole number of
-    // samples. Truncating instead of rounding up drops the last, partial sample
-    // — inaudible on its own, and the reason it matters is that the buffer's
-    // length is what everything downstream reads back as the piece's duration:
-    // the WAV header, the player's scrub bar, and the analysis of a rendering.
-    // Off by one sample every render is a length that disagrees with the score
-    // that produced it.
+    // Rounded up, not truncated: the buffer's length is what the WAV header,
+    // the scrub bar and any analysis read back as the piece's duration.
     for duration_s in [0.5001f32, 0.10005, 1.333] {
         let rendered = synth::render(&score(vec![note(0.0, 0.05, 220.0)], duration_s, vec![1.0]));
         let held_s = rendered.len() as f32 / RENDER_RATE as f32;
@@ -629,11 +580,8 @@ fn the_buffer_holds_every_sample_the_duration_asks_for() {
 
 #[test]
 fn a_note_with_no_pitch_makes_no_sound() {
-    // `hz` reaches here from a pitch track, and a pitch track has unvoiced
-    // frames: 0 is what "there was no pitch here" looks like by the time it is
-    // an event. A partial series multiplied by zero is a series of partials all
-    // at 0 Hz, which is not silence — it is a constant, a DC offset that the
-    // normalisation then scales the whole piece down to make room for.
+    // 0 Hz is what an unvoiced frame looks like as an event, and partials at 0 Hz
+    // are a DC offset the normalisation would scale the whole piece down for.
     for hz in [0.0f32, -110.0] {
         let rendered = synth::render(&score(vec![note(0.0, 0.5, hz)], 0.5, vec![1.0]));
         assert!(
@@ -646,22 +594,11 @@ fn a_note_with_no_pitch_makes_no_sound() {
 
 #[test]
 fn a_partial_landing_exactly_on_nyquist_is_dropped() {
-    // Half the sample rate is not a frequency this can render: sampled at
-    // 44'100, a 22'050 Hz sinusoid is two points per cycle, and which two
-    // depends entirely on the partial's phase. What comes out is an alternating
-    // sequence at whatever amplitude that phase happens to give — a buzz that is
-    // not in the score, and one whose loudness would change if the phase
-    // formula were ever touched.
-    //
-    // The boundary is closed for that reason and the test has to sit exactly on
-    // it: 2205 Hz has its tenth partial at 22'050.0 with no rounding to argue
-    // about, and `>=` against `>` is the whole difference.
-    //
-    // A field and not a note stream. The two renderers each carry their own
-    // Nyquist check, and only the field's accumulates phase across the whole
-    // piece — which is what makes a partial exactly at Nyquist audible rather
-    // than a run of exact zeros: the increment is pi as an f32, so the error
-    // compounds sample by sample and the alternation grows into the buffer.
+    // Nyquist itself cannot be rendered: two points per cycle, at an amplitude
+    // set by the phase — a buzz not in the score. The test sits exactly on the
+    // boundary (2205 Hz's tenth partial is 22,050.0), where `>=` against `>` is
+    // the difference. A field, because only its renderer accumulates phase, which
+    // makes the error grow audibly instead of staying zeros.
     let mut spectrum = vec![0.0f32; 10];
     spectrum[0] = 1.0;
     spectrum[9] = 1.0;
@@ -670,8 +607,7 @@ fn a_partial_landing_exactly_on_nyquist_is_dropped() {
         ..score(Vec::new(), 0.5, spectrum)
     });
 
-    // Nyquist is the one frequency a correlation can measure exactly: it is
-    // `+1, -1, +1, ...`, so this is a one-bin DFT with no window and no leakage.
+    // Nyquist is `+1, -1, +1, ...`, so this is an exact one-bin DFT.
     let alternating = rendered
         .iter()
         .enumerate()

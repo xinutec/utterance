@@ -17,13 +17,9 @@ import type {
 } from "./models";
 
 /**
- * A classified request failure.
- *
- * Classification happens once, at the boundary below, so no callsite ever reads
- * a raw status code. That separation is the point: status 0 (nothing answered)
- * and status 400 (the backend refused this audio) call for completely different
- * words on screen, and they are trivially confusable when each caller squints at
- * `error.status` for itself.
+ * A classified request failure. Classified once, here, so no caller reads a raw
+ * status: 0 (nothing answered) and 400 (the audio was refused) need different
+ * words on screen.
  */
 export type ApiFailure =
   | { readonly kind: "offline"; readonly message: string }
@@ -32,11 +28,8 @@ export type ApiFailure =
   | { readonly kind: "unknown"; readonly message: string };
 
 /**
- * What to say when nothing about a failure could be recognised.
- *
- * The last rung of every narrowing ladder. `String(err)` there reads
- * "[object Object]" for anything that is not an `Error`, which is both useless
- * and the one thing that makes a careful error path look broken.
+ * What to say when nothing about a failure could be recognised — never
+ * `String(err)`, which reads "[object Object]".
  */
 export const UNEXPLAINED = "the server did not say what went wrong";
 
@@ -49,10 +42,8 @@ export class ApiError extends Error {
 
   /**
    * Stable code where the backend supplied one, otherwise the failure kind.
-   *
-   * Not `string`: a caller comparing this against a code that no longer exists
-   * — or never did — is the failure the generated union is here to catch, and
-   * widening to `string` at this one accessor would hand that back.
+   * Typed, not `string`, so a comparison against a code that does not exist
+   * fails to compile.
    */
   get code(): ErrorCode | "offline" | "unknown" {
     return "code" in this.failure ? this.failure.code : this.failure.kind;
@@ -66,14 +57,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * The named field of an unknown value, only if it really is a string.
- *
- * `error.error` is typed `any` and holds whatever came back on the wire. When
- * the backend answered it is the generated `ErrorBody`, but an ingress 502 sends
- * HTML and a proxy can send a differently-shaped JSON — so asserting
- * `Partial<ErrorBody>` onto it would manufacture a `string` the compiler then
- * trusts all the way to the screen, where a non-string paints as "[object
- * Object]". A predicate, not an assertion, so the belief is earned rather than
- * declared.
+ * `error.error` is whatever came back — an ingress 502 sends HTML — so it is
+ * checked, not asserted to be an `ErrorBody`.
  */
 function stringField(value: unknown, key: string): string | null {
   if (!isRecord(value)) return null;
@@ -82,13 +67,8 @@ function stringField(value: unknown, key: string): string | null {
 }
 
 /**
- * Every code the backend can send, as values and not only as a type.
- *
- * `Record<ErrorCode, true>` is the point of the shape: the compiler rejects a
- * missing key and an extra one alike, so a code added in `src/error.rs` and
- * regenerated into `ErrorCode` fails the build here until somebody decides what
- * the page does about it. A plain `string[]` would accept both mistakes
- * silently.
+ * Every code the backend can send, as values. `Record<ErrorCode, true>` makes a
+ * code added in `src/error.rs` fail the build here until it is listed.
  */
 const CODES: Readonly<Record<ErrorCode, true>> = {
   audio_undecodable: true,
@@ -108,13 +88,8 @@ const CODES: Readonly<Record<ErrorCode, true>> = {
 };
 
 /**
- * The `code` of an error body, only if it is one this backend defines.
- *
- * A predicate rather than a cast, so the narrowing is earned: `error.error` is
- * whatever came back on the wire, and an ingress 502 or a proxy's JSON can carry
- * a `code` that means nothing here. Anything unrecognised is classified
- * `unknown` below and explained by its message, which is all that can honestly
- * be said about it.
+ * The `code` of an error body, only if it is one this backend defines; anything
+ * else is classified `unknown` and explained by its message.
  */
 function errorCode(value: unknown): ErrorCode | null {
   const field = stringField(value, "code");
@@ -125,22 +100,15 @@ function isCode(value: string): value is ErrorCode {
   return Object.hasOwn(CODES, value);
 }
 
-/**
- * Turn anything thrown by HttpClient into an {@link ApiFailure}.
- *
- * Exported so it can be tested directly, and so a future caller outside this
- * service classifies the same way rather than inventing a second scheme.
- */
+/** Turn anything thrown by HttpClient into an {@link ApiFailure}. */
 export function classifyApiError(error: unknown): ApiFailure {
   if (!(error instanceof HttpErrorResponse)) {
-    // NOT String(error): a thrown plain object stringifies to "[object Object]",
-    // which is what the user would then be shown as the explanation.
+    // Not `String(error)`, which reads "[object Object]" for a plain object.
     const message = error instanceof Error ? error.message : "something went wrong";
     return { kind: "unknown", message };
   }
 
-  // Status 0 means the request never got an answer: the backend is not running,
-  // or the network is gone. It is emphatically not "the request was refused".
+  // Status 0: no answer at all — backend down or network gone, not a refusal.
   if (error.status === 0) {
     return { kind: "offline", message: "the backend is not responding" };
   }
@@ -170,13 +138,8 @@ export class RecordingsApi {
   }
 
   /**
-   * Store a take.
-   *
-   * `role` says whether it defines the speaker or is only something to render,
-   * and defaults to material — the safe direction. Only the guided calibration
-   * flow sends `calibration`, because an upload that did not say what it was for
-   * must not start shaping the sound world: this store fills up with other
-   * people's singing, and a vowel space pooled across a crowd belongs to nobody.
+   * Store a take. `role` defaults to material: only the guided calibration
+   * flow sends `calibration`, so an upload shapes the speaker only on purpose.
    */
   upload(wav: Blob, label: string, role: Role = "material"): Observable<RecordingDetail> {
     return this.http
@@ -188,11 +151,8 @@ export class RecordingsApi {
   }
 
   /**
-   * Say what an already-stored take is for.
-   *
-   * Separate from `upload` because the answer is not always known when the audio
-   * arrives: a take that came in as a file, or before roles existed, has to be
-   * able to *become* a calibration one.
+   * Say what an already-stored take is for — a file upload, or a take from
+   * before roles existed, may need to become a calibration one.
    */
   setRole(id: string, role: Role): Observable<RecordingMeta> {
     return this.http
@@ -201,11 +161,8 @@ export class RecordingsApi {
   }
 
   /**
-   * Send a batch of client events to be logged.
-   *
-   * Deliberately fire-and-forget at the call site: the caller subscribes with an
-   * empty error handler, because a trace that surfaces its own failures is a
-   * trace that interferes with the app it observes.
+   * Send a batch of client events to be logged. The caller ignores failures: a
+   * trace must not interfere with the app it observes.
    */
   sendTelemetry(events: readonly TelemetryEvent[]): Observable<void> {
     return this.http.post<void>("/api/telemetry", events);
@@ -215,47 +172,28 @@ export class RecordingsApi {
     return this.http.delete<Deleted>(`/api/recordings/${id}`).pipe(catchError(rethrow));
   }
 
-  /**
-   * Every control the mapping offers, with the range each one accepts.
-   *
-   * Fetched rather than written down here: the ranges are facts about the
-   * mapping, and a slider offering a value the backend clamps away is a control
-   * that appears to do nothing.
-   */
+  /** Every control the mapping offers, with the range each one accepts. */
   controls(): Observable<Controls> {
     return this.http.get<Controls>("/api/controls").pipe(catchError(rethrow));
   }
 
   /**
-   * The scale, timbre and tonic derived from the speaker's calibration takes.
-   *
-   * Takes the settings because two of them change the answer: `calibration`
-   * picks the take the scale comes from, and `bind` decides how far those
-   * degrees are pulled toward equal temperament. Showing a scale that the
-   * render will not play would defeat the point of showing it.
+   * The scale, timbre and tonic derived from the speaker's calibration takes,
+   * under the given settings — `calibration` and `bind` change the answer.
    */
   voice(query = ""): Observable<VoiceSummary> {
     return this.http.get<VoiceSummary>(`/api/voice${suffix(query)}`).pipe(catchError(rethrow));
   }
 
   /**
-   * Where this speaker's own vowel corners sit, from the guided vowels.
-   *
-   * Separate from `voice()` because it answers without deriving a scale: a store
-   * whose takes are all too short for one still has corners, and the vowel chart
-   * wants them on load rather than when somebody presses render.
+   * This speaker's own vowel corners. Separate from `voice()`: it needs no
+   * scale, so it answers even when the takes are too short for one.
    */
   speakerCorners(): Observable<SpeakerCorners> {
     return this.http.get<SpeakerCorners>("/api/speaker/corners").pipe(catchError(rethrow));
   }
 
-  /**
-   * What a render is made of, for the same parameters the render takes.
-   *
-   * The streams rather than the audio: the question a comparison asks is which
-   * knob changed what, and that is legible in the score and buried in a
-   * waveform.
-   */
+  /** What the render with the same parameters is made of. */
   score(id: string, query = ""): Observable<ScoreView> {
     return this.http
       .get<ScoreView>(`/api/recordings/${id}/score${suffix(query)}`)
@@ -267,11 +205,8 @@ export class RecordingsApi {
   }
 
   /**
-   * Where this take can be heard as music.
-   *
-   * A URL rather than a fetched blob: an `<audio>` element streams it, and the
-   * backend renders on demand, so nothing here has to hold several megabytes of
-   * WAV in memory to play it.
+   * Where this take can be heard as music: a URL, so the `<audio>` element
+   * streams the render rather than this holding megabytes of WAV.
    */
   renderUrl(id: string, query = ""): string {
     return `/api/recordings/${id}/render${suffix(query)}`;

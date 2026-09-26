@@ -1,29 +1,12 @@
-//! The measured harmonic series of a voice.
+//! The measured harmonic series of a voice: for each harmonic of f0, where it
+//! sat and how strong it was.
 //!
-//! A voiced sound is a periodic glottal source filtered by the vocal tract. The
-//! source puts energy at every integer multiple of f0; the tract's resonances
-//! then decide which of those multiples come out loud and which are all but
-//! absent. This measures the result: for each harmonic, where it actually sat
-//! and how strong it was.
-//!
-//! **The amplitudes are the payload, not the frequencies.** A voice is very
-//! nearly harmonic — unlike a bell or a struck string, its partials really do
-//! land on integer multiples — so the ratios measured here should come out close
-//! to whole numbers, and a large deviation is far more likely to be measurement
-//! error than a discovery. What differs between people is the *profile*: which
-//! partials their vocal tract emphasises. That profile is what a tuning system
-//! can be derived from, because consonance between two tones depends on which of
-//! their partials collide.
-//!
-//! **A harmonic series belongs to a vowel, not only to a speaker.** The tract
-//! shape that emphasises partials 2 and 3 in one vowel emphasises 6 and 7 in
-//! another. That is why calibration asks for a *steady* vowel: a glide measures
-//! the average of several mouths.
-//!
-//! Only frames worth trusting are used — voiced, and close to the take's own
-//! median pitch — so a take that is not sustained phonation yields few frames
-//! and says so through [`Partials::frames_used`] rather than returning a
-//! confident answer built from nothing.
+//! **The amplitudes are the payload.** A voice is very nearly harmonic, so the
+//! ratios should be close to whole numbers; what differs between people is which
+//! partials their tract emphasises, and that is what a tuning is derived from.
+//! It belongs to a vowel as much as a speaker, which is why calibration asks for
+//! a *steady* one. Only voiced frames near the take's median pitch are used, and
+//! [`Partials::frames_used`] says how many there were.
 
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -32,54 +15,30 @@ use serde::{Deserialize, Serialize};
 use crate::frame;
 use crate::resample::ANALYSIS_RATE;
 
-/// Highest harmonic looked for.
-///
-/// At a typical male f0 the 24th harmonic is near 3 kHz, comfortably inside the
-/// 8 kHz the analysis rate can represent, and past the point where a partial
-/// still contributes usefully to whether two tones beat against each other.
-/// Going higher mostly collects noise that the presence gate then discards.
+/// Highest harmonic looked for: near 3 kHz for a low voice, past where partials
+/// matter to beating.
 pub const MAX_PARTIAL: usize = 24;
 
-/// Window for the harmonic measurement, 128 ms.
-///
-/// Much longer than the spectral window onset detection uses, and for the
-/// opposite reason: this wants frequency resolution, not time resolution. At
-/// 2048 samples the bins are 7.8 Hz apart, so neighbouring harmonics of even a
-/// low voice sit several bins apart and can be told from each other. A sustained
-/// vowel is stationary, so the long window costs nothing.
+/// Window for the harmonic measurement, 128 ms: bins 7.8 Hz apart, so even a low
+/// voice's harmonics are resolved. A steady vowel makes the long window free.
 pub const PARTIAL_WINDOW: usize = 2048;
 
-/// How far a frame's pitch may sit from the take's median and still be used,
-/// in semitones.
-///
-/// The measurement assumes every frame is describing the same note. A frame a
-/// tone away is describing a different one, and averaging it in smears every
-/// partial by that interval — multiplied by the harmonic number, so the top of
-/// the series smears worst.
+/// How far a frame's pitch may sit from the take's median and still be used, in
+/// semitones: a frame on another note smears every partial, the top worst.
 const PITCH_TOLERANCE_SEMITONES: f32 = 1.0;
 
-/// Fraction of the search band, either side of a harmonic's predicted position,
-/// that is searched for its peak.
-///
-/// A third of the spacing to the next harmonic. Wider would let harmonic *k*
-/// lock onto its neighbour when f0 is slightly misestimated, which produces a
-/// beautifully clean and completely wrong series.
+/// Fraction of f0, either side of a harmonic's predicted position, searched for
+/// its peak. Wider would let a slightly wrong f0 lock harmonic *k* onto its
+/// neighbour — a clean and wrong series.
 const SEARCH_FRACTION: f32 = 0.33;
 
-/// Amplitude below the frame's strongest partial at which a peak stops counting
-/// as found, in dB.
-///
-/// Sixty decibels down is a millionth of the power of the loudest partial, which
-/// in a real recording is the noise floor rather than the voice.
+/// Level below the frame's strongest partial at which a peak stops counting, in
+/// dB: 60 dB down is the noise floor, not the voice.
 const FLOOR_DB: f32 = -60.0;
 
-/// Fraction of usable frames a harmonic must appear in to be reported.
-///
-/// A partial found in a fifth of frames has a median amplitude computed from
-/// almost nothing, and reporting it alongside genuinely measured ones would
-/// present the two as equally solid. Those below the bar are dropped rather
-/// than reported weakly, and the ones above carry their own
-/// [`Partial::presence`] so a consumer can still weight them.
+/// Fraction of usable frames a harmonic must appear in to be reported. Rarer
+/// ones would sit beside real measurements as if equally solid; the rest carry
+/// [`Partial::presence`] so a consumer can weight them.
 const MIN_PRESENCE: f32 = 0.5;
 
 /// One harmonic of the measured series.
@@ -90,11 +49,8 @@ const MIN_PRESENCE: f32 = 0.5;
 pub struct Partial {
     /// Which harmonic this is. 1 is the fundamental.
     pub number: u32,
-    /// Measured frequency over measured f0, median across frames.
-    ///
-    /// Should sit close to `number`. How close is bounded by the pitch
-    /// tracker's own accuracy, so this measures agreement between two
-    /// estimates rather than proving the voice harmonic.
+    /// Measured frequency over measured f0, median across frames — agreement
+    /// between two estimates, close to `number`.
     pub ratio: f32,
     /// Median amplitude, relative to the strongest partial in the take.
     pub amplitude: f32,
@@ -108,10 +64,8 @@ pub struct Partial {
 #[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Partials {
-    /// Frames that were voiced and close enough to the median pitch to use.
-    ///
-    /// The honest measure of how much this series is worth. Sustained phonation
-    /// yields hundreds; connected speech yields few, because its pitch moves.
+    /// Frames voiced and near enough the median pitch to use: hundreds for a
+    /// sustained vowel, few for speech.
     pub frames_used: usize,
     /// Median f0 across those frames, the reference every ratio is against.
     pub f0_hz: Option<f32>,
@@ -119,11 +73,8 @@ pub struct Partials {
     pub partials: Vec<Partial>,
 }
 
-/// Measure the harmonic series of `samples`, guided by an existing pitch track.
-///
-/// The pitch track comes from the caller rather than being re-derived here so
-/// that one recording has exactly one f0 answer, and the ratios below are
-/// against the same fundamental everything else in the voiceprint is.
+/// Measure the harmonic series of `samples`, from the voiceprint's own pitch
+/// track so every ratio is against the same fundamental.
 pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
     let Some(median_f0) = median(&pitch.iter().flatten().copied().collect::<Vec<_>>()) else {
         return Partials {
@@ -166,7 +117,7 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
         }
         fft.process(&mut buf);
 
-        // Real input, so the upper half mirrors the lower and carries nothing.
+        // Real input: the upper half mirrors the lower.
         let magnitude: Vec<f32> = buf[..PARTIAL_WINDOW / 2].iter().map(|c| c.norm()).collect();
 
         let observed = harmonics(&magnitude, f0, bin_hz);
@@ -190,9 +141,8 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
         }
     }
 
-    // Normalised against the loudest harmonic overall rather than per frame, so
-    // the reported profile is one spectrum's shape and not an average of shapes
-    // each scaled by however loud that instant happened to be.
+    // Normalised to the loudest harmonic overall, so the profile is one
+    // spectrum's shape rather than an average of per-frame shapes.
     let peak = amplitudes
         .iter()
         .filter_map(|a| median(a))
@@ -242,8 +192,7 @@ fn harmonics(magnitude: &[f32], f0: f32, bin_hz: f32) -> Vec<Option<(f32, f32)>>
                 best
             }
         });
-        // A peak pinned to the edge of its band is the shoulder of something
-        // else, not this harmonic.
+        // A peak pinned to its band's edge is the shoulder of something else.
         if peak == lo || peak == hi {
             continue;
         }
@@ -252,15 +201,12 @@ fn harmonics(magnitude: &[f32], f0: f32, bin_hz: f32) -> Vec<Option<(f32, f32)>>
     found
 }
 
-/// Refine a magnitude peak by fitting a parabola through it and its neighbours.
-///
-/// The true peak almost never lands on a bin centre. Without this, a measured
-/// ratio is quantised to the bin spacing, which at the fundamental is several
-/// percent — enough to swamp the deviation from integer that is being looked at.
+/// Refine a magnitude peak with a parabola through it and its neighbours —
+/// otherwise a ratio is quantised to the bin spacing, several percent at f0.
 fn interpolate(magnitude: &[f32], peak: usize, bin_hz: f32) -> (f32, f32) {
     let (a, b, c) = (magnitude[peak - 1], magnitude[peak], magnitude[peak + 1]);
     let denominator = a - 2.0 * b + c;
-    // Flat or perfectly symmetric: the bin centre is already the best answer.
+    // Flat or symmetric: the bin centre is the answer.
     let offset = if denominator.abs() < f32::EPSILON {
         0.0
     } else {

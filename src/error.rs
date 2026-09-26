@@ -1,8 +1,5 @@
-//! How failures reach the client.
-//!
-//! Every error carries a machine-readable `code` alongside its message. The
-//! frontend branches on the code; the message is for a person. Without the code
-//! the UI ends up matching on prose, which breaks the moment the wording changes.
+//! How failures reach the client: a machine-readable `code` to branch on and a
+//! message for a person.
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -20,32 +17,18 @@ pub enum AppError {
     Store(#[from] StoreError),
     #[error("{0}")]
     BadRequest(String),
-    /// A request that makes sense and asks for something this scale cannot give.
-    ///
-    /// Separate from `BadRequest` because nothing about it is a mistake: the
-    /// mapping exists, the knob is inside its published range, and the pair
-    /// simply has no answer for this speaker. The client's move is to change a
-    /// setting rather than to fix a malformed request, and the code says which.
+    /// A valid request this scale cannot play — the fix is moving a setting, not
+    /// the request.
     #[error("{0}")]
     Unplayable(String),
-    /// Nothing in the store says who the speaker is.
-    ///
-    /// Its own code because it is the one failure with an obvious next move —
-    /// record the guided vowels — and a UI that knows the move should offer it
-    /// as a button rather than print a sentence about it. Matching the message
-    /// instead would break the moment somebody rewords it, which is exactly the
-    /// drift `ErrorBody::message` warns against.
+    /// Nothing in the store says who the speaker is — its own code because the
+    /// next move, recording the guided vowels, can be offered as a button.
     #[error("{0}")]
     NeedsCalibration(String),
 }
 
-/// Every failure this server can name.
-///
-/// **One list, in Rust, because the browser branches on it.** The enum crosses
-/// the wire through ts-rs, so the browser reads a union and a comparison against
-/// a code that does not exist stops the build. As bare strings, a code renamed
-/// here would go on compiling on both sides, and a listener would get the
-/// generic wording for a failure the page knew how to explain.
+/// Every failure this server can name, exported by ts-rs so the browser branches
+/// on a union, and a code that does not exist fails to compile there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -98,11 +81,7 @@ impl ErrorCode {
         ErrorCode::SignInFailed,
     ];
 
-    /// The wire spelling.
-    ///
-    /// Restates the serde attribute, for the same reason `Mapping::name` does:
-    /// the log line below wants a `&str`. `tests/errors.rs` serialises every
-    /// variant and compares, so the two cannot drift apart in silence.
+    /// The wire spelling, for log lines; `tests/errors.rs` holds it to serde's.
     pub fn name(self) -> &'static str {
         match self {
             ErrorCode::AudioUndecodable => "audio_undecodable",
@@ -145,8 +124,7 @@ pub struct ErrorBody {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code) = match &self {
-            // A recording the analyser cannot use is the client's problem to fix
-            // — a different take, a longer one — so these are 4xx, not 500.
+            // Unusable audio is the client's to fix: 4xx.
             AppError::Analysis(AnalysisError::Decode(_)) => {
                 (StatusCode::BAD_REQUEST, ErrorCode::AudioUndecodable)
             }
@@ -170,8 +148,7 @@ impl IntoResponse for AppError {
             AppError::NeedsCalibration(_) => (StatusCode::BAD_REQUEST, ErrorCode::NoCalibration),
         };
 
-        // Server-side faults are logged where they happen; client-side ones are
-        // already visible to whoever caused them.
+        // Server faults are logged here; client faults are visible to the client.
         if status.is_server_error() {
             tracing::error!("{code}: {self}");
         }

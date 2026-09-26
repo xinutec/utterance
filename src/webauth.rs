@@ -1,27 +1,17 @@
 //! Nextcloud sign-in for the browser — inert unless configured.
 //!
-//! **Why this exists.** The app holds recordings of two people's voices and
-//! accepts uploads and deletions over open routes. On a Mac serving a LAN that
-//! is fine: the network is the gate. On a public hostname it is not, and no
-//! amount of obscurity substitutes.
+//! The app holds recordings of people's voices and accepts uploads and deletions;
+//! on a LAN the network is the gate, on a public hostname it is not.
 //!
-//! **Why it is inert by default.** Importing this changes nothing. The gate only
-//! goes up when all three of [`SESSION_SECRET_ENV`], [`CLIENT_ID_ENV`] and
-//! [`CLIENT_SECRET_ENV`] are set, so the Mac, `ng serve` and every test keep
-//! running open, and only the deployed pod — where the secret lives — raises the
-//! wall. A half-set configuration is treated as *off* and logged, rather than as
-//! a gate with a hole in it: a wall that can be bypassed is worse than no wall,
-//! because it is believed.
+//! The gate goes up only when all of [`SESSION_SECRET_ENV`], [`CLIENT_ID_ENV`]
+//! and [`CLIENT_SECRET_ENV`] are set, so local runs and tests stay open. A
+//! half-set configuration is logged and treated as *off*: a wall with a hole in
+//! it is worse than none, because it is believed.
 //!
-//! **Identity only.** The OAuth access token is used once to ask Nextcloud who
-//! signed in, then dropped. There is no user store here; a signed, stateless
-//! cookie carries the identity, and an allowlist decides who may enter even
-//! after a valid Nextcloud sign-in.
-//!
-//! This is the one part of the program that reads a clock. Everything in the
-//! music path is deterministic on purpose (`docs/architecture.md`); an expiring
-//! session cannot be, so the time is passed in rather than fetched, which keeps
-//! it out of the pure code and lets the tests name their own hour.
+//! Identity only: the OAuth token is used once to ask who signed in, a signed
+//! stateless cookie carries the answer, and an allowlist decides who enters.
+//! The one part of the program that reads a clock — passed in, so tests can name
+//! their own hour.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -55,8 +45,7 @@ const DEFAULT_REDIRECT_URI: &str = "https://utterance.xinutec.org/auth/callback"
 
 const COOKIE_NAME: &str = "utterance_session";
 
-/// How long a sign-in lasts. Long, because the alternative is two people being
-/// asked to sign in again in the middle of listening to something.
+/// How long a sign-in lasts: long enough not to interrupt listening.
 const SESSION_TTL: Duration = Duration::from_hours(7 * 24);
 /// How long the round trip to Nextcloud and back may take.
 const STATE_TTL: Duration = Duration::from_mins(10);
@@ -71,13 +60,9 @@ pub struct WebAuth {
     client_secret: String,
     /// Public, browser-facing Nextcloud. The authorize redirect goes here.
     nc_base_url: String,
-    /// Where *this server* reaches Nextcloud, which is not always the same
-    /// address. On the cluster Nextcloud is co-located, so its public name
-    /// resolves to the node's own IP and a pod cannot reach it — the request
-    /// hairpins and is refused. Pointing this at the in-cluster Service name and
-    /// carrying the public host in a `Host:` header keeps Nextcloud's
-    /// trusted-domain routing happy while giving the pod an address it can
-    /// actually open.
+    /// Where *this server* reaches Nextcloud. On the cluster Nextcloud's public
+    /// name resolves to the node itself and the pod's request hairpins, so this
+    /// is the in-cluster Service, with the public host sent as `Host:`.
     nc_internal_url: String,
     redirect_uri: String,
     /// Who may enter. Empty means any Nextcloud user this server can see.
@@ -85,14 +70,8 @@ pub struct WebAuth {
 }
 
 impl WebAuth {
-    /// Build a gate directly, with the Nextcloud addresses left at their
-    /// defaults.
-    ///
-    /// [`from_env`](Self::from_env) is the normal path. This exists because the
-    /// alternative for a test is setting process-wide environment variables,
-    /// which every other test in the same binary would then be running inside —
-    /// and a gate that appears in one test and leaks into the next is exactly
-    /// the kind of thing that makes an auth suite untrustworthy.
+    /// Build a gate directly, with default Nextcloud addresses — for tests,
+    /// which must not set process-wide environment.
     pub fn new(
         session_secret: impl Into<String>,
         client_id: impl Into<String>,
@@ -111,29 +90,20 @@ impl WebAuth {
     }
 
     /// The cookie value that signs `session` in until `SESSION_TTL` elapses.
-    ///
-    /// Public because a test has to be able to arrive already signed in without
-    /// standing up a Nextcloud to sign in against.
+    /// Public so a test can arrive signed in.
     pub fn issue_session(&self, session: &Session, now: SystemTime) -> String {
         sign(&self.session_secret, session, now, SESSION_TTL)
     }
 
     /// Who a cookie says is signed in, if it is authentic and still current.
-    ///
-    /// The other half of [`issue_session`](Self::issue_session), and public for
-    /// the same reason: the properties worth checking about a credential —
-    /// that a forged one is refused, that an expired one is refused, that a
-    /// payload swapped under a good signature is refused — are properties of
-    /// this pair, and testing them through an HTTP round trip would only be able
-    /// to say *no* without saying which no.
+    /// Public so tests can tell a forged, an expired and a swapped credential
+    /// apart, which an HTTP 401 cannot.
     pub fn read_session(&self, token: &str, now: SystemTime) -> Option<Session> {
         verify(&self.session_secret, token, now)
     }
 
-    /// Point the gate at a Nextcloud other than the fleet's.
-    ///
-    /// `internal_url` is where *this server* opens a connection, which is not
-    /// always where the browser goes — see the field it sets.
+    /// Point the gate at a Nextcloud other than the fleet's; `internal_url` is
+    /// where this server connects (see the field).
     pub fn with_nextcloud(
         mut self,
         base_url: impl Into<String>,
@@ -154,13 +124,8 @@ impl WebAuth {
         Self::from_vars(|name| std::env::var(name).ok())
     }
 
-    /// The same, over an arbitrary lookup rather than the process environment.
-    ///
-    /// Split out because everything below is real decisions — whether a partial
-    /// configuration counts as configured, which URL a call goes to, who is on
-    /// the list — and calling `std::env::var` inside them would put every one of
-    /// those decisions out of reach of a test, short of `set_var`, which edition
-    /// 2024 made `unsafe` because it races every other thread in the binary.
+    /// The same, over an arbitrary lookup, so the decisions below are testable
+    /// without `set_var` (unsafe in edition 2024: it races other threads).
     pub fn from_vars(var: impl Fn(&str) -> Option<String>) -> Option<Self> {
         let secret = var(SESSION_SECRET_ENV).filter(|s| !s.is_empty());
         let client_id = var(CLIENT_ID_ENV).filter(|s| !s.is_empty());
@@ -171,8 +136,8 @@ impl WebAuth {
             return None;
         }
         if !present.iter().all(|p| *p) {
-            // Named individually, because the failure someone is debugging here
-            // is "I set the secret and the wall did not appear".
+            // Named, because the question being debugged is "I set the secret
+            // and the wall did not appear".
             tracing::warn!(
                 "sign-in only partly configured ({SESSION_SECRET_ENV}={}, {CLIENT_ID_ENV}={}, \
                  {CLIENT_SECRET_ENV}={}) — the gate stays OFF",
@@ -209,12 +174,8 @@ impl WebAuth {
     }
 
     /// The URL, and the `Host` to present, for a call this server makes to
-    /// Nextcloud itself.
-    ///
-    /// Public because it is a statement about the deployment rather than an
-    /// implementation detail — and because getting it wrong is a failure that
-    /// only appears at the end of a sign-in, as a refused connection, on a
-    /// cluster.
+    /// Nextcloud. Public because getting it wrong only shows at the end of a
+    /// sign-in, on a cluster.
     pub fn server_call(&self, path: &str) -> (String, Option<String>) {
         let url = format!("{}{path}", self.nc_internal_url);
         if self.nc_internal_url == self.nc_base_url {
@@ -272,36 +233,27 @@ struct Envelope<T> {
     exp: u64,
 }
 
-/// A `<payload>.<mac>` token: the payload base64url-encoded, and an HMAC of it.
-///
-/// Stateless on purpose. Verification needs the secret and nothing else, so a
-/// restarted pod — or a second replica — honours a cookie it never issued, and
-/// there is no session store to back up or to lose.
+/// A `<payload>.<mac>` token: the payload base64url-encoded, and its HMAC.
+/// Stateless, so a restarted pod or a second replica honours it.
 fn sign<T: Serialize>(secret: &str, body: T, now: SystemTime, ttl: Duration) -> String {
     let exp = now
         .checked_add(ttl)
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map_or(0, |d| d.as_secs());
-    // Not defaulted on failure. An empty payload here would still be signed
-    // correctly, so it would verify — and then be read back as a session with no
-    // user in it. The two payloads are plain structs of owned strings, so this
-    // cannot fail; if that ever stops being true it should stop the program
-    // rather than quietly mint an anonymous credential.
+    // Not defaulted on failure: an empty payload would still sign and verify,
+    // as a session with no user. It cannot fail for these plain structs.
     let json = serde_json::to_vec(&Envelope { body, exp })
         .expect("a session payload is a struct of strings and always serialises");
     let encoded = B64.encode(json);
     format!("{encoded}.{}", B64.encode(mac(secret, &encoded)))
 }
 
-/// The payload, if the token is authentic and has not expired.
-///
-/// Every malformed input returns `None` rather than raising: this reads a value
-/// an attacker chooses, so the only safe shape is one answer for "no".
+/// The payload, if the token is authentic and has not expired. Every malformed
+/// input is `None`: an attacker chooses this value.
 fn verify<T: serde::de::DeserializeOwned>(secret: &str, token: &str, now: SystemTime) -> Option<T> {
     let (encoded, presented) = token.split_once('.')?;
     let presented = B64.decode(presented).ok()?;
-    // Constant time: a byte-by-byte comparison leaks how much of a forged MAC
-    // was right, which is enough to build the rest of it one byte at a time.
+    // Constant time, or a forged MAC could be found one byte at a time.
     if !constant_time_eq(&mac(secret, encoded), &presented) {
         return None;
     }
@@ -321,12 +273,8 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// A redirect target that cannot leave this origin.
-///
-/// Only a single-slash absolute path survives. `//host`, a scheme, or anything
-/// else collapses to `/`, so a crafted `?return_to=` cannot turn signing in into
-/// an open redirect — which would make this app a convincing way to send someone
-/// somewhere else.
+/// A redirect target that cannot leave this origin: only a single-slash absolute
+/// path survives, so `?return_to=` cannot become an open redirect.
 pub fn safe_return_to(raw: Option<&str>) -> String {
     match raw {
         Some(path) if path.starts_with('/') && !path.starts_with("//") => path.to_string(),
@@ -334,8 +282,8 @@ pub fn safe_return_to(raw: Option<&str>) -> String {
     }
 }
 
-/// Percent-encode everything that is not unreserved, which is enough for the
-/// query values built here and avoids a dependency for one function.
+/// Percent-encode everything that is not unreserved — enough for the query
+/// values built here.
 fn urlencode(raw: &str) -> String {
     raw.bytes()
         .map(|b| match b {
@@ -357,17 +305,12 @@ fn session_from(auth: &WebAuth, headers: &HeaderMap, now: SystemTime) -> Option<
     verify(&auth.session_secret, token, now)
 }
 
-/// Refuse anything under `/api` that arrives without a session.
-///
-/// The browser is the only client this app has, so there is no equivalent of a
-/// headless device that cannot sign in, and nothing needs an exemption. The
-/// health check lives outside `/api` and stays open, which is what lets the
-/// cluster probe a pod nobody has signed into.
+/// Refuse anything under `/api` that arrives without a session. The browser is
+/// the only client, so nothing needs an exemption; `/healthz` is outside `/api`.
 pub async fn gate(auth: Arc<WebAuth>, request: Request, next: Next) -> Response {
     match session_from(&auth, request.headers(), SystemTime::now()) {
-        // 401 rather than a redirect: this is a fetch from a running page, and a
-        // 302 to Nextcloud would be followed by the browser and land as an
-        // opaque failure. A status the script can read is what raises the wall.
+        // 401 rather than a redirect: a fetch following a 302 to Nextcloud
+        // fails opaquely, where a status the page can read raises the wall.
         None => problem(
             StatusCode::UNAUTHORIZED,
             ErrorCode::NotAuthenticated,
@@ -460,11 +403,8 @@ async fn identify(auth: &WebAuth, code: &str) -> anyhow::Result<Session> {
     })
 }
 
-/// The routes sign-in adds. Only mounted when the gate is up.
-///
-/// Generic in the router's state because none of these touch it — they need the
-/// Nextcloud credentials and nothing else — and that keeps this module free of
-/// any knowledge of what the rest of the app is holding.
+/// The routes sign-in adds, mounted only when the gate is up. Generic in the
+/// router's state, which none of them touch.
 pub fn routes<S: Clone + Send + Sync + 'static>(auth: Arc<WebAuth>) -> Router<S> {
     let login_auth = auth.clone();
     let callback_auth = auth.clone();
@@ -498,8 +438,7 @@ pub fn routes<S: Clone + Send + Sync + 'static>(auth: Arc<WebAuth>) -> Router<S>
         .route(
             "/logout",
             post(move || async move {
-                // Expired rather than deleted by name alone, so a browser that
-                // ignores an empty value still drops it.
+                // Expired, so a browser that ignores an empty value still drops it.
                 redirect(
                     "/",
                     Some(format!(
@@ -513,10 +452,8 @@ pub fn routes<S: Clone + Send + Sync + 'static>(auth: Arc<WebAuth>) -> Router<S>
             get(move |headers: HeaderMap| {
                 let auth = me_auth.clone();
                 async move {
-                    // The gate has already run, so a session exists — but this
-                    // reads it again rather than trusting that, because the day
-                    // someone mounts this route outside the gate is the day
-                    // "trust me" becomes an unauthenticated identity endpoint.
+                    // Read again rather than trusting the gate, so mounting this
+                    // outside it cannot create an unauthenticated endpoint.
                     match session_from(&auth, &headers, SystemTime::now()) {
                         Some(session) => Json(session).into_response(),
                         None => problem(
@@ -554,8 +491,7 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
     let session = match identify(&auth, &code).await {
         Ok(session) => session,
         Err(why) => {
-            // Logged rather than returned: the detail is about this server's
-            // conversation with Nextcloud and means nothing to the person.
+            // Logged, not returned: the detail means nothing to the person.
             tracing::error!("nextcloud sign-in failed: {why:#}");
             return problem(
                 StatusCode::BAD_GATEWAY,
@@ -582,12 +518,8 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
     )
 }
 
-/// A 302 with an optional cookie.
-///
-/// `Secure` is set on every cookie here, because this app is served over TLS.
-/// That means sign-in does not work over plain http — which is the point: a
-/// session cookie that travels in clear text on a shared network is the thing
-/// the gate was raised against.
+/// A 302 with an optional cookie. Every cookie is `Secure`: a session in clear
+/// text on a shared network is what the gate exists to prevent.
 fn redirect(location: &str, set_cookie: Option<String>) -> Response {
     let mut response = Response::builder()
         .status(StatusCode::FOUND)

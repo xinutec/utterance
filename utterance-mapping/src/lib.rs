@@ -1,22 +1,10 @@
 //! Voiceprint in, musical decisions out.
 //!
-//! The aesthetic layer of the three described in `docs/architecture.md`: code
-//! that can be *wrong about nothing*. Everything in
-//! `utterance-analysis` answers a question with a right answer — is this frame
-//! voiced, where is F2. Nothing here does. Whether the minima of a dissonance
-//! curve should be called the notes of a scale is a choice, and a different
-//! choice would be a different mapping rather than a bug in this one.
-//!
-//! That is why it is a separate crate. The dependency runs one way — mapping
-//! reads what analysis measured, and analysis must never learn this crate
-//! exists — so a discarded aesthetic idea can be deleted without touching a line
-//! of DSP.
-//!
-//! What is testable here is narrower than next door, and worth being honest
-//! about: the arithmetic (does the dissonance model reproduce its published
-//! curve, does a scale derived from a harmonic spectrum land near just
-//! intonation), and that a derivation reads its input rather than restating its
-//! own assumptions. Never the taste.
+//! The aesthetic layer (`docs/architecture.md`): code that can be *wrong about
+//! nothing*. Calling a roughness minimum a note is a choice, and another choice
+//! is another mapping, not a bug. Analysis never learns this crate exists, so a
+//! discarded idea costs no DSP. What can be tested is the arithmetic and that a
+//! derivation reads its input — never the taste.
 
 // See `utterance-analysis/src/lib.rs` for what this bar is and what is
 // deliberately left out of it.

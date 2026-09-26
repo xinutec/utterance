@@ -1,16 +1,11 @@
 /**
- * The guided calibration: what to say, in what order, and what makes a take usable.
+ * The guided calibration: what to say, in what order, and what makes a take
+ * usable.
  *
- * One recording per step, self-advanced. Deliberately *not* prompts appearing
- * inside a single long take: a prompt time is not a label. People lag a prompt,
- * drift and start early, so slicing one recording by when the screen changed
- * would mean measuring the UI's timing rather than the voice's — and the
- * measurements would look exact while being wrong. A take per step makes the
- * label free and exact.
- *
- * The checks here judge a take against what its step was for. They never block:
- * a person can keep any take, because the notes below are heuristics about
- * usable material and the person is the one who heard the room.
+ * One recording per step rather than prompts in one long take: people lag and
+ * anticipate prompts, so slicing by screen time would measure the UI, while a
+ * take per step makes the label free and exact. The checks never block — the
+ * person heard the room.
  */
 
 import type { CalibrationStep as StepId, RecordingDetail } from "../../models";
@@ -22,11 +17,8 @@ interface Requirements {
   /** Fraction of frames that must carry a fundamental, where that is the point. */
   readonly minVoiced?: number;
   /**
-   * How far f0 may wander, in semitones, between its 5th and 95th percentile.
-   *
-   * Only set where holding a pitch still is the point of the step. Absent means
-   * unchecked rather than unlimited — the pitch-range steps are sustained too,
-   * but there the note being reached matters and a wobble does not.
+   * How far f0 may wander, in semitones (5th to 95th percentile) — set only
+   * where holding still is the point; absent means unchecked.
    */
   readonly maxDriftSemitones?: number;
 }
@@ -34,14 +26,9 @@ interface Requirements {
 /** One thing to record. */
 export interface CalibrationStep {
   /**
-   * Stable id, used verbatim as the take's label so the audio is self-describing.
-   *
-   * Typed against the backend's own list (`src/calibration.rs`, generated here
-   * by ts-rs) rather than as a string. The backend reads a take's label to know
-   * which vowel it is — that is where the speaker's own vowel corners come from
-   * — so a rename on either side would quietly stop a take being a vowel, with
-   * nothing failing and no measurement missing enough to notice. Typed, it does
-   * not compile.
+   * Stable id, used verbatim as the take's label. Typed by the backend's own
+   * list (`src/calibration.rs`), which reads the label to know which vowel a take
+   * is, so a rename on either side fails to compile.
    */
   readonly id: StepId;
   readonly title: string;
@@ -56,9 +43,7 @@ export interface CalibrationStep {
   readonly requirements: Requirements;
 }
 
-// A non-empty tuple rather than `readonly CalibrationStep[]`: the calibration
-// flow has no meaning with no steps, and typing it this way is what lets
-// `STEPS[0]` be a step rather than possibly-undefined at every use.
+// A non-empty tuple, so `STEPS[0]` is a step rather than possibly undefined.
 export const STEPS: readonly [CalibrationStep, ...CalibrationStep[]] = [
   {
     id: "steady-ah",
@@ -158,11 +143,8 @@ export interface Verdict {
 }
 
 /**
- * Judge a take against the step it was recorded for.
- *
- * Every note says what was measured and what to do, because a bare "not good
- * enough" leaves someone repeating the same take. Clipping is reported from the
- * analyser's own verdict rather than re-derived here, so the two cannot disagree.
+ * Judge a take against the step it was recorded for. Every note says what was
+ * measured and what to do; clipping is the analyser's verdict, not re-derived.
  */
 export function assess(step: CalibrationStep, detail: RecordingDetail): Verdict {
   const notes: string[] = [];
@@ -202,13 +184,9 @@ export function assess(step: CalibrationStep, detail: RecordingDetail): Verdict 
 }
 
 /**
- * Spread of a pitch track in semitones, 5th to 95th percentile.
- *
- * Percentiles rather than the full range: a voiced frame at the very start or
- * end of phonation is often half-formed, and one of those would otherwise decide
- * whether a perfectly steady note counted as steady. Returns `null` when there
- * is too little pitch to say — an unvoiced take fails the voicing check instead,
- * which is the more useful thing to be told.
+ * Spread of a pitch track in semitones, 5th to 95th percentile — a half-formed
+ * edge frame must not decide whether a steady note was steady. `null` with too
+ * little pitch; the voicing check reports that.
  */
 export function driftSemitones(hz: readonly (number | null)[]): number | null {
   const values = hz.filter((v): v is number => v !== null && v > 0).sort((a, b) => a - b);
@@ -225,9 +203,7 @@ function percentile(sorted: readonly number[], p: number): number {
   const floor = Math.floor(rank);
   const lo = sorted[floor];
   const hi = sorted[Math.ceil(rank)];
-  // `driftSemitones` is the only caller and has already required 20 values.
-  // NaN rather than 0 if a later caller skips that check: an empty track has no
-  // percentile, and 0 would be read as one.
+  // The caller has required 20 values; NaN rather than 0 if one ever does not.
   if (lo === undefined || hi === undefined) return NaN;
   return lo + (hi - lo) * (rank - floor);
 }

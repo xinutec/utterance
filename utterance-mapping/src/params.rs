@@ -1,16 +1,9 @@
-//! The knobs.
+//! The knobs: every arguable number in the mappings, in one type, so it can be
+//! swept by ear instead of edited and rebuilt.
 //!
-//! Every arguable number in the mappings, gathered into one type because the mapping
-//! layer exists to be swept and compared by ear, and a value buried in a `const` can
-//! only be changed by editing, rebuilding and re-rendering.
-//!
-//! **Why these live in mapping.** A control over how the music sounds is aesthetic, so
-//! it belongs here and never in analysis: a knob in analysis would invalidate every
-//! stored voiceprint each time it moved, where one here is swept against a fixed
-//! voiceprint and heard immediately (`docs/roadmap.md`).
-//!
-//! A knob's default reproduces the behaviour from before the knob existed, so renders
-//! stay comparable across versions.
+//! They live in mapping, never analysis: a knob in analysis would invalidate
+//! every stored voiceprint each time it moved. A knob's default reproduces the
+//! behaviour from before it existed, so renders stay comparable.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,23 +12,14 @@ use crate::tuning::{Degree, Tuning};
 
 /// One knob, described well enough that a UI can offer it without being told.
 ///
-/// **Why the range lives here and not in the UI.** A slider's minimum, maximum, step and
-/// starting position are all facts about the mapping, not the browser. Written twice
-/// they drift, and the failure shows up as a slider offering a value the mapping quietly
-/// clamps away — the person moves it and hears nothing change. Declared once,
-/// `Params::default`, `Params::sane` and the UI controls cannot disagree, and a knob
-/// added to this table appears in the UI with no UI edit.
-///
-/// **This is the wire type as well.** The API forwards it unchanged, unlike a `Score`,
-/// which it projects on the way out. A copy required to be identical is not a boundary,
-/// it is a second place to forget.
+/// The range lives here, not in the UI, so a slider can never offer a value the
+/// mapping clamps away. It is also the wire type: the API forwards it unchanged.
 #[derive(Clone, Copy, Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct Knob {
-    /// Which knob this is. Its `name` is the query parameter and the
-    /// `Params` field alike.
+    /// Which knob: its name is both the query parameter and the `Params` field.
     pub name: KnobName,
     /// What to call it in front of a person.
     pub label: &'static str,
@@ -46,31 +30,15 @@ pub struct Knob {
     pub default: f32,
     /// What moving it does, and what each end sounds like.
     pub about: &'static str,
-    /// Mappings this knob reaches. Empty means every one of them.
-    ///
-    /// **Why a knob has to say.** A knob belonging to one mapping but shown while
-    /// another is playing is the same failure the table exists to prevent — a slider
-    /// that moves and changes nothing — and only the knob can be trusted to know which.
-    /// `tests/api.rs` renders every knob against every mapping it claims and fails if
-    /// the audio is unchanged, so a claim made here is checked.
-    ///
-    /// [`Mapping`] rather than a name, so a knob cannot claim one that does not exist.
+    /// Mappings this knob reaches; empty means all. A slider shown beside a
+    /// mapping that ignores it moves and changes nothing, so the knob says, and
+    /// `tests/api.rs` checks the claim.
     pub mappings: &'static [Mapping],
     /// Whether to offer this one before anybody asks for it.
     ///
-    /// **The rule: primary knobs decide what kind of piece this is, advanced ones adjust
-    /// a piece you already have.** Ten sliders at equal weight is an instrument panel for
-    /// someone who already knows what each does; to anyone else it is ten things they
-    /// might be getting wrong. So the UI shows the primary ones and hides the rest.
-    ///
-    /// Declared here for the same reason the range is: a list of important names kept in
-    /// the frontend is a second opinion that drifts the first time somebody adds a knob
-    /// in Rust, and *that* failure shows up as a new control nobody can find.
-    ///
-    /// ⚠ **Not a ranking by audible authority.** `bind` is primary because it is the
-    /// axis the whole project argues about, however little it moves the field; `spacing`
-    /// earns its place on authority alone, with no thesis behind it. Either argument
-    /// suffices.
+    /// Primary knobs decide what kind of piece this is; the rest adjust a piece
+    /// you have. Not a ranking by audible authority: `bind` is primary because
+    /// the project argues about it, `spacing` for how much it changes.
     pub primary: bool,
 }
 
@@ -80,22 +48,14 @@ impl Knob {
         value.clamp(self.min, self.max)
     }
 
-    /// Whether this knob does anything to the given mapping.
-    ///
-    /// Empty means every one of them. Reading that convention is the whole of
-    /// this function, which is why callers use it rather than spelling out
-    /// `is_empty() || contains(...)` again.
+    /// Whether this knob does anything to the given mapping (empty means all).
     pub fn reaches(&self, mapping: Mapping) -> bool {
         self.mappings.is_empty() || self.mappings.contains(&mapping)
     }
 }
 
-/// A value a knob can hold.
-///
-/// The knob table speaks `f32` — a slider's range is a range of numbers — while
-/// some of the fields it sets count things and are `usize`. One conversion rule
-/// here, applied everywhere the macro generates, so no site can truncate where
-/// another rounds.
+/// A value a knob can hold. The table speaks `f32` and some fields count things,
+/// so one conversion rule is applied everywhere the macro generates.
 pub trait KnobValue: Copy {
     fn from_knob(value: f32) -> Self;
     fn to_knob(self) -> f32;
@@ -111,8 +71,7 @@ impl KnobValue for f32 {
 }
 
 impl KnobValue for usize {
-    /// Rounded, not truncated: these count things, and a slider stopping just
-    /// under an integer would otherwise mean the one below it.
+    /// Rounded, not truncated: a slider stopped just under 5 means 5.
     fn from_knob(value: f32) -> Self {
         value.round().max(0.0) as usize
     }
@@ -123,14 +82,10 @@ impl KnobValue for usize {
 
 /// Declare the knobs once.
 ///
-/// **Why a macro.** A knob appears in the `Knob` const, the `Params` field, `Default`,
-/// the clamp in `sane`, the arm in `with`, `KnobName` and `KnobQuery`. Several of those
-/// are not exhaustive struct literals, so written by hand the compiler would not notice
-/// one missing — and a knob missing from the query is published to the browser, drawn
-/// as a slider, and connected to nothing.
-///
-/// The cost: fields declared here do not answer to grep, and jumping to `Params::bind`
-/// lands on this macro. Generating [`KnobName`] is also what makes `with` total.
+/// A knob appears in the `Knob` const, the `Params` field, `Default`, `sane`,
+/// `with`, `KnobName` and `KnobQuery`. Written by hand, one missing would not
+/// always fail to compile — and a knob missing from the query is a slider
+/// connected to nothing. The cost: `Params::bind` jumps to this macro.
 macro_rules! knobs {
     ($(
         $(#[$field_doc:meta])*
@@ -145,11 +100,7 @@ macro_rules! knobs {
             primary: $primary:expr,
         }
     )*) => {
-        /// Which knob, as a value.
-        ///
-        /// Generated beside the table, so a name that is not a knob cannot be
-        /// spoken. It reaches the browser through `Knob::name`, so the settings
-        /// a listener shares are keyed by a union rather than by `string`.
+        /// Which knob, as a value, so a name that is not a knob cannot be written.
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
         #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
         #[cfg_attr(feature = "ts", ts(export))]
@@ -159,12 +110,8 @@ macro_rules! knobs {
         }
 
         impl KnobName {
-            /// The wire spelling, which is also the `Params` field name.
-            ///
-            /// From `stringify!` on the field itself rather than restated, so
-            /// this cannot drift from what it names. Serde lowercases the
-            /// variant to the same string, and `name_round_trips_through_serde`
-            /// in `tests/params.rs` holds the two together.
+            /// The wire spelling, which is also the `Params` field name — from
+            /// `stringify!`, and held to serde's by `name_round_trips_through_serde`.
             pub fn name(self) -> &'static str {
                 match self {
                     $( KnobName::$variant => stringify!($name), )*
@@ -201,9 +148,6 @@ macro_rules! knobs {
         )*
 
         /// Every knob, in the order a person should meet them.
-        ///
-        /// A slice rather than a sized array, so the count is not a fact anybody
-        /// has to maintain.
         pub const KNOBS: &[Knob] = &[ $( $variant, )* ];
 
         /// How the voice binds, and what it drives.
@@ -219,12 +163,9 @@ macro_rules! knobs {
         }
 
         impl Params {
-            /// Clamp everything into a range that produces sound rather than an
-            /// error.
-            ///
-            /// Called once where the values arrive rather than checked at each
-            /// use: a knob that arrives out of range is someone exploring, not a
-            /// bug, and the useful response is the nearest thing that works.
+            /// Clamp everything into a range that produces sound: an out-of-range
+            /// knob is someone exploring, and the answer is the nearest thing
+            /// that works.
             pub fn sane(self) -> Self {
                 Params {
                     $( $name: <$ty as KnobValue>::from_knob(
@@ -233,14 +174,8 @@ macro_rules! knobs {
                 }
             }
 
-            /// The same parameters with one knob moved, chosen by name.
-            ///
-            /// The table promises that a knob's name is the field it sets, and
-            /// this is what acts on the promise — so a sweep, a test or the
-            /// route can set a knob generically instead of keeping its own copy
-            /// of the mapping from name to field.
-            ///
-            /// Total, since [`KnobName`] cannot name a knob that does not exist.
+            /// The same parameters with one knob moved, chosen by name. Total,
+            /// since [`KnobName`] cannot name a knob that does not exist.
             pub fn with(self, knob: KnobName, value: f32) -> Self {
                 match knob {
                     $( KnobName::$variant => Params {
@@ -258,15 +193,10 @@ macro_rules! knobs {
             }
         }
 
-        /// The knobs as a query string accepts them: each one absent or given.
+        /// The knobs as a query string gives them: each absent or given.
         ///
-        /// Generated from the same list as `Params`, so no knob can be missing
-        /// from it.
-        ///
-        /// Its own extractor rather than part of `VoiceParams`, because
-        /// `serde_urlencoded` cannot flatten: a nested struct would have to be
-        /// deserialised through `deserialize_any`, and every value in a query
-        /// string is a string, so the numbers would not parse.
+        /// Its own extractor rather than part of `VoiceParams`: `serde_urlencoded`
+        /// cannot flatten a nested struct without losing the numbers.
         #[derive(Debug, Default, Deserialize)]
         pub struct KnobQuery {
             $( #[serde(default)] pub $name: Option<f32>, )*
@@ -286,16 +216,10 @@ macro_rules! knobs {
 }
 
 knobs! {
-    /// How far the speaker's own scale is used, 0..1.
-    ///
-    /// **The convention-to-speaker axis**, and the longest-standing open
-    /// question in the project. At 1 the degrees are exactly where this voice's
-    /// spectrum puts them; at 0 they snap to twelve-tone equal temperament; in
-    /// between they are interpolated in cents.
-    ///
-    /// The reason it exists rather than being decided: nobody knows where on
-    /// this axis the music is, and it is not a thing anyone can settle by
-    /// argument. It converts a question into something you listen to.
+    /// How far the speaker's own scale is used, 0..1 — the convention-to-speaker
+    /// axis. At 1 the degrees are where the spectrum puts them, at 0 they snap to
+    /// equal temperament, between they interpolate in cents. A knob because
+    /// where on this axis the music is can only be settled by listening.
     BIND bind: f32 = {
         label: "Bind to the voice",
         min: 0.0,
@@ -308,11 +232,8 @@ knobs! {
         primary: true,
     }
 
-    /// How deep a dip in the roughness curve must be to count as a note.
-    ///
-    /// Raise it for a handful of very stable intervals, lower it for a dense
-    /// microtonal set. The same speaker's *ah* gave eight degrees and their *ee*
-    /// gave three, and part of that spread is this number rather than the voice.
+    /// How deep a dip in the roughness curve must be to count as a note: high
+    /// gives a few very stable intervals, low a dense microtonal set.
     DENSITY density: f32 = {
         label: "Scale density",
         min: 0.0005,
@@ -351,12 +272,9 @@ knobs! {
         primary: true,
     }
 
-    /// Octaves the whole field transposes across the speaker's pitch range.
-    ///
-    /// At 0 the prosody is discarded and the field sits still; at 1 it follows
-    /// the speaker's pitch closely enough to read as a parallel melody, which is
-    /// the naive mapping this project exists to avoid. The default is deliberately
-    /// nearer the first.
+    /// Octaves the whole field transposes across the speaker's pitch range. Near
+    /// 1 it reads as a parallel melody — the naive mapping this project avoids —
+    /// so the default sits low.
     DRIFT drift: f32 = {
         label: "Follow the pitch",
         min: 0.0,
@@ -369,11 +287,8 @@ knobs! {
         primary: false,
     }
 
-    /// How far the vowel moves the harmony.
-    ///
-    /// Octaves the root travels front to back in the field mapping; cells of
-    /// lattice crossed in the Tonnetz one. The same quantity read onto two
-    /// geometries, which is why it is one knob rather than two.
+    /// How far the vowel moves the harmony: octaves the root travels in the
+    /// field, cells crossed in the Tonnetz. One quantity on two geometries.
     REACH reach: f32 = {
         label: "Follow the vowel",
         min: 0.0,
@@ -387,11 +302,8 @@ knobs! {
         primary: false,
     }
 
-    /// How far past a boundary the mouth must go before the harmony follows.
-    ///
-    /// Read only by the mappings that quantise their harmony. It is the knob that
-    /// decides whether a chord rings — and so whether the derived tuning can be
-    /// heard at all (`docs/roadmap.md`).
+    /// How far past a boundary the mouth must go before the harmony follows —
+    /// whether a chord rings long enough for its tuning to be heard.
     HOLD hold: f32 = {
         label: "Hold the harmony",
         min: 0.0,
@@ -406,16 +318,9 @@ knobs! {
     }
 
     /// How long the mouth must stay away before the harmony follows, in seconds.
-    ///
-    /// The other half of [`Self::hold`], and the half that reaches an artifact
-    /// hysteresis in space cannot. Spatial hold asks *how far* past the boundary;
-    /// this asks *for how long*, so a mouth that crosses a line and comes
-    /// straight back leaves the chord alone. Spatial hold alone, even at its
-    /// maximum, leaves a held chord flicking to a neighbour for a frame or two.
-    ///
-    /// In seconds rather than frames because the frame rate is an analysis
-    /// detail, and a knob whose meaning moved with the hop size would be a
-    /// different knob on a different recording.
+    /// [`Self::hold`] asks how far; this asks how long, so a mouth that crosses
+    /// a line and comes straight back leaves the chord alone. Seconds, not
+    /// frames, so the meaning does not move with the hop size.
     SETTLE settle: f32 = {
         label: "Settle",
         min: 0.0,
@@ -430,12 +335,9 @@ knobs! {
         primary: false,
     }
 
-    /// How far the third formant opens or clusters the chord.
-    ///
-    /// The dimension of articulation the vowel chart cannot see. F1 and F2 place
-    /// a vowel; F3 separates mouth shapes that share a place — rounded from
-    /// spread, retroflex from not — and it moves while the other two hold still.
-    /// At 0 the voices are evenly stacked whatever the mouth is doing.
+    /// How far the third formant opens or clusters the chord. F3 separates mouth
+    /// shapes the vowel chart cannot — rounded from spread — and moves while F1
+    /// and F2 hold still. At 0 the voices stack evenly.
     VOICING voicing: f32 = {
         label: "Voicing",
         min: 0.0,
@@ -451,12 +353,9 @@ knobs! {
         primary: false,
     }
 
-    /// How much the rate of spectral change stirs the texture.
-    ///
-    /// The field's only answer to rhythm that does not involve cutting anything
-    /// into notes. Spectral flux says *the sound is changing now* without
-    /// claiming a syllable began — which is exactly the weakness that makes it
-    /// a bad onset detector and a good continuous stream.
+    /// How much the rate of spectral change stirs the texture: rhythm without
+    /// cutting anything into notes. Flux says *the sound is changing now*, which
+    /// makes it a poor onset detector and a good continuous stream.
     ARTICULATION articulation: f32 = {
         label: "Articulation",
         min: 0.0,
@@ -488,24 +387,13 @@ knobs! {
 /// Cents in an equal-tempered semitone.
 const SEMITONE_CENTS: f32 = 100.0;
 
-/// Pull one pitch toward the nearest equal-tempered one by `1 - bind`.
+/// Pull one pitch toward the nearest equal-tempered one by `1 - bind`,
+/// interpolating in cents, where the perceptual midpoint is.
 ///
-/// Interpolating in cents rather than in frequency ratio, because cents are
-/// where the perceptual midpoint is: halfway between a just third at 386 and a
-/// tempered one at 400 is 393, which is what a listener hears as halfway.
-///
-/// The whole convention-to-speaker axis on one number. Separate from
-/// [`bind_toward_equal`] because the callers apply it in different places and only one
-/// has a scale to hand: the field mapping binds the *degrees* and stacks voices on them,
-/// while the Tonnetz binds each **sounding pitch**, its chord already built from the
-/// speaker's own lattice.
-///
-/// ⚠ **Why the Tonnetz cannot bind its axes instead.** A lattice point's pitch is
-/// `x·a + y·b`, so an axis error multiplies by how far out the point sits: binding the
-/// axes moves a chord near the tonic by a few cents and one three cells away by fifty or
-/// more, and since pitch folds into an octave, far enough out it becomes a different
-/// note. That is a structural change wearing a tuning knob's name, and it made `bind`
-/// untestable on the one mapping whose chords hold still long enough to test it.
+/// Separate from [`bind_toward_equal`] because the Tonnetz binds each sounding
+/// pitch rather than its axes: a lattice point is `x·a + y·b`, so binding the
+/// axes would move far-out chords by more than a quarter tone and eventually
+/// into different notes — a structural change wearing a tuning knob's name.
 pub fn bind_cents_toward_equal(cents: f32, bind: f32) -> f32 {
     if bind >= 1.0 {
         return cents;
@@ -514,13 +402,9 @@ pub fn bind_cents_toward_equal(cents: f32, bind: f32) -> f32 {
     tempered + (cents - tempered) * bind.clamp(0.0, 1.0)
 }
 
-/// Pull a tuning toward equal temperament by `1 - bind`.
-///
-/// At `bind = 1` this returns the scale untouched. At 0 every degree lands on a
-/// tempered note — which usually means the scale collapses to fewer degrees than
-/// it had, since two neighbours can snap to the same place. That is honest
-/// rather than a defect: it is what conventional tuning does to a spectrum that
-/// did not ask for it.
+/// Pull a tuning toward equal temperament by `1 - bind`. At 0 neighbouring
+/// degrees can snap to one note, so the scale may shrink — which is what
+/// conventional tuning does to a spectrum that did not ask for it.
 pub fn bind_toward_equal(tuning: &Tuning, bind: f32) -> Tuning {
     if bind >= 1.0 {
         return tuning.clone();
@@ -539,9 +423,8 @@ pub fn bind_toward_equal(tuning: &Tuning, bind: f32) -> Tuning {
         })
         .collect();
 
-    // Two degrees that snapped to the same tempered note are now one note played
-    // twice. Keeping both would silently double a voice in the field and change
-    // the balance for a reason nothing reports.
+    // Degrees that snapped to one note are one note: keeping both would double
+    // a voice in the field.
     degrees.dedup_by(|a, b| (a.cents - b.cents).abs() < 1.0);
 
     Tuning {

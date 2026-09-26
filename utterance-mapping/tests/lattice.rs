@@ -1,10 +1,6 @@
-//! The harmonic lattice, checked against the claims its module makes.
-//!
-//! Two of them can be tested and both matter. That the axes are *read* from the
-//! spectrum rather than assumed — the same test the tuning has, for the same
-//! reason: a derivation that restates its own assumptions is worth nothing. And
-//! that adjacency on the lattice really is the near relation it is claimed to
-//! be, since every musical consequence here rests on that geometry.
+//! The harmonic lattice, checked against its module's two testable claims: the
+//! axes are read from the spectrum rather than assumed, and adjacency is the
+//! near relation every musical consequence rests on.
 
 use utterance_mapping::dissonance::Component;
 use utterance_mapping::lattice::{
@@ -23,11 +19,8 @@ fn harmonic() -> Tuning {
     tuning::from_spectrum(&spectrum).expect("a scale")
 }
 
-/// A spectrum stretched until it is nothing a throat could make.
-///
-/// Partials at `k^1.4` rather than at `k`, which is roughly what a stiff bar
-/// does. Its consonances are somewhere else entirely, and if the lattice comes
-/// out spanned by a fifth and a third anyway then the derivation is decoration.
+/// Partials at `k^1.4`, as a stiff bar has: if this lattice still comes out a
+/// fifth and a third, the derivation is decoration.
 fn stretched() -> Tuning {
     let spectrum: Vec<Component> = (1..=16)
         .map(|k| Component {
@@ -40,9 +33,8 @@ fn stretched() -> Tuning {
 
 #[test]
 fn a_voice_is_spanned_by_intervals_it_actually_makes_consonant() {
-    // Not a claim that they are the fifth and the third — a claim that they are
-    // deep minima of this speaker's own curve. That they land near the familiar
-    // pair for a harmonic spectrum is the result, not the input.
+    // Deep minima of this spectrum; that they are near the familiar pair is the
+    // result.
     let t = harmonic();
     let (a, b) = generators(&t).expect("two generators");
 
@@ -62,10 +54,7 @@ fn a_voice_is_spanned_by_intervals_it_actually_makes_consonant() {
 
 #[test]
 fn the_first_axis_of_a_voice_is_the_fifth() {
-    // The classical Tonnetz's first axis, arrived at from the spectrum rather
-    // than from the theory: the fifth is what a harmonic series makes least
-    // rough, which is why harmony settled on it. Deriving it back is the check
-    // that the derivation does the work the theory says it does.
+    // The fifth, derived back from the spectrum rather than assumed.
     let (a, _) = generators(&harmonic()).unwrap();
     assert!(
         (a.cents - 702.0).abs() < 30.0,
@@ -88,10 +77,8 @@ fn an_inharmonic_spectrum_is_spanned_by_something_else() {
     );
 }
 
-/// A scale built by hand, to reach shapes a real spectrum reaches only rarely.
-///
-/// Interior degrees as `(cents, depth)`; the tonic and the octave are added the
-/// way `tuning` adds them, with no depth.
+/// A scale built by hand, as interior `(cents, depth)`; tonic and octave are
+/// added as `tuning` adds them.
 fn scale(interior: &[(f32, f32)]) -> Tuning {
     let degree = |cents: f32, depth: f32| Degree {
         cents,
@@ -110,9 +97,7 @@ fn scale(interior: &[(f32, f32)]) -> Tuning {
 
 #[test]
 fn a_scale_with_one_interval_spans_no_plane() {
-    // A steady *ee* in the calibration set gave the fifth and nothing else. That
-    // is a line, and saying so beats folding the plane flat and letting one of
-    // the two vowel dimensions reach nothing.
+    // A scale of the fifth alone is a line; saying so beats folding it flat.
     let refused = Lattice::from_tuning(&scale(&[(702.0, 0.3)])).expect_err("a plane from a line");
     assert_eq!(
         refused,
@@ -124,10 +109,8 @@ fn a_scale_with_one_interval_spans_no_plane() {
 
 #[test]
 fn a_refusal_says_which_intervals_there_were_and_what_to_move() {
-    // The whole reason the failure carries a reason. Someone who raised one
-    // slider until the music stopped needs to be told *that* slider, and a
-    // message that leaves out the intervals cannot be checked against the scale
-    // shown on the same screen.
+    // The message must name the knob and the intervals, so it can be checked
+    // against the scale on screen.
     let refused = Lattice::from_tuning(&scale(&[(702.0, 0.3)])).expect_err("a plane from a line");
     let said = refused.to_string();
     assert!(
@@ -142,10 +125,7 @@ fn a_refusal_says_which_intervals_there_were_and_what_to_move() {
 
 #[test]
 fn a_scale_of_the_fifth_and_the_fourth_is_refused_as_one_direction() {
-    // Two intervals, and still no plane: they sum to the octave, so the second
-    // axis lies along the first and the two triangles of every cell would be the
-    // same three pitches. The trap a harmonic spectrum lays, since these are the
-    // two deepest minima any voice has.
+    // Two intervals that sum to the octave: the second axis lies along the first.
     let refused = Lattice::from_tuning(&scale(&[(498.0, 0.4), (702.0, 0.5)]))
         .expect_err("a plane from the fifth and the fourth");
     assert_eq!(
@@ -172,11 +152,8 @@ fn a_scale_of_nothing_but_the_tonic_and_the_octave_is_refused_too() {
 
 #[test]
 fn the_two_halves_of_a_cell_are_different_chords() {
-    // The degeneracy a voice's own spectrum lays a trap for. Its two deepest
-    // minima are the fifth and the fourth, which sum to the octave — and a
-    // lattice spanned by both has `(1,1)` back on the tonic, so the upward and
-    // downward triangles of every cell are the same three pitches. It would look
-    // two-dimensional and have half its moves do nothing.
+    // A voice's two deepest minima, the fifth and the fourth, sum to the octave:
+    // `(1,1)` lands on the tonic and both triangles of a cell are one chord.
     let lattice = Lattice::from_tuning(&harmonic()).unwrap();
     let pitches = |t: Triangle| {
         let mut cents: Vec<i32> = t
@@ -200,8 +177,7 @@ fn the_two_halves_of_a_cell_are_different_chords() {
     });
     assert_ne!(up, down, "both halves of a cell are the same chord");
 
-    // ...and neither has two voices sitting on one pitch, which is the other way
-    // an axis can fail to add a dimension.
+    // ...and no triangle doubles a pitch.
     assert_eq!(up.len(), 3);
     assert!(
         up[0] != up[1] && up[1] != up[2],
@@ -211,9 +187,7 @@ fn the_two_halves_of_a_cell_are_different_chords() {
 
 #[test]
 fn neighbouring_triangles_share_two_of_their_three_pitches() {
-    // The claim the whole mapping rests on: moving to an adjacent chord holds
-    // two voices still and steps one. Nothing enforces that — it is what
-    // adjacency on this lattice is.
+    // Moving to an adjacent chord holds two voices and steps one.
     let up = Triangle {
         x: 0,
         y: 0,
@@ -264,9 +238,7 @@ fn a_position_is_in_the_triangle_it_is_in() {
 
 #[test]
 fn holding_keeps_a_chord_through_a_wobble_and_yields_to_a_move() {
-    // What makes a chord ring: a formant estimate that jitters across a boundary
-    // must not change the harmony, and a mouth that genuinely goes somewhere
-    // must.
+    // Jitter across a boundary must not change the harmony; a real move must.
     let start = triangle_at(0.2, 0.2);
     let wobbled = settle(start, 0.45, 0.45, 0.5);
     assert_eq!(
@@ -287,16 +259,13 @@ fn holding_at_zero_follows_every_boundary() {
     assert_eq!(settle(start, 0.45, 0.45, 0.0), triangle_at(0.45, 0.45));
 }
 
-/// Frames of settle used throughout the walk tests, and a plain number of frames
-/// rather than a duration, because [`Walk`] counts frames and the seconds are
-/// converted once by the caller.
+/// Frames of settle used by the walk tests (frames, since [`Walk`] counts them).
 const DWELL: usize = 5;
 
 #[test]
 fn a_chord_survives_a_departure_that_comes_straight_back() {
-    // The artifact this exists for. `hold` is hysteresis in space and cannot see
-    // this case at all: the mouth really did cross the boundary, so the spatial
-    // rule is right to let it go — and then it came back two frames later.
+    // The artifact: the mouth really crossed — so `hold` lets go — and came back
+    // two frames later.
     let mut walk = Walk::start(0.2, 0.2);
     let home = walk.step(0.2, 0.2, 0.0, DWELL);
 
@@ -317,8 +286,7 @@ fn a_chord_survives_a_departure_that_comes_straight_back() {
 
 #[test]
 fn a_departure_that_lasts_moves_the_chord() {
-    // The other half, and the reason this is a delay rather than a lockout: what
-    // is refused is a flicker, not a move.
+    // A delay, not a lockout: a flicker is refused, a move is not.
     let mut walk = Walk::start(0.2, 0.2);
     let home = walk.step(0.2, 0.2, 0.0, DWELL);
 
@@ -332,16 +300,12 @@ fn a_departure_that_lasts_moves_the_chord() {
 
 #[test]
 fn the_count_restarts_when_the_mouth_comes_home() {
-    // Consecutive frames, not a total. Otherwise a mouth that dips out for one
-    // frame every second accumulates its way across the boundary eventually,
-    // which is the flicker being counted as a move by instalments.
+    // Consecutive frames, not a total, or dips would accumulate into a move.
     let mut walk = Walk::start(0.2, 0.2);
     let home = walk.step(0.2, 0.2, 0.0, DWELL);
 
     for _ in 0..DWELL * 3 {
-        // Asserted *during* the departure as well as after it. Checking only the
-        // frame it comes home on passes trivially under a walk with no clock in
-        // it at all, which is a test that cannot fail.
+        // Asserted during the departure too, or a walk with no clock would pass.
         assert_eq!(
             walk.step(1.5, 0.2, 0.0, DWELL),
             home,
@@ -357,17 +321,13 @@ fn the_count_restarts_when_the_mouth_comes_home() {
 
 #[test]
 fn a_glide_keeps_moving_rather_than_freezing() {
-    // The failure mode of the obvious implementation. Waiting for *one candidate*
-    // to hold still means a mouth sweeping across the lattice never rests
-    // anywhere, so the harmony would freeze for the whole gesture — the opposite
-    // of what a deliberate move should do. Counting departures instead, the walk
-    // commits to wherever the mouth is now and goes on committing as it travels.
+    // Counting departures, not rests in one triangle: a glide rests nowhere, and
+    // the harmony must follow it rather than freeze.
     let mut walk = Walk::start(0.0, 0.2);
     let start = walk.step(0.0, 0.2, 0.0, DWELL);
 
-    // Fast enough that no single triangle is occupied for `DWELL` frames — which
-    // is the whole point. A glide slow enough to rest in each cell would commit
-    // under either design and prove nothing.
+    // Fast enough to rest in no triangle for `DWELL` frames, or both designs
+    // would commit.
     let mut seen: Vec<Triangle> = Vec::new();
     for frame in 0..40 {
         let x = frame as f32 * 0.3;
@@ -386,9 +346,7 @@ fn a_glide_keeps_moving_rather_than_freezing() {
 
 #[test]
 fn no_settle_time_is_the_walk_that_has_no_clock_in_it() {
-    // The default changes nothing for anyone who does not touch the knob. Both
-    // 0 and 1 frame mean *commit as soon as the spatial rule allows*, which is
-    // what `settle` alone does.
+    // The default changes nothing: 0 and 1 frame both commit at once.
     for frames in [0, 1] {
         let mut walk = Walk::start(0.2, 0.2);
         walk.step(0.2, 0.2, 0.5, frames);
@@ -407,11 +365,8 @@ fn no_settle_time_is_the_walk_that_has_no_clock_in_it() {
 
 #[test]
 fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
-    // A real scale, measured from a held *ah*, with its two deepest minima at
-    // their measured depths. Their difference is 182 cents, which is not a
-    // degree, is not near one, and sits close to where the roughness curve
-    // peaks — so spanning the lattice by the deepest pair would put a whole-tone
-    // clash inside every chord the mapping could play.
+    // A real scale from a held *ah*: its two deepest minima, 884 and 702, differ
+    // by 182 cents — near the roughness peak, in every chord.
     let measured = scale(&[
         (316.0, 0.09),
         (386.0, 0.12),
@@ -423,9 +378,7 @@ fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
 
     let (a, b) = generators(&measured).expect("this scale spans a plane");
 
-    // Inversions count as the same interval, as they must: these are pitch
-    // classes and which octave each voice takes is decided later, so a fourth
-    // in the lattice can sound as a fifth in the chord.
+    // Inversions count as the same interval: octave placement comes later.
     let fold = |cents: f32| {
         let wrapped: f32 = cents.rem_euclid(1200.0);
         wrapped.min(1200.0 - wrapped)
@@ -437,8 +390,7 @@ fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
             .any(|d| (fold(d.cents) - fold(cents)).abs() <= 50.0)
     };
 
-    // The property that matters: all three of the triangle's intervals are
-    // things this speaker's spectrum rests on, not just the two axes.
+    // All three of the triangle's intervals are consonant, not just the axes.
     for interval in [a.cents, b.cents, a.cents - b.cents] {
         assert!(
             is_degree(interval),
@@ -447,9 +399,7 @@ fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
         );
     }
 
-    // And the deepest pair is specifically *not* what comes out: 884 and 702
-    // are the two deepest minima here and their difference is 182, which is
-    // nothing.
+    // And the deepest pair is specifically *not* chosen.
     let deepest_pair = (a.cents - 884.0).abs() < 1.0 && (b.cents - 702.0).abs() < 1.0;
     assert!(
         !deepest_pair,
@@ -463,11 +413,8 @@ fn a_triangle_is_judged_by_its_worst_interval_not_its_best() {
 
 #[test]
 fn a_scale_whose_intervals_never_agree_still_gets_a_lattice() {
-    // No pair here has a consonant difference: 100 and 550 differ by 450, 100
-    // and 700 by 600, 550 and 700 by 150, and none of those is a degree. A
-    // lattice with a rough interval in every chord is worse than one without
-    // and better than no mapping at all, so it is taken rather than refused —
-    // the alternative is a speaker for whom the Tonnetz silently disappears.
+    // No pair has a consonant difference (450, 600, 150 are not degrees): the
+    // rough lattice is taken rather than the mapping vanishing.
     let awkward = scale(&[(100.0, 0.10), (550.0, 0.08), (700.0, 0.12)]);
     let (a, b) = generators(&awkward).expect("a lattice is still spanned");
     assert_ne!(a.cents, b.cents);
@@ -475,17 +422,9 @@ fn a_scale_whose_intervals_never_agree_still_gets_a_lattice() {
 
 #[test]
 fn a_point_a_hair_below_the_tonic_folds_to_the_tonic() {
-    // `pitch_class` promises a position *within* one octave, and everything
-    // downstream reads it that way: `tonnetz` registers each voice by adding
-    // whole octaves to it, so a pitch class of 1200 is a voice an octave above
-    // where the lattice put it — the tonic sounding as the octave, in a mapping
-    // whose entire argument is that a pitch the lattice keeps is a frequency the
-    // ear keeps.
-    //
-    // The case is exactly representable and not hypothetical. `rem_euclid` on a
-    // small negative returns `1200.0 - eps`, and f32 has no room for an eps
-    // below 1.2e-4 at that magnitude, so the subtraction lands back on 1200.0
-    // itself. Two axes that nearly cancel put a lattice point there.
+    // A pitch class of 1200 would sound the tonic an octave up. `rem_euclid` of a
+    // tiny negative rounds to exactly 1200.0 in f32, so two nearly cancelling
+    // axes reach it.
     let cancelling = Lattice {
         a_cents: 1e-5,
         b_cents: -2e-5,

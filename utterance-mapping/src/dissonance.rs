@@ -1,23 +1,11 @@
-//! How rough two spectra sound together.
+//! How rough two spectra sound together: Plomp and Levelt's curve, in Sethares'
+//! parameterisation.
 //!
-//! The model is Plomp and Levelt's (1965), in the parameterisation Sethares
-//! fitted in 1993. Two sinusoids close in frequency beat against each other; the
-//! roughness that produces peaks when they are about a quarter of a critical
-//! band apart and falls away both as they converge on unison and as they
-//! separate. Two *complex* tones are rough to the extent that their partials
-//! collide, so the shape of the curve for a given pair of spectra depends
-//! entirely on which partials those spectra have and how loud they are.
-//!
-//! That is the whole reason this project measures a harmonic series. A voice
-//! emphasising partials 2 and 6 has a different set of intervals that sit still
-//! from one emphasising 2 and 3, and the difference is not a matter of opinion —
-//! it follows from where the collisions land.
-//!
-//! **What is a model here and what is not.** The roughness curve is empirical
-//! psychoacoustics fitted to listening tests, not arithmetic: it describes what
-//! people reported, averaged. Calling its minima *consonant* is already an
-//! interpretation, and calling them *notes* is a further one. Both belong to
-//! this crate rather than to analysis for exactly that reason.
+//! Two nearby sinusoids beat; roughness peaks about a quarter of a critical band
+//! apart and vanishes at unison and at a distance. Complex tones are rough where
+//! their partials collide, so the curve depends on which partials a voice has —
+//! the reason this project measures them. The curve is fitted psychoacoustics,
+//! and calling its minima notes is an interpretation, which is why it is mapping.
 
 /// A single sinusoid: where it is and how loud.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -28,12 +16,7 @@ pub struct Component {
     pub amplitude: f32,
 }
 
-/// Sethares' fit to the Plomp–Levelt data.
-///
-/// Named rather than inlined so the source of each is traceable: these are
-/// fitted constants from published listening experiments, not tunable knobs, and
-/// changing one is changing the psychoacoustic claim rather than adjusting a
-/// parameter.
+/// Sethares' fit to the Plomp–Levelt data: published constants, not knobs.
 mod fit {
     /// Frequency separation, as a fraction of critical bandwidth, at which
     /// roughness peaks.
@@ -46,12 +29,8 @@ mod fit {
     pub const FALL: f32 = 5.75;
 }
 
-/// Roughness between two sinusoids.
-///
-/// Zero at unison and zero as the two separate, with a maximum between — which
-/// is the entire content of the model. Both limits matter: without the first,
-/// nothing would make a unison consonant; without the second, every wide
-/// interval would be rough.
+/// Roughness between two sinusoids: zero at unison and at a distance, peaking
+/// between.
 pub fn between(a: Component, b: Component) -> f32 {
     let (low, high) = if a.hz <= b.hz {
         (a.hz, b.hz)
@@ -63,29 +42,22 @@ pub fn between(a: Component, b: Component) -> f32 {
         return 0.0;
     }
 
-    // Critical bandwidth at the lower frequency, scaled so the curve peaks where
-    // the listening data said it does.
+    // Critical bandwidth at the lower frequency.
     let scale = fit::PEAK_FRACTION / (fit::BANDWIDTH_SLOPE * low + fit::BANDWIDTH_OFFSET);
     let x = scale * separation;
     a.amplitude * b.amplitude * ((-fit::RISE * x).exp() - (-fit::FALL * x).exp())
 }
 
-/// Roughness of one spectrum sounded against another.
-///
-/// Every partial of one against every partial of the other. Only the cross terms
-/// are counted: a spectrum's roughness against *itself* is real but constant
-/// however the two are tuned apart, so including it would raise the whole curve
-/// by a fixed amount and move no minimum.
+/// Roughness of one spectrum against another: cross terms only, since each
+/// spectrum's roughness with itself is constant and moves no minimum.
 pub fn between_spectra(a: &[Component], b: &[Component]) -> f32 {
     a.iter()
         .flat_map(|&x| b.iter().map(move |&y| between(x, y)))
         .sum()
 }
 
-/// A spectrum sounded against a copy of itself shifted by `ratio`.
-///
-/// The curve this traces as `ratio` sweeps upward is the thing a scale gets read
-/// out of.
+/// A spectrum against a copy of itself shifted by `ratio` — swept, the curve a
+/// scale is read from.
 pub fn at_interval(spectrum: &[Component], ratio: f32) -> f32 {
     let shifted: Vec<Component> = spectrum
         .iter()

@@ -18,26 +18,17 @@ export type { UpdateOutcome };
 const RECOVERY_KEY = 'utterance.sw-recovery-attempted';
 
 /**
- * Self-update — the Angular wiring. The rules live in
- * `@xinutec/ui-harness/sw-updates`; this is the adapter.
- *
- * ⚠ **ngsw alone caches a build that never learns a newer one exists.** That is
- * why the update path ships with the service worker: without it an app serves
- * yesterday's build indefinitely, which is worse than serving none because it
- * looks fine.
- *
- * The policy is shared and unit-tested against a fake. What is here is the
- * Angular wiring — that `SwUpdate.versionUpdates` really feeds it, filtered to
- * VERSION_READY, and that a reload really happens — which a fake cannot reach.
+ * Self-update — the Angular adapter for `@xinutec/ui-harness/sw-updates`, whose
+ * policy is tested there against a fake. ⚠ ngsw alone caches a build that never
+ * learns a newer one exists, serving yesterday's app while looking fine.
  */
 @Injectable({ providedIn: 'root' })
 export class SwUpdates {
   private readonly sw = inject(SwUpdate);
 
   private readonly serviceWorker: ServiceWorkerPort = ((sw: SwUpdate) => ({
-    // Bound to a local, not `this`: an object-literal getter does not capture the
-    // enclosing `this` lexically, and a copied boolean would freeze `isEnabled` at
-    // construction when start() must read the live value.
+    // A local, not `this`: an object-literal getter would not capture `this`,
+    // and a copied boolean would freeze `isEnabled`.
     get isEnabled(): boolean {
       return sw.isEnabled;
     },
@@ -47,9 +38,8 @@ export class SwUpdates {
         .subscribe(() => handler());
     },
     onUnrecoverable: (handler: () => void): void => {
-      // The cached build is broken and the server no longer holds the files to repair
-      // it — what a roll-forward deploy of :latest leaves a client whose cache was
-      // evicted meanwhile. Nothing recovers from here except a fresh load.
+      // A broken cache whose files the server no longer has (after a
+      // roll-forward): only a fresh load recovers.
       sw.unrecoverable.subscribe(() => handler());
     },
     checkForUpdate: () => sw.checkForUpdate(),
@@ -65,8 +55,7 @@ export class SwUpdates {
     },
     recoveryAttempted: () => sessionStorage.getItem(RECOVERY_KEY) !== null,
     markRecoveryAttempted: () => sessionStorage.setItem(RECOVERY_KEY, '1'),
-    // Routed through the method below rather than called directly, so a test can
-    // assert "this would have reloaded" without navigating the test runner.
+    // Through the method below, so a test can assert the reload.
     reload: () => this.reload(),
     now: () => Date.now(),
   };
@@ -77,14 +66,12 @@ export class SwUpdates {
     this.policy.start();
   }
 
-  /** Manual "Check for updates" (Settings). Never rejects — every failure comes back
-   *  as `'failed'` so the caller can say so. */
+  /** Manual "Check for updates". Never rejects: failure comes back `'failed'`. */
   checkNow(): Promise<UpdateOutcome> {
     return this.policy.checkNow();
   }
 
-  /** The one place the page is thrown away. Its own method so tests can assert
-   *  "this would have reloaded" without navigating the test runner. */
+  /** The one place the page is thrown away, a method so tests can assert it. */
   reload(): void {
     document.location.reload();
   }

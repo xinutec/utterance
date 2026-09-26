@@ -42,22 +42,11 @@ type Side = "a" | "b";
 /**
  * Two settings, heard against each other.
  *
- * **The problem this solves.** Two renders played one after the other are
- * separated by however long the first one lasted, and by then the ear has
- * nothing left to compare against — a real difference and no difference feel
- * identical. Every question this project has left open is of that shape: is the
- * speaker's tuning better than equal temperament, does a knob earn its place.
- *
- * Three things make the comparison answerable, and all three matter:
- *
- * - **Both renders play at once**, with one muted. Switching is instant and at
- *   the same instant of the piece, so what is being compared is two versions of
- *   one moment rather than two memories.
- * - **The scores are drawn on top of each other**, so a difference too small to
- *   hear is still visible — which is the difference between "this knob does
- *   nothing" and "this knob does something I cannot hear yet".
- * - **The chart says where.** Clicking moves both players there. Nobody has to
- *   hunt through a whole take for the seconds that differ.
+ * Played one after the other, two renders are compared from memory, and a real
+ * difference feels like none. So both play at once with one muted, switching at
+ * the same instant of the piece; their scores are drawn on top of each other,
+ * so a difference too small to hear is still visible; and the chart says where,
+ * moving both players there on a click.
  */
 @Component({
   selector: "app-compare",
@@ -94,23 +83,16 @@ export class Compare implements OnInit {
   readonly scoreA = signal<ScoreView | null>(null);
   readonly scoreB = signal<ScoreView | null>(null);
   /**
-   * Sides whose player has been pointed at a new render and cannot play it yet.
-   *
-   * Cleared by the elements' own `canplay` and `error`, because the render is
-   * fetched by the `<audio>` element after `load()` has returned — seconds of
-   * synthesis that nothing else on the page can see.
+   * Sides whose player has been pointed at a new render and cannot play it yet,
+   * cleared by the element's own `canplay` or `error`.
    */
   private readonly waiting = signal<ReadonlySet<Side>>(new Set());
   readonly loading = computed(() => this.waiting().size > 0);
   readonly error = signal<string | null>(null);
 
   /**
-   * Why one of the two sides cannot be played at all, if it cannot.
-   *
-   * Held apart from {@link error} because it survives differently: an error is
-   * cleared by trying again, while this is a property of the settings and stays
-   * true until one of them moves. Otherwise pressing play after a refusal
-   * would clear the explanation and point both players at a URL that fails.
+   * Why one side cannot be played, if it cannot. Apart from {@link error}
+   * because it lasts until the settings move, not until the next attempt.
    */
   readonly unplayable = signal<string | null>(null);
 
@@ -128,10 +110,8 @@ export class Compare implements OnInit {
   readonly differing = computed(() => differences(this.a(), this.b(), this.controls.knobs()));
 
   /**
-   * True once the *audio* no longer matches the settings.
-   *
-   * Keyed on the take actually on screen rather than on `recordingId`, which
-   * stays null until someone opens the take picker.
+   * True once the *audio* no longer matches the settings, for the take on
+   * screen.
    */
   readonly stale = computed(() => {
     const id = this.chosen();
@@ -143,17 +123,12 @@ export class Compare implements OnInit {
   });
 
   /**
-   * The moment the two renders differ most, in seconds.
-   *
-   * Offered rather than jumped to: it is a suggestion about where to listen, and
-   * moving someone's playhead without being asked is not.
+   * The moment the two renders differ most, in seconds — offered, not jumped to.
    */
   readonly mostDifferent = computed(() => {
     const [a, b] = [this.scoreA(), this.scoreB()];
     if (!a || !b) return null;
-    // Across every panel rather than a chosen few: level, colour and breath
-    // are all byte-identical under `bind`, the comparison the page exists to
-    // make.
+    // Across every panel: under `bind` only pitch differs.
     return mostDifferentAt(a, b);
   });
 
@@ -170,23 +145,14 @@ export class Compare implements OnInit {
 
   // ---- the comparison as a link -------------------------------------------
   //
-  // **Why this page of all of them.** A comparison is the project's unit of
-  // evidence — every open question in `docs/roadmap.md` is settled by two
-  // renders and a pair of ears. Passed on as a description of which controls to
-  // move, two people in two rooms listen to two slightly different things and
-  // disagree about a result neither of them heard.
-  //
-  // `a` and `b` each carry a whole settings query, url-encoded inside this one,
-  // so the encoding is `settingsQuery` in both directions and there is no second
-  // format to keep in step with the knob table.
+  // A comparison passed on as a description of which controls to move is two
+  // people hearing two slightly different things. `a` and `b` each carry a
+  // whole settings query, encoded inside this one by `settingsQuery`.
 
   /**
-   * True once the incoming URL has been read.
-   *
-   * The read has to wait for the published knobs — nothing can validate a knob
-   * value before the list of knobs arrives — and the write must not run before
-   * the read, or the first render would overwrite a shared link with the
-   * defaults it was about to replace.
+   * True once the incoming URL has been read. The read waits for the published
+   * knobs, and the write waits for the read, or it would overwrite a shared
+   * link with defaults.
    */
   private readonly loaded = signal(false);
 
@@ -196,9 +162,8 @@ export class Compare implements OnInit {
 
     effect(() => {
       const knobs = this.controls.knobs();
-      // Both arrive in the one `/api/controls` response, so a non-empty knob
-      // list means the mappings are here too — and `parseSettings` needs them to
-      // tell a name this backend serves from one it does not.
+      // One `/api/controls` response carries both lists, so knobs mean mappings
+      // are here too.
       const offered = this.controls.mappings();
       if (this.loaded() || knobs.length === 0) return;
 
@@ -207,9 +172,8 @@ export class Compare implements OnInit {
       const a = params.get("a");
       const b = params.get("b");
       if (a !== null) this.a.set(parseSettings(a, knobs, offered));
-      // Only when `a` was given too: a link carrying one side and not the other
-      // would silently keep this page's own default on the other, which is a
-      // comparison nobody chose.
+      // Only with `a` too: one side alone would pair it with a default nobody
+      // chose.
       if (a !== null && b !== null) this.b.set(parseSettings(b, knobs, offered, this.b()));
       this.loaded.set(true);
     });
@@ -227,9 +191,7 @@ export class Compare implements OnInit {
         a: settingsQuery(this.a(), knobs),
         b: settingsQuery(this.b(), knobs),
       };
-      // `replaceUrl` because moving a slider is not somewhere to go back to:
-      // pushing history would make the back button undo one knob at a time
-      // through a whole afternoon of listening.
+      // `replaceUrl`: the back button should not undo one knob at a time.
       void router.navigate([], { relativeTo: route, queryParams, replaceUrl: true });
     });
   }
@@ -264,16 +226,9 @@ export class Compare implements OnInit {
   }
 
   /**
-   * Keep the charts on whatever the sliders currently say.
-   *
-   * **Scores follow the settings; audio waits to be asked for.** Deriving a
-   * score is about fifty milliseconds — it is the mapping and nothing else —
-   * where rendering it to audio is seconds of synthesis. Tied to a button, a
-   * moving slider would change nothing on screen and the page would look as
-   * though the knobs did nothing at all.
-   *
-   * Responses are matched against the request that asked for them, so a burst
-   * of changes during a drag cannot leave an older answer on screen.
+   * Keep the charts on whatever the sliders say. A score is about 50 ms, a
+   * render seconds, so scores follow the settings and audio waits for the
+   * button. Stale responses from a drag are dropped by request token.
    */
   private scoreRequest = 0;
 
@@ -295,9 +250,7 @@ export class Compare implements OnInit {
         error: (err: unknown) => {
           if (token !== this.scoreRequest) return;
           const message = err instanceof ApiError ? err.message : UNEXPLAINED;
-          // A refusal is not a failure to retry: the settings and this
-          // speaker's scale have no answer for each other, and the way out is
-          // to move one of them.
+          // A refusal is not retried: moving a setting is the way out.
           if (err instanceof ApiError && err.code === "unplayable") {
             this.unplayable.set(message);
             this.error.set(null);
@@ -312,24 +265,22 @@ export class Compare implements OnInit {
   /** Point the players at renders of the current settings. */
   load(): void {
     const id = this.chosen();
-    // Nothing is pointed anywhere while a side is unplayable. The render would
-    // fail, and a failing `<audio>` says only that it is broken — so the reason
-    // already on screen is the better thing to leave there.
+    // Nothing is pointed anywhere while a side is unplayable: a failing
+    // `<audio>` shows only that it is broken.
     if (!id || this.unplayable()) return;
 
     this.error.set(null);
     const urlA = this.api.renderUrl(id, this.queryA());
     const urlB = this.api.renderUrl(id, this.queryB());
 
-    // Only a side whose URL changes is waited on: an element handed the URL it
-    // already holds loads nothing, and would never report that it can play.
+    // Only a side whose URL changes is waited on: an unchanged URL loads
+    // nothing and never reports it can play.
     const pending = new Set<Side>();
     if (urlA !== this.urlA()) pending.add("a");
     if (urlB !== this.urlB()) pending.add("b");
     this.waiting.set(pending);
 
-    // Both URLs set together, so the two players never describe different
-    // settings from each other for even a moment.
+    // Both URLs together, so the players never describe different settings.
     this.urlA.set(urlA);
     this.urlB.set(urlB);
     this.playhead.set(0);
@@ -355,10 +306,8 @@ export class Compare implements OnInit {
 
   // ---- playback -----------------------------------------------------------
   //
-  // Two elements playing in step with one muted, rather than one element whose
-  // source is swapped. Swapping a source reloads and reseeks, which takes long
-  // enough to hear as a gap — and a gap is precisely the thing that makes two
-  // renders impossible to compare.
+  // Two elements in step with one muted, rather than one whose source swaps:
+  // swapping reloads and reseeks, and the gap defeats the comparison.
 
   private readonly playerA = viewChild<ElementRef<HTMLAudioElement>>("playerA");
   private readonly playerB = viewChild<ElementRef<HTMLAudioElement>>("playerB");
@@ -387,9 +336,7 @@ export class Compare implements OnInit {
     }
 
     this.applySide();
-    // Started together from the same position. Play returns a promise that
-    // rejects if the browser refuses; nothing here can be done about that, but
-    // reporting it beats a button that silently does nothing.
+    // Started together. `play()` can be refused; say so rather than silently not.
     try {
       await Promise.all(players.map((p) => p.play()));
       this.playing.set(true);
@@ -399,12 +346,8 @@ export class Compare implements OnInit {
   }
 
   /**
-   * Switch which side is audible, at the same instant of the piece.
-   *
-   * The silent player is nudged onto the audible one's clock first. Two elements
-   * decoding independently drift by a few milliseconds over a minute, and a
-   * switch that also jumps in time is a switch that tells you nothing about the
-   * difference between the renders.
+   * Switch which side is audible at the same instant, nudging the silent player
+   * onto the audible one's clock first — they drift apart over a minute.
    */
   chooseSide(side: Side): void {
     const from = this.audible();
@@ -417,13 +360,8 @@ export class Compare implements OnInit {
   }
 
   /**
-   * Move both players to the same moment.
-   *
-   * **A seek before the element knows how long it is does nothing at all.**
-   * Assigning `currentTime` while `readyState` is still `HAVE_NOTHING` is
-   * dropped in silence, and the next `timeupdate` then reports zero — so the
-   * playhead snaps back and the button looks broken. Waiting for metadata is
-   * what makes an early click work rather than being swallowed.
+   * Move both players to the same moment. A seek before metadata has loaded is
+   * silently dropped, so it waits for `loadedmetadata`.
    */
   seekTo(seconds: number): void {
     for (const player of this.both()) {

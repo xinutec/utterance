@@ -1,26 +1,14 @@
-//! Audio in, voiceprint out.
+//! Audio in, voiceprint out — the objective layer (`docs/architecture.md`).
 //!
-//! The objective layer of the three described in `docs/architecture.md`. Every
-//! question this crate answers has a right answer that can be demonstrated wrong
-//! — is this frame voiced, what is f0 here, where are the events. It holds no
-//! musical opinions and must never grow any: it does not know what a scale is,
-//! and the moment it does, the mapping layer stops being replaceable.
-//!
-//! Analysis is a pure function of the audio bytes. No clock, no randomness, no
-//! ambient configuration. The same input yields the same voiceprint on the same
-//! toolchain and platform, which is what makes fixtures meaningful.
+//! Every question here has a right answer that can be shown wrong: is this frame
+//! voiced, what is f0. No musical opinions — the moment this crate knows what a
+//! scale is, mappings stop being replaceable. A pure function of the audio: the
+//! same input gives the same voiceprint on the same toolchain and platform.
 
-// **A pure core does not decide to stop.** Analysis is called on a request
-// thread with a recording someone just made, so a panic here is a 500 on a take
-// that took effort to sing.
-//
-// Deliberately NOT here: `indexing_slicing`, `arithmetic_side_effects` and
-// `integer_division`. This is DSP — `frame[i]` indexed by a loop variable
-// derived from that frame's own `len()` is the normal shape, and a bar firing on
-// it would be blanket-allowed, taking the rest of this list with it.
-//
-// Termination is the other half of the bar and is not expressible here; it is
-// `[package.metadata.dev-lint] totality = true` in Cargo.toml.
+// A pure core does not panic: analysis runs on a request with a take someone
+// just sang. Not denied: `indexing_slicing` and friends — DSP indexes by loop
+// variables derived from `len()`, and a lint firing on that would be allowed
+// wholesale. Termination is `totality = true` in Cargo.toml.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,

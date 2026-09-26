@@ -4,18 +4,9 @@ import type { Knob, MappingChoice } from "./models";
 import { RecordingsApi } from "./recordings-api";
 
 /**
- * What the mapping says it can be asked for.
- *
- * Root-provided and fetched once, like the take list next door and for the same
- * reason: a component that fetches its own list empties it every time the
- * component is destroyed, so switching tabs blanks the sliders and re-requests
- * them. This list is stronger than that even — it cannot change while the page
- * is open, because it is a property of the running backend rather than of
- * anything anyone does here.
- *
- * Failure is deliberately quiet. Without these the studio still renders at the
- * mapping's defaults; only the sliders are missing, and an error banner over a
- * working player would misdescribe that.
+ * What the mapping says it can be asked for, root-provided and fetched once: it
+ * cannot change while the page is open. Failure is quiet — the studio still
+ * works at the defaults, just without sliders.
  */
 @Injectable({ providedIn: "root" })
 export class ControlsStore {

@@ -319,18 +319,10 @@ fn a_calibration_take_stays_one_when_the_analyser_changes() {
         "re-analysis demoted a calibration take to material"
     );
 }
-
 // --- a take is replaced in one step, or not at all ---------------------------
 //
-// `fs::write` truncates and then writes, so between those two the file on disk
-// is short. `read_json` maps a parse failure to `StoreError::Corrupt`, so a
-// request arriving mid-write reads the take as CORRUPT rather than as its old
-// or new self — and a crash in that window leaves it corrupt permanently. The
-// audio is the largest of the three files and holds the window open longest.
-//
-// Reverting `store::write` to a plain `fs::write` fails both of these. They pin
-// the MECHANISM rather than the OUTCOME, which truncate-and-rewrite also
-// usually reaches.
+// `fs::write` truncates then writes, so a reader mid-write sees a corrupt take.
+// These pin the mechanism (write-then-rename), which a plain `fs::write` fails.
 
 /// A rename REPLACES the directory entry, so the file is a different inode
 /// afterwards. A truncate-and-write modifies it in place and keeps it. That is

@@ -19,22 +19,15 @@ use utterance_mapping::params::{Knob, KnobQuery};
 
 /// Serve audio so a browser can seek in it.
 ///
-/// **Why this is not just a body with a content type.** An `<audio>` element
-/// will only move its playhead to a position it can actually fetch, and without
-/// `Accept-Ranges` it has no way to ask for one — so `currentTime = 27.5` is
-/// silently ignored and the element stays where it was. That failure looks
-/// exactly like a broken button: the page asks to jump, nothing happens, and
-/// the next `timeupdate` reports zero.
-///
-/// Both audio endpoints go through here, because the compare page seeks in
-/// renders and the studio seeks in the original recording, and neither has any
-/// reason to be the one that cannot.
+/// An `<audio>` element only moves its playhead to a position it can fetch, and
+/// without `Accept-Ranges` it cannot ask — so a seek is silently dropped and the
+/// page looks broken. Both audio endpoints go through here.
 fn audio_response(bytes: Vec<u8>, range: Option<&str>) -> Response {
     let total = bytes.len() as u64;
     let common = [
         (header::CONTENT_TYPE, "audio/wav".to_string()),
         // Advertised even on a full response: it is how the element learns that
-        // seeking is available at all.
+        // seeking is available.
         (header::ACCEPT_RANGES, "bytes".to_string()),
     ];
 
@@ -55,13 +48,10 @@ fn audio_response(bytes: Vec<u8>, range: Option<&str>) -> Response {
         .into_response()
 }
 
-/// The inclusive byte range a `Range` header asks for, if it asks for one we
-/// serve.
+/// The inclusive byte range a `Range` header asks for, if we serve it.
 ///
-/// Only the single-range `bytes=start-end` forms, which is all any media element
-/// sends. A multi-range request would need a multipart body; answering `None`
-/// sends the whole file instead, which is correct if wasteful and cannot be
-/// heard.
+/// Only the single-range `bytes=start-end` forms, which is all a media element
+/// sends; anything else gets the whole file, which is correct if wasteful.
 fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
     let spec = header.strip_prefix("bytes=")?;
     if spec.contains(',') || total == 0 {
@@ -87,15 +77,11 @@ fn parse_range(header: &str, total: u64) -> Option<(u64, u64)> {
 
 /// Run `work` on tokio's blocking pool rather than on an async worker.
 ///
-/// **Every handler that touches the store, analysis or synthesis goes through
-/// here.** Analysis and rendering are seconds of CPU and the store is file IO,
-/// and the pod gets as many async workers as CPU cores in its limit — two. Two
-/// renders run inline occupy both, and every other request waits behind them:
-/// measured with two workers, `/healthz` took 1.4 s during two renders against
-/// 1 ms idle, past a probe's default one-second timeout.
-///
-/// A panic inside `work` is resumed here, so it fails the request exactly as it
-/// would have run inline.
+/// Every handler that touches the store, analysis or synthesis goes through
+/// here. The pod gets two async workers (its CPU limit), and two renders run
+/// inline would occupy both: measured, `/healthz` took 1.4 s during two renders
+/// against 1 ms idle. A panic inside `work` is resumed, failing the request as
+/// it would have inline.
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
     tokio::task::spawn_blocking(work)
         .await
@@ -105,19 +91,13 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) 
 /// Query string of the endpoints that need a speaker's musical world.
 #[derive(Debug, Deserialize)]
 pub struct VoiceParams {
-    /// Recording to derive the scale and timbre from.
-    ///
-    /// Absent means "choose one" — see `crate::voice::calibrate`. Present is how
-    /// a listener disagrees with that choice, which they will, because which
-    /// vowel a tuning should come from is not settled.
+    /// Recording to derive the scale and timbre from. Absent lets
+    /// `crate::voice::calibrate` choose; present is how a listener disagrees.
     #[serde(default)]
     pub calibration: Option<String>,
-    /// Which mapping or mappings to hear, comma separated.
-    ///
-    /// `field` (the default) and `tonnetz` sound every frame as a continuous
-    /// texture; `notes` sounds discrete events at onsets; `field,notes` sounds
-    /// both, so a stream of events sits over a texture. The only way to judge
-    /// any of them is against the others.
+    /// Which mappings to hear, comma separated. `field` (the default) and
+    /// `tonnetz` make a texture, `notes` makes events; a texture and `notes`
+    /// can sound together.
     #[serde(default)]
     pub mapping: Option<String>,
 }
@@ -129,10 +109,8 @@ pub struct UploadParams {
     #[serde(default)]
     pub label: Option<String>,
     /// Whether this take defines the speaker or is only material to render.
-    ///
-    /// Absent means material, which is the safe direction: an upload that did
-    /// not say what it was for must not start shaping the sound world. Only the
-    /// guided calibration flow asks for `calibration`.
+    /// Absent means material: an upload that did not say what it was for must
+    /// not shape the sound world.
     #[serde(default)]
     pub role: Role,
 }
@@ -147,11 +125,8 @@ pub struct RecordingDetail {
     pub voiceprint: Voiceprint,
 }
 
-/// `POST /api/recordings?label=…` — body is the raw WAV file.
-///
-/// Analysis runs synchronously. A take analyses in seconds at most, so a job
-/// queue would add a state machine and a polling endpoint to save little anyone
-/// would notice.
+/// `POST /api/recordings?label=…` — body is the raw WAV file. Analysed before
+/// answering: seconds at most, which a job queue would not be worth.
 pub async fn upload(
     State(app): State<AppState>,
     Query(params): Query<UploadParams>,
@@ -222,13 +197,8 @@ pub struct RoleBody {
 
 /// `PUT /api/recordings/{id}/role` — say what an already-stored take is for.
 ///
-/// A whole endpoint for one field, because the field decides whether a take
-/// shapes the speaker's sound world, and a take that arrived as a file or before
-/// roles existed has no other way to be told. See
-/// [`crate::store::Store::put_role`].
-///
-/// Idempotent, and a `PUT` rather than a `PATCH` for that reason: the body is
-/// the complete new value of the thing being addressed.
+/// A take that arrived as a file or before roles existed has no other way to be
+/// told. Idempotent: the body is the complete new value.
 pub async fn put_role(
     State(app): State<AppState>,
     Path(id): Path<String>,
@@ -257,11 +227,8 @@ pub struct Deleted {
     pub id: String,
 }
 
-/// One note of the speaker's derived scale, as the browser sees it.
-///
-/// A wire type rather than `utterance_mapping::tuning::Degree` re-exported: the
-/// mapping crate has no business carrying serialisation for a UI, and a scale
-/// shown to a person wants the cents rounded and the roughness left out.
+/// One note of the speaker's derived scale, as the browser sees it: cents
+/// rounded, roughness left out.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -269,8 +236,7 @@ pub struct Deleted {
 pub struct ScaleDegree {
     pub cents: f32,
     pub ratio: f32,
-    /// How firmly this is a note rather than a technicality. See
-    /// `utterance_mapping::tuning::Degree::depth`.
+    /// How firmly this is a note (`utterance_mapping::tuning::Degree::depth`).
     pub depth: f32,
 }
 
@@ -283,11 +249,8 @@ pub struct VoiceSummary {
     /// Where the music centres — this speaker's median pitch.
     pub tonic_hz: f32,
     pub degrees: Vec<ScaleDegree>,
-    /// Spectra the tone moves between, ordered dark to bright.
-    ///
-    /// One per calibration take that held a pitch — the speaker's own vowels,
-    /// which is what gives the output a timbre that moves rather than one fixed
-    /// colour.
+    /// Spectra the tone moves between, ordered dark to bright: one per
+    /// calibration take that held a pitch.
     pub palette: Vec<Vec<f32>>,
     /// Spread among partials in cents, from the speaker's own pitch instability.
     pub detune_cents: f32,
@@ -298,22 +261,14 @@ pub struct VoiceSummary {
     pub takes: usize,
     /// Why the mapping asked for cannot be played in this scale, if it cannot.
     ///
-    /// **Here rather than only on the render, because of when it is needed.**
-    /// The render is fetched by an `<audio>` element, which is handed a URL and
-    /// reports a failure as a broken player with no message — so a refusal that
-    /// only lives there is a refusal nobody reads. This summary is fetched by
-    /// script, under the same settings, before the player is pointed anywhere.
-    /// The render refuses too; this is what makes the refusal legible.
+    /// Here as well as on the render because the render is fetched by an
+    /// `<audio>` element, which shows a failure as a broken player with no
+    /// message. This is fetched by script first, so the refusal can be read.
     pub refusal: Option<String>,
 }
 
-/// Where one of this speaker's held vowels actually sat.
-///
-/// A wire type rather than `utterance_analysis::speaker::VowelCorner` re-exported,
-/// for the reason `ScaleDegree` is one: the analysis crate carries no
-/// serialisation for a UI. It also carries the step, so a chart can label the
-/// point with the vowel the person was asked for rather than with a corner's
-/// technical name — "ee" is what they said; "close front" is what it means.
+/// Where one of this speaker's held vowels actually sat, with the step it was
+/// recorded for — "ee" is what the person was asked to say.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -342,10 +297,8 @@ pub struct SpeakerCorners {
 
 /// `GET /api/speaker/corners` — this speaker's own vowel corners.
 ///
-/// **Not part of `/api/voice`**, though both read the calibration takes. A chart
-/// wants these on load and wants them whether or not a scale can be derived;
-/// folding them into the voice summary would make a picture of somebody's mouth
-/// depend on their takes being long enough to build a musical world out of.
+/// Not part of `/api/voice`: a chart wants them even when the takes are too
+/// short to derive a scale from.
 pub async fn speaker_corners(
     State(app): State<AppState>,
 ) -> Result<Json<SpeakerCorners>, AppError> {
@@ -366,12 +319,7 @@ pub async fn speaker_corners(
     }))
 }
 
-/// One mapping a render may ask for, described well enough to be offered.
-///
-/// A wire type over [`Mapping`] rather than the enum alone, because a UI needs
-/// the label and the blurb beside the name and a bare variant carries neither.
-/// The name itself is the enum, so the browser reads `"field" | "tonnetz" |
-/// "notes"` and a mapping this backend does not serve cannot be named there.
+/// One mapping a render may ask for, with the label and blurb a UI offers it by.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -379,10 +327,8 @@ pub async fn speaker_corners(
 pub struct MappingChoice {
     pub name: Mapping,
     pub label: String,
-    /// The material this mapping makes. Two of a kind cannot sound together.
-    ///
-    /// Sent so the UI can turn one off when the other is chosen, rather than
-    /// letting someone select a combination the render route refuses.
+    /// The material this mapping makes. Two of a kind cannot sound together, so
+    /// the UI turns one off when the other is chosen.
     pub makes: Material,
     pub about: String,
 }
@@ -397,12 +343,8 @@ pub struct Controls {
     pub mappings: Vec<MappingChoice>,
 }
 
-/// `GET /api/controls` — the knobs, their ranges and what each one does.
-///
-/// The UI builds its controls from this rather than from its own list, so a knob
-/// added to `utterance_mapping::params::KNOBS` appears in the browser without anyone
-/// editing the browser, and a range changed in the mapping cannot leave a slider
-/// offering values the mapping clamps away.
+/// `GET /api/controls` — the knobs, their ranges and what each one does. The UI
+/// builds its controls from this, so a knob added in Rust needs no UI change.
 pub async fn controls() -> Json<Controls> {
     Json(Controls {
         // Forwarded, not copied. The table is the wire shape.
@@ -426,19 +368,15 @@ pub async fn voice_summary(
     Query(query): Query<KnobQuery>,
 ) -> Result<Json<VoiceSummary>, AppError> {
     let knobs = query.params();
-    // Before any work, and before the render would reach the same verdict. The
-    // summary and the render have to agree about what was asked for, so a name
-    // this refuses there cannot quietly succeed here.
+    // Checked first, the same way the render checks it, so a name refused there
+    // cannot succeed here.
     let chosen = chosen_mappings(&params)?;
     let calibrated = blocking(move || {
         voice::calibrate_with(&app.store, params.calibration.as_deref(), knobs.density)
     })
     .await?;
 
-    // Bound here as well as in the mappings, because this is the scale someone
-    // is shown while deciding whether they like it. Showing the derived degrees
-    // beside a render that snapped them to equal temperament would make the one
-    // number this project is trying to demonstrate a lie.
+    // Bound as the render binds it: the scale shown must be the scale played.
     let tuning = utterance_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
 
     Ok(Json(VoiceSummary {
@@ -457,35 +395,19 @@ pub async fn voice_summary(
         calibration_id: calibrated.source.id.clone(),
         calibration_label: calibrated.source.label.clone(),
         takes: calibrated.profile.takes,
-        // The same verdict the render will reach, from the same tuning, so what
-        // is on screen cannot promise audio the render then refuses.
-        // Against the speaker's own scale, not the bound one: the Tonnetz lays
-        // its lattice on the unbound degrees and binds each note afterwards, so
-        // whether a plane exists is a fact about this voice and not about where
-        // the knob is. Asking of the bound scale would refuse settings that play
-        // perfectly well, and explain the refusal by naming a knob that is not
-        // the cause.
+        // The render's verdict, against the speaker's own scale rather than the
+        // bound one: the Tonnetz binds each note after laying out its lattice,
+        // so whether a plane exists does not depend on `bind`.
         refusal: refusal(&calibrated.voice.tuning, &chosen),
     }))
 }
 
-/// Points a stream is reduced to before it is sent to a browser.
-///
-/// A 46-second take is 4,600 frames per stream and there are a dozen streams;
-/// at a screen's width that is several frames per pixel, so the wire cost buys
-/// nothing anyone can see. Reduced by taking the extreme of each bucket rather
-/// than the mean — a spike that survives averaging is a spike that was long, and
-/// what someone comparing two renders is looking for is exactly the brief
-/// divergence a mean would erase.
+/// Points a stream is reduced to before it is sent to a browser — more than a
+/// screen is wide. See [`reduce`] for how.
 const STREAM_POINTS: usize = 1200;
 
-/// A score as something to draw.
-///
-/// Why the score and not the audio: the question this answers is *which knob
-/// changed what*, and the score is where that is legible. Two renders differing
-/// in a waveform tell you they differ; two scores differing in `colour` and
-/// nowhere else tell you the colour moved, which is the sentence someone
-/// actually wants.
+/// A score as something to draw. The score rather than the audio, because
+/// *which knob changed what* is legible there and buried in a waveform.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -512,11 +434,8 @@ pub struct ScoreView {
     pub events: Vec<[f32; 3]>,
 }
 
-/// `GET /api/recordings/{id}/score` — what the render is made of.
-///
-/// Takes exactly the parameters `render` takes and answers about the same score,
-/// so a chart drawn from this describes the audio at the matching URL rather
-/// than something near it.
+/// `GET /api/recordings/{id}/score` — what the render at the same URL is made
+/// of.
 pub async fn score(
     State(app): State<AppState>,
     Path(id): Path<String>,
@@ -541,9 +460,7 @@ pub async fn score(
                 step_s,
             )
         }
-        // A note mapping has no per-frame streams at all. Empty series and the
-        // events below is the honest shape for it, rather than a field
-        // synthesised from the notes so the chart has something to draw.
+        // A note mapping has no per-frame streams: empty series, and the events.
         None => (
             Vec::new(),
             Vec::new(),
@@ -577,11 +494,9 @@ fn bucket(frames: usize) -> usize {
     frames.div_ceil(STREAM_POINTS).max(1)
 }
 
-/// Reduce a per-frame series to something a chart can draw.
-///
-/// Each bucket contributes the value furthest from the series' own middle, so a
-/// brief excursion survives instead of being averaged into the surrounding
-/// frames. Comparing two renders is looking for exactly those.
+/// Reduce a per-frame series to something a chart can draw, keeping from each
+/// bucket the value furthest from the middle — a brief divergence between two
+/// renders is what a comparison looks for, and a mean would erase it.
 fn reduce(values: &[f32]) -> Vec<f32> {
     let step = bucket(values.len());
     if step == 1 {
@@ -610,11 +525,8 @@ fn reduce(values: &[f32]) -> Vec<f32> {
 }
 
 /// `GET /api/recordings/{id}/render` — this take as music, in the speaker's
-/// own scale and timbre.
-///
-/// Rendered on demand rather than stored. It is a pure function of the take, the
-/// calibration and the mapping, and the mapping is the thing we expect to change
-/// hourly — a cached render would be stale the moment it was interesting.
+/// own scale and timbre. Rendered on demand: the mapping changes too often for a
+/// cached render to stay interesting.
 pub async fn render(
     State(app): State<AppState>,
     Path(id): Path<String>,
@@ -647,12 +559,7 @@ pub async fn render(
 }
 
 /// The score a set of parameters asks for, and the scale it is played in.
-///
-/// Shared by `render` and `score` rather than written twice, because the whole
-/// value of the second is that it describes the first. Two copies of this would
-/// drift, and the way that failure presents is a chart that disagrees with the
-/// audio next to it — which is worse than no chart, since the chart is what
-/// someone would believe.
+/// Shared by `render` and `score`, so the chart cannot disagree with the audio.
 fn build_score(
     app: &AppState,
     id: &str,
@@ -672,12 +579,9 @@ fn build_score(
 
     let chosen = chosen_mappings(params)?;
 
-    // Two mappings making the same material cannot both be heard. Refused
-    // rather than silently resolved: whichever one lost would be a mapping
-    // someone asked for and did not hear, and the whole reason to keep more
-    // than one is that they are compared.
-    // `r != mapping` because asking for the same one twice is redundant rather
-    // than contradictory, and rendering it once is what a listener meant.
+    // Two mappings making the same material cannot both be heard, so the pair
+    // is refused rather than one silently losing. The same one twice is only
+    // redundant.
     for (i, mapping) in chosen.iter().enumerate() {
         if let Some(rival) = chosen[i + 1..]
             .iter()
@@ -691,20 +595,15 @@ fn build_score(
     }
 
     let tuning = utterance_mapping::params::bind_toward_equal(&calibrated.voice.tuning, knobs.bind);
-    // Refused before anything is rendered. A mapping that cannot be applied
-    // still produces a score — one with no field in it — and that renders to
-    // consonants over silence, which is indistinguishable from a broken build.
+    // Refused before rendering: a mapping that cannot apply still produces a
+    // score, with no field, which sounds like consonants over silence.
     if let Some(why) = refusal(&calibrated.voice.tuning, &chosen) {
         return Err(AppError::Unplayable(why));
     }
 
-    // Built by starting from one mapping and lifting the other's material into
-    // it. Both carry the consonants, so taking them from the first and leaving
-    // the second's behind is what stops the noise layer being played twice.
-    //
-    // Asked by material rather than by name, so a new texture mapping is
-    // heard here without this function learning it exists. The clash check above
-    // has already refused two of a material, so `find` is the only one.
+    // Start from the texture mapping and lift the notes' events into it, so the
+    // consonants both carry sound once. Chosen by material, not name, and the
+    // clash check above guarantees at most one.
     let texture = chosen.iter().find(|m| m.makes() == Material::Texture);
     let mut score =
         texture
@@ -719,15 +618,9 @@ fn build_score(
     Ok((score, tuning))
 }
 
-/// The mappings a query asked for, defaulting to the one someone starts with.
-///
-/// Trimmed and emptied of blanks, so `field,` and `field, notes` mean what they
-/// look like. Shared by the render and the voice summary, which have to agree
-/// about what was asked for or the summary will describe a different render.
-///
-/// A name no mapping has is refused rather than dropped: someone who asked for
-/// `feild` wants to be told, and silently rendering the default is how they end
-/// up describing a mapping they never heard.
+/// The mappings a query asked for, defaulting to `field`. Blanks are dropped,
+/// so `field,` means `field`; an unknown name is refused rather than silently
+/// replaced by the default.
 fn chosen_mappings(params: &VoiceParams) -> Result<Vec<Mapping>, AppError> {
     let asked: Vec<&str> = params
         .mapping
@@ -756,11 +649,8 @@ fn chosen_mappings(params: &VoiceParams) -> Result<Vec<Mapping>, AppError> {
 }
 
 /// Why the mappings asked for cannot be played in this scale, if they cannot.
-///
-/// Only the lattice can fail this way, and it is the only one that needs a
-/// *shape* from the scale rather than a list of degrees: two intervals that
-/// point different ways. Everything else works with whatever degrees it is
-/// given, down to a scale of the tonic and the octave.
+/// Only the lattice can fail: it needs two intervals pointing different ways,
+/// where the others play whatever degrees there are.
 fn refusal(tuning: &utterance_mapping::tuning::Tuning, chosen: &[Mapping]) -> Option<String> {
     if !chosen.contains(&Mapping::Tonnetz) {
         return None;

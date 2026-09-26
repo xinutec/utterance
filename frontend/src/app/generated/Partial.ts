@@ -9,11 +9,8 @@ export type Partial = {
  */
 number: number, 
 /**
- * Measured frequency over measured f0, median across frames.
- *
- * Should sit close to `number`. How close is bounded by the pitch
- * tracker's own accuracy, so this measures agreement between two
- * estimates rather than proving the voice harmonic.
+ * Measured frequency over measured f0, median across frames — agreement
+ * between two estimates, close to `number`.
  */
 ratio: number, 
 /**

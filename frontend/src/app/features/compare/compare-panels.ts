@@ -1,16 +1,9 @@
 /**
  * What each panel of a comparison shows, and how the two sides differ in it.
  *
- * **Why the difference is computed per panel rather than generically.** Drawn
- * on a shared scale, the comparison that matters most — the speaker's tuning
- * versus equal temperament — is byte-identical in most panels, so the second
- * curve lands exactly on the first and hides it, and the rest differ by cents
- * on an axis octaves tall. That reads as a broken chart rather than as a small
- * difference.
- *
- * So every panel knows its own units and reports its own difference, scaled to
- * itself. Ten cents out of two octaves is invisible; ten
- * cents out of "the largest gap here is ten cents" is the whole panel.
+ * Per panel, in its own units and scaled to itself: on a shared scale, tuning
+ * against equal temperament is identical in most panels and a few cents on an
+ * octave-tall axis in the rest, which reads as a broken chart.
  */
 
 import type { ScoreView } from "../../models";
@@ -34,8 +27,7 @@ function apart(a: readonly number[], b: readonly number[]): number[] {
   const out: number[] = [];
   for (const [i, av] of a.entries()) {
     const bv = b[i];
-    // Running off the end of `b` *is* the documented stopping condition, so it
-    // is the loop's exit rather than a length computed alongside it.
+    // Running off the end of `b` is the stopping condition.
     if (bv === undefined) break;
     out.push(Math.abs(av - bv));
   }
@@ -55,9 +47,7 @@ function spread(score: ScoreView): number[] {
   const out: number[] = [];
   for (const [i, hz] of low.entries()) {
     const top = high[i];
-    // The two voices are rendered from the same frame count, so this holds;
-    // stopping is still the right answer if one is ever shorter, because the
-    // alternative is `Math.max(undefined, 1)` — NaN, plotted as a gap.
+    // Same frame count in practice; stopping beats `Math.max(undefined, 1)`.
     if (top === undefined) break;
     out.push(Math.log2(Math.max(top, 1) / Math.max(hz, 1)));
   }
@@ -80,10 +70,7 @@ export const PANELS: readonly Panel[] = [
     unit: "",
   },
   {
-    // Every voice at once rather than the root alone. Under `bind` the root does
-    // not move at all — the tonic is zero cents in any tuning — so a panel
-    // showing only the root reports "no difference" about the one change the
-    // whole knob exists to make.
+    // Every voice, not the root: under `bind` the tonic never moves.
     key: "pitch",
     label: "pitch — every voice, on a log axis",
     traces: (s) => s.voices.map((v) => v.map((hz) => Math.log2(Math.max(hz, 1)))),
@@ -92,14 +79,12 @@ export const PANELS: readonly Panel[] = [
       const [firstA, firstB] = [a.voices[0], b.voices[0]];
       if (voices === 0 || !firstA || !firstB) return [];
       const points = Math.min(firstA.length, firstB.length);
-      // The widest gap across the voices at each moment: one voice moving is a
-      // difference even if the others hold, and averaging would dilute it.
+      // The widest gap across the voices: one voice moving is a difference.
       return Array.from({ length: points }, (_, i) =>
         Math.max(
           ...Array.from({ length: voices }, (_, v) => {
             const [av, bv] = [a.voices[v]?.[i], b.voices[v]?.[i]];
-            // `v` is below both voice counts and `i` below both lengths, so
-            // this is unreachable; 0 contributes nothing to a max of distances.
+            // Unreachable: `v` and `i` are in bounds for both.
             return av === undefined || bv === undefined ? 0 : cents(av, bv);
           }),
         ),

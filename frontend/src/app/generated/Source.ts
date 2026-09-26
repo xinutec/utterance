@@ -9,10 +9,7 @@ export type Source = { sampleRateHz: number, channels: number, durationS: number
  */
 peak: number, 
 /**
- * Fraction of source samples pinned at full scale.
- *
- * Measured on the decoded samples *before* resampling: a band-limited
- * resampler rounds off the flat tops that clipping produces, so a
- * conversion first would hide the very thing this measures.
+ * Fraction of source samples pinned at full scale, measured before
+ * resampling rounds the flat tops off.
  */
 clippedFraction: number, };

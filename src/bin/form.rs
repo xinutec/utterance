@@ -1,54 +1,23 @@
 //! Whether an utterance has structure above the two-second ceiling — and whether
 //! that structure is in the voice or in the method.
 //!
-//! **Why this exists.** Two gaps in the roadmap are one gap: the derived tuning
-//! is inaudible because no chord rings for the second a beat needs, and nothing
-//! in the field operates above `streams::DRIFT_FRAMES` — two seconds. Both want
-//! a harmonic rhythm slow enough to have sections, and the only routes to one
-//! that have been tried, meter and the symbol stream, are blocked behind
-//! syllables somebody marks by ear.
+//! Nothing in the field operates above `streams::DRIFT_FRAMES` (two seconds),
+//! and the routes to a slower harmonic rhythm — meter, the symbol stream — are
+//! blocked on labels. Recurrence needs none: if the mouth returns to where it
+//! has been, a harmony could return with it. This asks whether real takes
+//! recur above two seconds more than the same material with its long-range
+//! order destroyed. Yes would license a form layer; no costs one tool.
 //!
-//! Recurrence is a third route and it needs no labels. If the mouth returns to
-//! where it has been, that return is measurable directly from the streams a
-//! mapping already reads, and a harmony that returns with it would hold at the
-//! timescale of the returning rather than of the syllable.
+//! **The control is the whole argument.** Smooth streams look structured
+//! whatever the material, so every figure is reported beside a surrogate: each
+//! stream's Fourier magnitudes kept and its phases replaced, one phase sequence
+//! across all eight so their correlations survive. It keeps smoothness and slow
+//! drift and destroys only the arrangement in time. A block shuffle would not
+//! do: it manufactures a boundary at every block edge, a bias along the very
+//! axis measured.
 //!
-//! **This tool does not build that.** It asks the one question that decides
-//! whether it is worth building: is there recurrent structure above two seconds
-//! in real takes, above what the same material produces with its long-range
-//! order destroyed? A yes is a licence to build a form layer. A no costs one
-//! tool instead of a layer, which is the point of asking here first.
-//!
-//! **The control is the whole argument.** A self-similarity matrix over smooth
-//! streams looks blocky whatever the material, because neighbouring frames
-//! resemble each other by construction, and a novelty curve over any smooth
-//! signal has peaks. So every figure is reported beside the same figure computed
-//! on a surrogate: the take's streams with their Fourier magnitudes kept exactly
-//! and their phases replaced. That preserves every stream's power spectrum, and
-//! therefore all of its smoothness and all of its slow drift, and — because one
-//! phase sequence is applied to all eight streams together — every correlation
-//! between them. What it destroys is the arrangement in time and nothing else.
-//!
-//! **Why not a block shuffle.** Permuting one-second blocks manufactures a
-//! discontinuity at every block edge, so a one-second kernel lands on a
-//! fabricated boundary once a second and a sixteen-second kernel averages them
-//! all away. Its strength varies with the very axis the tool measures along, and
-//! real material "loses" at 1 s and "wins" at 16 s as a property of the control.
-//! A control whose bias runs along the axis under test cannot settle anything on
-//! that axis.
-//!
-//! **A surrogate that keeps the drift is what makes the answer mean something.**
-//! Slow structure and slow *trend* are different claims: a take that simply gets
-//! quieter throughout has structure at sixteen seconds in no sense worth
-//! building a harmony on. The surrogate has that take's trend too, so beating it
-//! requires arrangement rather than slowness.
-//!
-//! **What it cannot answer.** Silence is gated out, for the reason `streams`
-//! gates it: every stream reports something constant in digital silence, so two
-//! pauses resemble each other perfectly and recurrence would mostly be counting
-//! them. That makes this a measure of what the voice *does*, not of where it
-//! stops — and pauses are real phrase structure, so this measurement is a floor
-//! on the structure present rather than an estimate of it.
+//! Silence is gated out (every stream agrees in silence), so pauses — real
+//! phrase structure — are not counted: the result is a floor, not an estimate.
 //!
 //! ```text
 //! cargo run --bin form
@@ -60,58 +29,33 @@ use utterance_analysis::voiceprint::Voiceprint;
 use utterance_mapping::streams;
 use utterance_mapping::voice::Voice;
 
-/// How far below a take's loudest frame still counts as sounding.
-///
-/// The same gate `dwell` and `streams` use, and here for their reason: silence
-/// makes every stream agree with every other, and a recurrence measure over
-/// silent frames would report the pauses as the structure.
+/// How far below a take's loudest frame still counts as sounding — the gate
+/// `dwell` and `streams` use.
 const PEAK_DROP_DB: f32 = 40.0;
 
-/// Frames per second the similarity matrix is built at.
-///
-/// Ten. The question is about structure measured in seconds, and at the
-/// analyser's own 100 Hz a minute-long take is a 6000-square matrix answering it
-/// no better. Every stream is smoothed at its own timescale before this
-/// decimation, so what is dropped is detail the smoothing already removed rather
-/// than detail the matrix would have used.
+/// Frames per second the similarity matrix is built at. The streams are already
+/// smoothed coarser than this, so decimating to it loses nothing.
 const COARSE_HZ: f32 = 10.0;
 
-/// Kernel widths, in seconds, that novelty is measured at.
-///
-/// Deliberately straddling the ceiling: 1 and 2 seconds are inside what the
-/// field already reaches, 4 through 16 are the region nothing in the project
-/// operates at. Structure that shows only at 1 s would be the syllable rate
-/// found again under a new name.
+/// Kernel widths, in seconds, that novelty is measured at: 1 and 2 are inside
+/// what the field reaches, 4 to 16 above it.
 const SCALES_S: [f32; 5] = [1.0, 2.0, 4.0, 8.0, 16.0];
 
-/// Nearest a frame may be and still count as a return rather than as itself.
-///
-/// Five seconds, which is past every timescale the field reads, so nothing here
-/// can be satisfied by a stream that is merely slow. A vowel held for four
-/// seconds resembles itself throughout and that is not a return; the mouth
-/// leaving and coming back is.
+/// Nearest a frame may be and still count as a return rather than as itself —
+/// past every timescale the field reads, so a held vowel is not a return.
 const RETURN_LAG_S: f32 = 5.0;
 
-/// How many surrogates each figure is compared against.
-///
-/// Five, averaged. One surrogate is one draw and its peak novelty moves with the
-/// phases it happened to get; the question is whether real material beats what
-/// its own spectrum typically produces, not whether it beats one instance.
+/// How many surrogates each figure is compared against, averaged: one is a
+/// single draw.
 const SURROGATES: usize = 5;
 
-/// Fraction of surrogate frame pairs that define "resembling".
-///
-/// The recurrence threshold is read off the surrogate's own distribution at this
-/// quantile, so the surrogate scores 5% by construction and the real take's
-/// score is a multiple of it. An absolute threshold could not be chosen without
-/// deciding in advance how similar counts as similar, which is the thing being
-/// measured.
+/// Fraction of surrogate frame pairs that define "resembling". The threshold is
+/// read off the surrogate's own distribution, so the surrogate scores this by
+/// construction and the take is a multiple of it.
 const RECURRENCE_QUANTILE: f32 = 0.95;
 
-/// The increment the surrogate's phases advance by, as a turn of the circle.
-///
-/// The golden ratio's fractional part, which is equidistributed for any length,
-/// so no take gets a phase sequence that happens to repeat inside itself.
+/// The increment the surrogate's phases advance by, as a turn of the circle: the
+/// golden ratio's fractional part, equidistributed for any length.
 const GOLDEN: f64 = 0.618_033_988_749_895;
 
 /// One take's per-frame feature vectors, one vector per coarse frame.
@@ -121,12 +65,8 @@ struct Trajectory {
 }
 
 /// Every stream a continuous mapping reads, gated to sounding frames, decimated
-/// and standardised.
-///
-/// Standardised per stream over the take, because cosine similarity between
-/// these vectors is otherwise a statement about which stream has the largest
-/// units. Hertz would decide every comparison and openness would never be heard
-/// from.
+/// and standardised — so cosine similarity is not decided by the stream with the
+/// largest units.
 fn trajectory(vp: &Voiceprint, voice: &Voice, gate_silence: bool) -> Option<Trajectory> {
     let (open, front) = streams::vowel(vp, voice);
     let peak = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
@@ -136,9 +76,7 @@ fn trajectory(vp: &Voiceprint, voice: &Voice, gate_silence: bool) -> Option<Traj
         .map(|db| !gate_silence || *db > peak - PEAK_DROP_DB)
         .collect();
 
-    // Smoothed first and gated second, as `streams` does it: gating first
-    // splices the sounding frames together and runs a moving average across a
-    // pause as though the voice had carried on through it.
+    // Smoothed first and gated second: gating first would average across pauses.
     let heard = |values: Vec<f32>, window: usize| {
         streams::smooth(&values, window)
             .into_iter()
@@ -158,10 +96,7 @@ fn trajectory(vp: &Voiceprint, voice: &Voice, gate_silence: bool) -> Option<Traj
         heard(vp.texture.tilt_db_per_octave.clone(), streams::ROOT_FRAMES),
     ];
 
-    // `frame.analysis_rate_hz` is the audio rate after resampling, not the frame
-    // rate: `hop_s` is the seconds between frames, and this grid is indexed in
-    // frames. Reading the wrong one decimates by 1600 instead of 10 and leaves a
-    // minute-long take three frames long.
+    // `hop_s`, not `analysis_rate_hz` (the audio rate): this grid is in frames.
     let frame_hz = 1.0 / vp.frame.hop_s;
     let step = ((frame_hz / COARSE_HZ).round() as usize).max(1);
     let n = columns.iter().map(Vec::len).min()?;
@@ -184,9 +119,8 @@ fn trajectory(vp: &Voiceprint, voice: &Voice, gate_silence: bool) -> Option<Traj
     })
 }
 
-/// Zero mean, unit variance. A stream that never moves is returned as zeros
-/// rather than divided by nothing, so it contributes to no comparison instead of
-/// dominating every one.
+/// Zero mean, unit variance. A stream that never moves becomes zeros rather than
+/// being divided by nothing.
 fn standardise(values: Vec<f32>) -> Vec<f32> {
     let n = values.len();
     if n == 0 {
@@ -227,16 +161,9 @@ fn matrix(t: &Trajectory) -> Vec<Vec<f32>> {
     s
 }
 
-/// Foote novelty: a checkerboard kernel dragged down the diagonal.
-///
-/// Two quadrants reward self-similarity either side of the point and two punish
-/// similarity across it, so the curve peaks where the take stops resembling what
-/// it was and starts resembling what it becomes. The kernel is Gaussian-tapered,
-/// which is what keeps a peak from being decided by the two frames at the
-/// kernel's corners.
-///
-/// Returns `None` where the take is shorter than the kernel: a novelty curve
-/// measured over less than one kernel width is measuring the edge of the take.
+/// Foote novelty: a Gaussian-tapered checkerboard kernel dragged down the
+/// diagonal, peaking where the take stops resembling what it was. `None` where
+/// the take is shorter than the kernel.
 fn novelty(s: &[Vec<f32>], half: usize) -> Option<Vec<f32>> {
     let n = s.len();
     if half == 0 || n < 2 * half + 1 {
@@ -268,23 +195,11 @@ fn novelty(s: &[Vec<f32>], half: usize) -> Option<Vec<f32>> {
     Some(out)
 }
 
-/// How far the strongest boundary stands above an ordinary moment, in the
-/// curve's own units.
-///
-/// **Not the raw maximum.** A maximum is a competition the noisier curve wins,
-/// and a phase surrogate's novelty curve is noisier than a real take's at every
-/// scale — so comparing raw peaks reported real material as having *less*
-/// structure than its surrogate at 1 s, where nobody claims it has any. That is
-/// the third statistic in this tool to be biased by taking an extreme over many
-/// draws, after the recurrence maximum above, and the second to be caught by the
-/// control rather than by reading it.
-///
-/// Standardising by the curve's own spread asks the question that was meant: a
-/// boundary is a moment that stands out from this take's other moments, and how
-/// jumpy the curve is overall is exactly what has to be divided out.
+/// How far the strongest boundary stands above an ordinary moment, in units of
+/// the curve's own spread. Not the raw maximum: a maximum is a contest the
+/// noisier curve wins, and a surrogate's curve is noisier.
 fn contrast(curve: &[f32]) -> Option<f32> {
-    // The kernel cannot reach the first and last half-width, which are left at
-    // zero; including them would put a spike of zeros into the spread.
+    // The kernel cannot reach the first and last half-width; leave them out.
     let measured: Vec<f32> = curve.iter().copied().filter(|v| *v != 0.0).collect();
     if measured.len() < 4 {
         return None;
@@ -299,11 +214,8 @@ fn contrast(curve: &[f32]) -> Option<f32> {
     Some((max - mean) / sd)
 }
 
-/// Every similarity between frames far enough apart to be a return.
-///
-/// Anything closer than `RETURN_LAG_S` is dropped, not because it is
-/// uninteresting but because it is not a return: a vowel held for four seconds
-/// resembles itself throughout, and counting that would report sustain as form.
+/// Every similarity between frames at least `RETURN_LAG_S` apart — closer is the
+/// same sound held, not a return.
 fn distant(s: &[Vec<f32>], lag: usize) -> Vec<f32> {
     let mut out = Vec::new();
     for (i, row) in s.iter().enumerate() {
@@ -313,11 +225,6 @@ fn distant(s: &[Vec<f32>], lag: usize) -> Vec<f32> {
 }
 
 /// The value at a quantile of a sample, by nearest rank.
-///
-/// Sorted by `total_cmp` rather than `partial_cmp`: a similarity here cannot be
-/// NaN, because `similarity` returns zero rather than dividing by a zero norm —
-/// but a total order costs nothing and does not depend on that guarantee holding
-/// after somebody edits the function it comes from.
 fn quantile(values: &mut [f32], q: f32) -> Option<f32> {
     if values.is_empty() {
         return None;
@@ -327,18 +234,10 @@ fn quantile(values: &mut [f32], q: f32) -> Option<f32> {
     Some(values[k])
 }
 
-/// How much more often than chance the take returns to where it has been.
-///
-/// The threshold is the surrogate's own `RECURRENCE_QUANTILE`, so the surrogate
-/// scores that quantile's complement by construction and the real take is
-/// reported as a multiple of it. One means the mouth revisits no more than its
-/// own spectrum would produce by arrangement alone.
-///
-/// **A maximum was tried here first and saturated.** Reporting, per frame, the
-/// best resemblance to any distant frame gave 0.91 against a control's 0.94: with
-/// hundreds of candidates and eight dimensions, something matches well by chance
-/// almost everywhere, and the statistic had no room left to show a difference.
-/// A rate above a threshold has that room; a maximum over many draws does not.
+/// How much more often than chance the take returns to where it has been, as a
+/// multiple of the surrogate's rate; one means no more than arrangement alone
+/// would give. A rate above a threshold rather than a per-frame maximum, which
+/// saturates: with hundreds of candidates something matches everywhere.
 fn recurrence_ratio(real: &[Vec<f32>], surrogate: &[f32], lag: usize) -> Option<f32> {
     let mut sample = surrogate.to_vec();
     let threshold = quantile(&mut sample, RECURRENCE_QUANTILE)?;
@@ -352,23 +251,14 @@ fn recurrence_ratio(real: &[Vec<f32>], surrogate: &[f32], lag: usize) -> Option<
 
 /// The same streams with their spectra kept and their arrangement destroyed.
 ///
-/// Each stream's Fourier magnitudes are left exactly as measured and every phase
-/// is replaced, so the surrogate has the take's smoothness, its variance and its
-/// slow drift and none of its order. **One phase sequence serves all streams**,
-/// which is what keeps the correlations between them intact: replacing phases
-/// identically is a linear filter applied to every stream at once, and a control
-/// that also decorrelated the streams would be beaten by a take merely for
-/// having streams that move together.
-///
-/// The phases are a fixed equidistributed sequence rather than drawn from a
-/// generator. Analysis in this project is a pure function of the audio, and a
-/// control that moved between runs would let this tool's answer move with it.
+/// One phase sequence serves every stream — a linear filter applied to all at
+/// once — so their correlations survive; a control that decorrelated them would
+/// be beaten by any take whose streams move together. The phases are a fixed
+/// sequence, not random, so the answer does not move between runs.
 fn surrogate(t: &Trajectory, variant: usize) -> Trajectory {
     let n = t.frames.len();
     let dims = t.frames.first().map_or(0, Vec::len);
-    // Golden-ratio increments: equidistributed for any length, and offset per
-    // variant so five surrogates are five different arrangements rather than one
-    // repeated.
+    // Offset per variant, so the surrogates are different arrangements.
     let phases: Vec<f64> = (0..n)
         .map(|k| {
             let x = ((k + 1) as f64 * GOLDEN + variant as f64 * 0.37).fract();
@@ -391,14 +281,9 @@ fn surrogate(t: &Trajectory, variant: usize) -> Trajectory {
 
 /// One real series, its magnitude spectrum kept and its phases replaced.
 ///
-/// A direct transform rather than an FFT: the series here are a few hundred
-/// frames long, this runs a handful of times per take, and a dependency bought
-/// for it would have to be justified to everyone who builds the workspace.
-///
-/// The conjugate symmetry is what keeps the result real. DC is left alone
-/// because it is the stream's mean, which the surrogate is meant to preserve,
-/// and at even lengths the Nyquist bin has no partner to be symmetric with, so
-/// its sign is kept rather than given a phase it cannot carry.
+/// A direct transform: the series are a few hundred frames and this runs a few
+/// times per take. Conjugate symmetry keeps the result real; DC (the mean) is
+/// kept, and at even lengths the unpaired Nyquist bin keeps its sign.
 fn phase_scramble(x: &[f64], phases: &[f64]) -> Vec<f64> {
     let n = x.len();
     if n < 4 {
@@ -458,8 +343,7 @@ fn measure(label: String, t: &Trajectory) -> Measured {
         .map(|scale| {
             let half = ((scale * t.rate_hz / 2.0).round() as usize).max(1);
             let r = contrast(&novelty(&real, half)?)?;
-            // A scale is reported only where every surrogate could be measured
-            // at it too, so the pair being compared is always like for like.
+            // Reported only where every surrogate could be measured too.
             let mut total = 0.0f32;
             for s in &surrogates {
                 total += contrast(&novelty(s, half)?)?;
@@ -468,9 +352,7 @@ fn measure(label: String, t: &Trajectory) -> Measured {
         })
         .collect();
 
-    // Pooled across surrogates: one surrogate's distant similarities are a small
-    // sample on a short take, and the threshold read off it would move with the
-    // sample rather than with the material.
+    // Pooled across surrogates: one alone is too small a sample on a short take.
     let pooled: Vec<f32> = surrogates.iter().flat_map(|s| distant(s, lag)).collect();
 
     Measured {
@@ -511,8 +393,7 @@ fn main() -> anyhow::Result<()> {
             let Some(t) = trajectory(&vp, &calibrated.voice, gate_silence) else {
                 continue;
             };
-            // A take with nothing above the ceiling cannot answer a question about
-            // what is above the ceiling, and averaging it in would answer it wrongly.
+            // A take with nothing above the ceiling cannot answer the question.
             if t.frames.len() as f32 / t.rate_hz < SCALES_S[1] * 2.0 {
                 continue;
             }

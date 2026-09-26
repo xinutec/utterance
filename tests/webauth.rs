@@ -1,15 +1,9 @@
 //! The sign-in gate, over the real router.
 //!
-//! Every test here builds the gate explicitly rather than through the
-//! environment. That is deliberate: `WebAuth::from_env` reads process-wide
-//! state, and a test that sets it would raise the wall for every other test
-//! running in the same binary — so the suite would be measuring leakage rather
-//! than the gate.
-//!
-//! What is being checked is not "does OAuth work" — that needs a Nextcloud —
-//! but the two things that decide whether this is a wall or a decoration: that
-//! nothing under `/api` answers without a valid session, and that the wall is
-//! completely absent when nobody configured one.
+//! Not "does OAuth work" — that needs a Nextcloud — but whether this is a wall:
+//! nothing under `/api` answers without a valid session, and the wall is absent
+//! when nobody configured one. Every test builds the gate explicitly; setting
+//! the environment would raise it for every other test in the binary.
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -109,10 +103,8 @@ async fn get(app: &TestApp, path: &str, cookie: Option<&str>) -> (StatusCode, St
     send(app, request.body(Body::empty()).unwrap()).await
 }
 
-/// Every route that reads or changes a recording. Written out rather than
-/// derived, because the failure this guards against is a route added later and
-/// left outside the gate — which a list generated from the router would inherit
-/// instead of catching.
+/// Every route that reads or changes a recording, written out: a list derived
+/// from the router would inherit a route added outside the gate.
 const GUARDED: [(&str, &str); 6] = [
     ("GET", "/api/recordings"),
     ("GET", "/api/recordings/abc"),
@@ -140,8 +132,7 @@ async fn nothing_under_api_answers_without_a_session() {
 
 #[tokio::test]
 async fn uploading_and_deleting_are_gated_too() {
-    // The routes that matter most: without the gate, anyone could add a
-    // recording of anything, or delete the ones that are there.
+    // Without the gate, anyone could upload or delete.
     let app = TestApp::new(Some(gate()));
     for request in [
         Request::post("/api/recordings?label=x").body(Body::from(vec![0u8; 16])),
@@ -158,9 +149,7 @@ async fn a_signed_in_user_is_let_through() {
     let cookie = signed_in_as(&auth, "pippijn");
     let app = TestApp::new(Some(auth));
 
-    // Reaching the handler is the assertion. `/api/controls` needs no data, so
-    // a 200 here means the gate opened rather than that the store happened to
-    // have something in it.
+    // `/api/controls` needs no data, so a 200 means the gate opened.
     let (status, body) = get(&app, "/api/controls", Some(&cookie)).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body.contains("tonnetz"), "{body}");
@@ -168,8 +157,7 @@ async fn a_signed_in_user_is_let_through() {
 
 #[tokio::test]
 async fn a_nextcloud_user_who_is_not_on_the_list_is_refused() {
-    // The allowlist is the difference between "anyone with an account on the
-    // fleet's Nextcloud" and "the two people this is for".
+    // The allowlist narrows "any fleet Nextcloud account" to the people named.
     let auth = gate();
     let cookie = signed_in_as(&auth, "someone-else");
     let app = TestApp::new(Some(auth));
@@ -181,8 +169,7 @@ async fn a_nextcloud_user_who_is_not_on_the_list_is_refused() {
 
 #[tokio::test]
 async fn a_cookie_signed_by_someone_else_does_not_open_the_gate() {
-    // Someone who knows the cookie's shape but not the secret. If this passes
-    // the wall is decoration, since the payload names the user.
+    // The cookie's shape without the secret must not pass.
     let forger = WebAuth::new("a-different-secret", "client", "shh", []);
     let cookie = signed_in_as(&forger, "pippijn");
     let app = TestApp::new(Some(gate()));
@@ -193,8 +180,7 @@ async fn a_cookie_signed_by_someone_else_does_not_open_the_gate() {
 
 #[tokio::test]
 async fn the_health_check_stays_open() {
-    // The cluster probes this before anyone has signed in; gating it would make
-    // the pod permanently unready and the app permanently unreachable.
+    // The cluster probes it before anyone signs in.
     let app = TestApp::new(Some(gate()));
     let (status, body) = get(&app, "/healthz", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -223,7 +209,7 @@ async fn signing_in_sends_the_browser_to_nextcloud() {
     );
     assert!(location.contains("apps/oauth2/authorize"), "{location}");
     assert!(location.contains("response_type=code"), "{location}");
-    // The state is what makes the callback refuse a request nobody started.
+    // The state makes the callback refuse a request nobody started.
     assert!(location.contains("state="), "{location}");
 }
 
@@ -237,8 +223,7 @@ async fn a_callback_nobody_started_is_refused() {
 
 #[tokio::test]
 async fn with_no_sign_in_configured_the_app_is_wide_open() {
-    // The property the Mac and every other test depend on. If this fails, the
-    // gate has stopped being opt-in and local development needs a Nextcloud.
+    // Local development and every other test rely on the gate being opt-in.
     let app = TestApp::new(None);
     let (status, body) = get(&app, "/api/controls", None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -246,8 +231,7 @@ async fn with_no_sign_in_configured_the_app_is_wide_open() {
 
 #[tokio::test]
 async fn with_no_sign_in_configured_there_is_nothing_to_sign_in_to() {
-    // A /login that redirected to a Nextcloud this deployment never heard of
-    // would be worse than absent — it would look like a way in.
+    // A /login to a Nextcloud nobody configured would look like a way in.
     let app = TestApp::new(None);
     for path in ["/login", "/auth/callback", "/api/me"] {
         let (status, _) = get(&app, path, None).await;
@@ -273,10 +257,8 @@ async fn who_am_i_answers_for_a_signed_in_user() {
 
 // ---- the credential itself ------------------------------------------------
 //
-// Everything above goes through HTTP, which can only ever say "no". These go
-// straight at the pair that issues and reads a cookie, because the ways a
-// signed credential fails are different from each other and a 401 does not say
-// which one happened.
+// Straight at the pair that issues and reads a cookie: a 401 cannot say which
+// of the ways a signed credential fails happened.
 
 /// A moment far enough in the past that TTLs can be stepped over.
 fn a_moment() -> SystemTime {
@@ -308,9 +290,7 @@ async fn a_cookie_signed_with_another_secret_reads_as_nothing() {
 
 #[tokio::test]
 async fn a_cookie_stops_being_accepted_once_it_expires() {
-    // Seven days. Checked by stepping over it rather than by reading the
-    // constant back, so a change to the constant that forgets the expiry check
-    // still fails here.
+    // Seven days, checked by stepping over it rather than reading the constant.
     let auth = gate();
     let now = a_moment();
     let token = auth.issue_session(&session("pippijn"), now);
@@ -328,9 +308,7 @@ async fn a_cookie_stops_being_accepted_once_it_expires() {
 
 #[tokio::test]
 async fn a_payload_swapped_under_a_good_signature_is_refused() {
-    // The attack the signature exists for. The payload names the user, so if a
-    // cookie could be edited and keep its MAC, anyone signed in as anyone could
-    // rewrite themselves into anyone else.
+    // An edited payload under a valid MAC would let anyone become anyone.
     let auth = gate();
     let now = a_moment();
     let mine = auth.issue_session(&session("michiel"), now);
@@ -338,8 +316,7 @@ async fn a_payload_swapped_under_a_good_signature_is_refused() {
     let (my_payload, my_mac) = mine.split_once('.').expect("a two-part token");
     let (their_payload, their_mac) = theirs.split_once('.').expect("a two-part token");
 
-    // Both halves are real, so this cannot pass by being malformed — which is
-    // how a test like this quietly stops testing anything.
+    // Both halves are real, so this cannot pass by being malformed.
     assert!(auth.read_session(&mine, now).is_some());
     assert!(auth.read_session(&theirs, now).is_some());
 
@@ -357,8 +334,7 @@ async fn a_payload_swapped_under_a_good_signature_is_refused() {
 
 #[tokio::test]
 async fn rubbish_is_refused_rather_than_panicking() {
-    // This reads a value someone else chooses, so every malformed shape has to
-    // have an answer, and the answer has to be "no" rather than a stack trace.
+    // An attacker chooses this value: every malformed shape must answer "no".
     let auth = gate();
     let now = a_moment();
     for token in ["", ".", "a.b", "no-dot", "!!.??", "....", "ᚠ.ᚠ"] {
@@ -368,8 +344,7 @@ async fn rubbish_is_refused_rather_than_panicking() {
 
 #[tokio::test]
 async fn only_a_local_path_survives_as_a_return_target() {
-    // Anything that could leave this origin turns signing in into an open
-    // redirect, which is a phishing primitive rather than a small bug.
+    // Anything leaving this origin would make sign-in an open redirect.
     assert_eq!(
         utterance::webauth::safe_return_to(Some("/compare")),
         "/compare"
@@ -391,8 +366,8 @@ async fn only_a_local_path_survives_as_a_return_target() {
 
 #[tokio::test]
 async fn an_empty_allowlist_admits_any_nextcloud_user() {
-    // The documented meaning of "no list", and the one that would be a security
-    // hole if it were read the other way round by accident.
+    // An empty list admits anyone — the documented meaning, and a hole if read
+    // the other way.
     let open = WebAuth::new("secret", "client", "shh", []);
     assert!(open.permits("anyone"));
     assert!(gate().permits("pippijn"));
@@ -401,10 +376,8 @@ async fn an_empty_allowlist_admits_any_nextcloud_user() {
 
 #[tokio::test]
 async fn a_server_call_presents_the_public_host_when_the_address_differs() {
-    // The hairpin fix. On the cluster Nextcloud's public name resolves to the
-    // node's own IP, which a pod cannot open — so the call goes to the in-cluster
-    // Service and carries the public host, or Nextcloud refuses it as an
-    // untrusted domain.
+    // In-cluster, the public name hairpins, so the call goes to the Service and
+    // carries the public host, which Nextcloud checks.
     let auth = gate().with_nextcloud(
         "https://dash.example",
         "http://nextcloud-server.nextcloud.svc.cluster.local",
@@ -417,8 +390,7 @@ async fn a_server_call_presents_the_public_host_when_the_address_differs() {
     );
     assert_eq!(host.as_deref(), Some("dash.example"));
 
-    // ...and no Host header when there is nothing to pretend about, since
-    // sending one needlessly is a way to break a working deployment.
+    // ...and no Host header when there is only one address.
     let same = gate().with_nextcloud(
         "https://dash.example",
         "https://dash.example",
@@ -432,9 +404,8 @@ async fn a_server_call_presents_the_public_host_when_the_address_differs() {
 
 #[tokio::test]
 async fn the_authorize_url_escapes_what_it_interpolates() {
-    // The redirect URI contains slashes and colons and the state is base64 with
-    // a dot in it. Unescaped, either would end the parameter early and the
-    // sign-in would fail in a way that looks like Nextcloud's fault.
+    // The redirect URI and the base64 state must be escaped, or the parameter
+    // ends early.
     let auth = gate().with_nextcloud(
         "https://dash.example",
         "https://dash.example",
@@ -450,12 +421,8 @@ async fn the_authorize_url_escapes_what_it_interpolates() {
 
 // ---- reading the configuration ------------------------------------------
 //
-// `from_env` reads the process environment and so is unreachable from a test
-// short of `set_var`, which is `unsafe` in edition 2024 because it races every
-// other thread in the binary. `from_vars` takes the lookup instead, which puts
-// the decisions below — is a half-set configuration configured, which address
-// does a call go to, who is on the list — in reach without touching the
-// process at all.
+// `from_vars` takes the lookup, so these decisions are testable without the
+// process environment.
 
 /// A lookup over a fixed table, standing in for the environment.
 fn vars(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
@@ -487,9 +454,8 @@ fn nothing_set_means_no_gate() {
 
 #[test]
 fn a_half_set_configuration_is_off_rather_than_open() {
-    // The module's central claim: a wall that can be bypassed is worse than no
-    // wall, because it is believed. Each of the three missing in turn, so this
-    // cannot pass by one of them being special.
+    // A wall that can be bypassed is worse than none: each of the three missing
+    // in turn.
     for missing in 0..3 {
         let mut set = configured();
         let dropped = set.remove(missing);
@@ -503,9 +469,7 @@ fn a_half_set_configuration_is_off_rather_than_open() {
 
 #[test]
 fn an_empty_string_is_not_a_setting() {
-    // A variable exported as "" is how a secret arrives when the thing meant to
-    // fill it did not. Treated as set, it would build a gate whose sessions are
-    // signed with the empty key.
+    // A secret exported as "" would sign sessions with the empty key.
     let mut set = configured();
     set[0].1 = "";
     assert!(WebAuth::from_vars(vars(&set)).is_none());
@@ -518,8 +482,7 @@ fn all_three_set_means_a_gate() {
 
 #[test]
 fn a_trailing_slash_does_not_double_up_in_a_url() {
-    // `https://dash.example/` + `/index.php/...` is a path with `//` in it,
-    // which Nextcloud answers with a redirect the sign-in does not follow.
+    // A trailing slash would give Nextcloud a `//` path it redirects.
     let mut set = configured();
     set.push((webauth::NC_BASE_URL_ENV, "https://dash.example/"));
     let auth = WebAuth::from_vars(vars(&set)).expect("configured");
@@ -543,8 +506,7 @@ fn without_an_internal_url_calls_go_to_the_public_one() {
 
 #[test]
 fn an_internal_url_is_where_the_call_goes_and_the_public_one_is_the_host() {
-    // In-cluster, the public name resolves to the node itself and the pod's own
-    // request hairpins.
+    // In-cluster, the public name hairpins to the node itself.
     let mut set = configured();
     set.push((webauth::NC_BASE_URL_ENV, "https://dash.example"));
     set.push((webauth::NC_INTERNAL_URL_ENV, "http://nextcloud.nc.svc/"));
@@ -560,9 +522,7 @@ fn an_internal_url_is_where_the_call_goes_and_the_public_one_is_the_host() {
 
 #[test]
 fn an_empty_internal_url_falls_back_rather_than_producing_a_hostless_call() {
-    // How the variable arrives when the manifest declares it and leaves it
-    // blank. Taken literally it would build the URL `/ocs` and open a
-    // connection to nowhere.
+    // Declared but blank in a manifest: not a URL of `/ocs`.
     let mut set = configured();
     set.push((webauth::NC_BASE_URL_ENV, "https://dash.example"));
     set.push((webauth::NC_INTERNAL_URL_ENV, ""));
@@ -581,10 +541,8 @@ fn an_unset_allowlist_admits_any_nextcloud_user() {
 
 #[test]
 fn the_allowlist_is_split_trimmed_and_stripped_of_blanks() {
-    // Written by hand into a k8s manifest, so spaces after the commas and a
-    // trailing one are what it actually looks like. A blank entry surviving
-    // would not admit anyone extra, but an untrimmed one silently refuses the
-    // person it names.
+    // Hand-written in a manifest: spaces and a trailing comma must not refuse
+    // the person named.
     let mut set = configured();
     set.push((webauth::ALLOWED_USERS_ENV, " pippijn, michiel ,, "));
     let auth = WebAuth::from_vars(vars(&set)).expect("configured");

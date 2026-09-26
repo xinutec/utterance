@@ -1,23 +1,10 @@
-//! How independent the voice's streams actually are, measured across the store.
+//! How independent the voice's streams actually are, across the store.
 //!
-//! **Why this exists.** *One stream drives one parameter* is only checkable by
-//! measurement: two streams welded together — one a rescaling of the other —
-//! make a mapping simpler than its count of streams says, and nothing about the
-//! code shows it.
-//!
-//! So this reports the correlation between every stream a mapping reads. What a
-//! listener hears as variety is how many things can move **independently**, and
-//! two streams at |r| near 1 are one stream counted twice however separately
-//! they are computed.
-//!
-//! **It is also the gate on adding a stream.** A new measurement earns its place
-//! by moving where the existing ones do not; one that merely restates the
-//! centroid would add a parameter, a knob and a line of documentation while
-//! adding nothing anybody can hear.
-//!
-//! Reads `utterance_mapping::streams` — the mapping's own readers, gaps carried
-//! and all — rather than the raw voiceprint fields, so what is measured is what
-//! is actually mapped.
+//! *One stream drives one parameter* can only be checked by measurement: two
+//! streams at |r| near 1 are one stream counted twice. It is also the gate on
+//! adding a stream — one that restates an existing one adds a knob and nothing
+//! anyone can hear. Reads the mapping's own stream readers, so what is measured
+//! is what is mapped.
 //!
 //! ```text
 //! cargo run --bin streams
@@ -29,23 +16,13 @@ use utterance_analysis::voiceprint::Voiceprint;
 use utterance_mapping::streams;
 use utterance_mapping::voice::Voice;
 
-/// How far below a take's loudest frame still counts as sounding.
-///
-/// The same gate `dwell` uses, and here for a sharper reason than tidiness.
-/// Every stream reports something constant in digital silence — tilt fits a flat
-/// line through the bin floor and returns exactly 0, energy is 0, flatness is 0 —
-/// so the silent frames of every take pile up at one point of the scatter. Two
-/// streams that are unrelated while the voice sounds are then reported as
-/// correlated, because they agree about the silence. This tool exists to decide
-/// whether a stream is worth reading, and silence is not what any of them will be
-/// read for.
+/// How far below a take's loudest frame still counts as sounding. Every stream
+/// is constant in silence, so without the gate unrelated streams would agree
+/// about the pauses and read as correlated.
 const PEAK_DROP_DB: f32 = 40.0;
 
-/// Above this, two streams are reported as one stream counted twice.
-///
-/// 0.9 leaves room for streams that genuinely share a cause — loudness and
-/// aperiodicity both move at a phrase boundary — while catching one series that
-/// *is* the other after a linear rescaling, where the correlation is exactly 1.
+/// Above this, two streams are reported as one counted twice — room for streams
+/// sharing a cause (loudness and aperiodicity at a phrase boundary).
 const WELDED: f32 = 0.9;
 
 /// One named per-frame series, as the mapping reads it.
@@ -54,11 +31,8 @@ struct Stream {
     values: Vec<f32>,
 }
 
-/// Pearson's r, on the frames where both series are defined.
-///
-/// Returns `None` where either series never moves: a constant has no
-/// correlation with anything, and reporting 0 would read as *independent* when
-/// the truth is *this take says nothing about it*.
+/// Pearson's r where both series are defined, or `None` where one never moves —
+/// a constant says nothing, which 0 would misreport as independence.
 fn correlation(a: &[f32], b: &[f32]) -> Option<f32> {
     let n = a.len().min(b.len());
     if n < 2 {
@@ -82,12 +56,9 @@ fn correlation(a: &[f32], b: &[f32]) -> Option<f32> {
     Some(cov / (va * vb).sqrt())
 }
 
-/// Every stream a continuous mapping reads, plus the candidates for admission.
-///
-/// Smoothed at the timescale each one belongs to, because that is the form the
-/// mapping sees. Two series can correlate weakly frame by frame and strongly
-/// once both are averaged over a syllable, and the smoothed pair is the one that
-/// decides whether the music has two things moving in it or one.
+/// Every stream a continuous mapping reads, plus the candidates for admission,
+/// smoothed as the mapping sees them: two series can correlate weakly per frame
+/// and strongly over a syllable.
 fn collect(vp: &Voiceprint, voice: &Voice) -> Vec<Stream> {
     let (open, front) = streams::vowel(vp, voice);
     let peak = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
@@ -96,9 +67,7 @@ fn collect(vp: &Voiceprint, voice: &Voice) -> Vec<Stream> {
         .iter()
         .map(|db| *db > peak - PEAK_DROP_DB)
         .collect();
-    // Smoothed first and gated second. Gating first would splice the sounding
-    // frames together and let a moving average run across a pause as though the
-    // voice had carried straight on through it.
+    // Smoothed first and gated second: gating first would average across pauses.
     let heard = |values: Vec<f32>, window: usize| {
         streams::smooth(&values, window)
             .into_iter()
@@ -139,8 +108,7 @@ fn collect(vp: &Voiceprint, voice: &Voice) -> Vec<Stream> {
             name: "aperiodicity",
             values: heard(vp.pitch.aperiodicity.clone(), streams::LEVEL_FRAMES),
         },
-        // Measured but not yet read by any mapping. The question this tool is
-        // being run to answer.
+        // Measured but not yet read by any mapping.
         Stream {
             name: "*tilt",
             values: heard(vp.texture.tilt_db_per_octave.clone(), streams::ROOT_FRAMES),
@@ -159,10 +127,7 @@ fn main() -> anyhow::Result<()> {
     println!("calibration: {}\n", calibrated.source.id);
     println!("* marks a stream nothing reads yet.\n");
 
-    // Pooled over every take rather than reported per take. A correlation is a
-    // claim about the voice, and one take can make two streams agree by
-    // accident — a take that is all one vowel has no vowel motion to disagree
-    // with anything.
+    // Pooled over every take: one take can make two streams agree by accident.
     let takes = store.list()?;
     let mut pooled: Vec<Stream> = Vec::new();
     let mut used = 0;
@@ -195,8 +160,7 @@ fn main() -> anyhow::Result<()> {
         print!("{:<14}", a.name);
         for (j, b) in pooled.iter().enumerate() {
             match j.cmp(&i) {
-                // Lower triangle left blank: correlation is symmetric, so
-                // printing it twice only makes the table harder to read across.
+                // Lower triangle blank: correlation is symmetric.
                 std::cmp::Ordering::Less => print!("{:>13}", ""),
                 std::cmp::Ordering::Equal => print!("{:>13}", "—"),
                 std::cmp::Ordering::Greater => match correlation(&a.values, &b.values) {
@@ -208,7 +172,7 @@ fn main() -> anyhow::Result<()> {
         println!();
     }
 
-    // The verdict, so nobody has to read a triangle of numbers to find it.
+    // The verdict, so nobody has to read the triangle.
     println!("\nwelded pairs (|r| >= {WELDED:.1}):");
     let mut any = false;
     for (i, a) in pooled.iter().enumerate() {

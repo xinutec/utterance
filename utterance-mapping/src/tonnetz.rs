@@ -1,36 +1,16 @@
 //! Harmony as a walk across the speaker's own harmonic lattice.
 //!
-//! The other continuous mapping, and the answer to the thing `field` cannot do.
-//! There, the voices are stacked at a fixed distance in scale degrees and the
-//! whole stack slides as the vowel moves: every moment is the same chord at a
-//! different pitch, never in one place long enough to be heard as being in a
-//! tuning at all. A chord has to ring for about a second before anyone can hear
-//! whether its partials lock or beat.
+//! In `field` the voice stack slides with the vowel, so no chord stays long
+//! enough to be heard in a tuning — that takes about a second. Here the vowel
+//! space maps onto a lattice spanned by two of the speaker's consonances
+//! ([`crate::lattice`]), and position is quantised to a triangle:
 //!
-//! **What changes here.** The two dimensions of vowel space become the two
-//! dimensions of a lattice spanned by two of the speaker's own consonances (see
-//! [`crate::lattice`]), and the position on it is *quantised to a triangle*.
-//! Two consequences, and the second is the point:
+//! - **Chords hold** while the mouth stays in one triangle, as every other
+//!   stream keeps moving underneath.
+//! - **Changes are small**: neighbouring triangles share two pitches, so the
+//!   harmony holds two voices and steps one.
 //!
-//! - **Chords hold.** While the mouth stays inside one triangle the pitches do
-//!   not move at all, so a sustained vowel is a sustained chord. Everything else
-//!   the voice does — loudness, tone colour, breath, the slow pitch drift — goes
-//!   on moving underneath it, so holding still harmonically is not holding still.
-//! - **Changes are small.** Triangles that share an edge share two of their
-//!   three pitches, so the harmony moves by holding two voices and stepping one.
-//!   Nobody wrote that rule; it is what adjacency on this lattice *is*.
-//!
-//! **This is still continuous tracking**, which is the trade the project chose:
-//! nothing is cut into events and no frame is skipped. What is quantised is the
-//! harmony, not the time — the chord changes when the mouth changes, at whatever
-//! irregular moment that happens to be.
-//!
-//! The knobs mean what they mean everywhere else, read onto this geometry:
-//! `reach` is how much of the lattice a vowel crosses, `spacing` how open the
-//! chord is voiced, `voicing` how far the mouth shape tips the chord's weight,
-//! and `hold` how far past a boundary the mouth must go before the harmony
-//! follows — with `settle` saying how long it must stay gone, which is the part
-//! `hold` cannot express.
+//! Still continuous tracking: the harmony is quantised, not the time.
 
 use utterance_analysis::voiceprint::Voiceprint;
 
@@ -42,50 +22,28 @@ use crate::score::{Field, Score};
 use crate::streams::{self, DRIFT_FRAMES, LEVEL_FRAMES, ROOT_FRAMES};
 use crate::voice::Voice;
 
-/// Cells of lattice a vowel crosses at `reach = 1`.
-///
-/// Three, so a mouth moving from one extreme to the other passes through a
-/// handful of chords rather than one or dozens. Fewer and a whole utterance is
-/// one harmony; more and the quantising buys nothing back, because the position
-/// crosses a boundary as often as a continuous root would have moved.
+/// Cells of lattice a vowel crosses at `reach = 1`: a handful of chords from one
+/// extreme to the other, rather than one or dozens.
 const CELLS_PER_REACH: f32 = 3.0;
 
-/// Where one voice sits above the next at `spacing = 1`, in cents.
-///
-/// A target rather than a rule: each voice takes whichever octave of its pitch
-/// falls nearest to its own place in the register. A quarter of an octave, so
-/// the closest a chord is ever voiced still spreads five voices across one —
-/// near enough for two voices' partials to beat against each other, which is
-/// the whole point of holding a chord still.
-///
-/// Set against the field mapping's register rather than by taste: much closer
-/// and the default chord crowds into one octave at the bottom of a low voice,
-/// which is mud whatever its tuning. Two mappings meant to be compared have to
-/// sit in the same register or the comparison is about register.
+/// Where one voice sits above the next at `spacing = 1`, in cents — a target:
+/// each voice takes whichever octave of its pitch class is nearest its place.
+/// Matched to the field mapping's register, so the two compare on harmony rather
+/// than register; much closer would crowd the chord into mud.
 const CLOSE_POSITION_CENTS: f32 = 300.0;
 
-/// Widest the chord is allowed to be laid out across, in cents.
-///
-/// Four octaves, a little past what the field mapping's own stacking reaches.
-/// Without it, twelve voices at the widest spacing would target more than eight
-/// octaves above the tonic and the upper ones would leave the range a person
-/// hears — a voice count that silently stops meaning voices. Spacing is capped
-/// against the voice count rather than in itself, so a small chord can still be
-/// as open as it likes.
+/// Widest the chord may be laid out across, in cents: four octaves, or twelve
+/// widely spaced voices would climb out of hearing. Spacing is capped against
+/// the voice count, so a small chord can still be open.
 const MAX_SPAN_CENTS: f32 = 4800.0;
 
-/// Least distance between two voices, in cents.
-///
-/// A quarter-tone. Below this two tones are not heard as two notes but as one
-/// beating, so a chord that puts a pair here is quietly a voice short.
+/// Least distance between two voices, in cents: below a quarter-tone two tones
+/// are heard as one beating.
 const MIN_SEPARATION_CENTS: f32 = 50.0;
 
-/// How far the mouth shape may tip the chord's weight, at `voicing = 1`.
-///
-/// 0.6, so an extreme leaves the far end of the chord at 40% and never silences
-/// it. A voicing that can mute a voice outright would make the voice count
-/// something the mouth decides, which is a different knob wearing this one's
-/// name.
+/// How far the mouth shape may tip the chord's weight, at `voicing = 1`: the far
+/// end drops to 40% and never silences, or the mouth would decide the voice
+/// count.
 const LEAN: f32 = 0.6;
 
 /// Build the lattice field for a take.
@@ -93,25 +51,13 @@ pub fn compose(vp: &Voiceprint, voice: &Voice) -> Option<Field> {
     compose_with(vp, voice, Params::default())
 }
 
-/// Which triangle the harmony is in, frame by frame.
-///
-/// The walk itself, separated from the chord it is turned into. Public because
-/// it is the thing worth measuring: *how long a chord rings* is the question
-/// this whole mapping exists to answer, and a tool that reimplemented the walk
-/// to find out could drift from it and report on a mapping nobody is listening
-/// to. `src/bin/dwell.rs` reads this.
-///
-/// Returns `None` in exactly the cases [`compose_with`] does.
+/// Which triangle the harmony is in, frame by frame — the walk, separated from
+/// the chord so `src/bin/dwell.rs` measures the real thing. `None` exactly where
+/// [`compose_with`] is.
 pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Vec<Triangle>> {
     let params = params.sane();
-    // **The speaker's own scale, never the bound one.** See `compose_with` for
-    // why the axes must not follow `bind`; here it also means the walk itself is
-    // the same walk whatever the tuning, so two settings can be compared without
-    // comparing two different pieces.
-    //
-    // The reason it spans no plane is not thrown away here so much as asked for
-    // somewhere else: `routes::api` calls `Lattice::from_tuning` itself, so a
-    // refusal reaches the browser as a sentence rather than as silence.
+    // The speaker's own scale, never the bound one, so the walk is the same
+    // whatever `bind` is. A plane-less scale's reason is reported by the route.
     Lattice::from_tuning(&voice.tuning).ok()?;
     if vp.frame.count == 0 {
         return None;
@@ -121,9 +67,7 @@ pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<V
     let open = streams::smooth(&open_raw, ROOT_FRAMES);
     let front = streams::smooth(&front_raw, ROOT_FRAMES);
 
-    // The walk is stateful, because holding a chord means remembering which one
-    // is being held. Deterministic all the same: the state is a pure function of
-    // the frames before it, and it starts wherever the first frame lands.
+    // Stateful — holding a chord means remembering it — and still deterministic.
     let span = CELLS_PER_REACH * params.reach;
     let position = |i: usize| {
         (
@@ -134,11 +78,8 @@ pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<V
     let (x0, y0) = position(0);
     let mut walk = Walk::start(x0, y0);
 
-    // The settle time is a knob in seconds and the walk counts frames, so the
-    // conversion happens once, here, against this take's own hop. Rounded rather
-    // than truncated so a setting just under one frame's worth still means one
-    // frame — the alternative is a slider whose bottom step silently does
-    // nothing on a recording with a long hop.
+    // Seconds to frames against this take's hop, rounded so the slider's bottom
+    // step still means one frame.
     let dwell_frames = (params.settle / vp.frame.hop_s.max(f32::EPSILON)).round() as usize;
 
     Some(
@@ -151,19 +92,12 @@ pub fn harmonic_path(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<V
     )
 }
 
-/// Build the lattice field with the knobs set explicitly.
-///
-/// Returns `None` when the speaker's scale spans no plane — see
-/// [`Lattice::from_tuning`]. That is a real answer rather than a failure: a
-/// scale of the fifth and nothing else has one axis, and laying a lattice over
-/// it anyway would mean one of the two vowel dimensions silently reaching
-/// nothing.
+/// Build the lattice field with the knobs set explicitly, or `None` when the
+/// speaker's scale spans no plane ([`Lattice::from_tuning`]).
 pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Field> {
     let params = params.sane();
-    // **The lattice is laid out on the speaker's own scale, and `bind` is
-    // applied to the notes it produces rather than to its axes** — see
-    // `params::bind_cents_toward_equal` for why binding the axes would make two
-    // renders differing in `bind` two different chord sequences.
+    // Laid out on the speaker's own scale; `bind` is applied to each sounding
+    // pitch (`params::bind_cents_toward_equal` says why).
     let lattice = Lattice::from_tuning(&voice.tuning).ok()?;
     let path = harmonic_path(vp, voice, params)?;
 
@@ -182,35 +116,21 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
     for i in 0..frames {
         let here = path[i];
 
-        // The speaker's prosody, as a slow transposition of everything —
-        // measured against their habitual pitch rather than this take's own
-        // median, for the reason recorded in `field`.
+        // The speaker's prosody as a slow transposition, against their habitual
+        // pitch as in `field`.
         let drift_octaves = (drift[i] / voice.tonic_hz).max(0.01).log2() * params.drift;
         let base = voice.tonic_hz * 2f32.powf(drift_octaves);
 
-        // The mouth shape the vowel chart cannot see decides where the chord's
-        // weight sits. Centred so a speaker in the middle of their own F3 range
-        // leans neither way.
-        //
-        // **Weight rather than spelling**, which is where this parts company
-        // with the field mapping, and the reason is the geometry rather than
-        // taste. Everything about pitch here is a lattice point, so anything F3
-        // reached through the harmony would move in steps — silent for most of
-        // the knob's travel and then a jump. A stream that only registers at a
-        // threshold is a stream barely read. Balance across the chord is
-        // continuous, so the third formant is audible everywhere along it.
+        // F3 tips the chord's weight rather than its spelling: pitch here moves
+        // in lattice steps, so F3 reaching the harmony would be silent and then
+        // jump, where balance is continuous. Centred on the speaker's F3 range.
         let lean = (depth[i].clamp(0.0, 1.0) - 0.5) * 2.0 * params.voicing;
         let top = (params.voices - 1).max(1) as f32;
         let gap = (CLOSE_POSITION_CENTS * params.spacing as f32).min(MAX_SPAN_CENTS / top);
 
-        // Absolute pitch classes, not intervals above a moving root. That is
-        // what makes two adjacent chords share tones *in sound* rather than only
-        // on paper: a pitch the lattice keeps is a frequency the ear keeps.
-        // Bound here, at the last moment, on the note that will actually sound.
-        // Every pitch moves by at most a quarter tone toward the grid everyone
-        // else uses, and the chord it belongs to — which lattice points, in what
-        // order, held for how long — is untouched. That is what makes `bind` a
-        // tuning knob on this mapping rather than a structural one.
+        // Absolute pitch classes, so a pitch two chords share is one frequency.
+        // Bound here, on the note that sounds: each moves at most a quarter tone
+        // and the chord is untouched.
         let mut pitch_classes: Vec<f32> = here
             .ring(params.voices)
             .into_iter()
@@ -221,24 +141,14 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
         let mut previous = f32::NEG_INFINITY;
         for v in 0..params.voices {
             let pc = pitch_classes.get(v).copied().unwrap_or(0.0);
-            // **Register from the pitch class alone, not from the chord it is
-            // in.** Each voice has a place it wants to sit and takes whichever
-            // octave of its pitch is nearest to it, so a pitch the lattice keeps
-            // across a chord change keeps its *frequency* too and the voice
-            // holding it does not move at all. Stacking each chord from its own
-            // lowest note instead — the obvious way — re-registers everything
-            // whenever the set changes, and the common tones the geometry went
-            // to such trouble to provide are then audible nowhere.
+            // Register from the pitch class alone, not the chord: each voice
+            // takes the octave nearest its place, so a kept pitch keeps its
+            // frequency. Stacking from each chord's lowest note would
+            // re-register everything on every change.
             let target = v as f32 * gap;
             let placed = pc + 1200.0 * ((target - pc) / 1200.0).round();
-            // Two voices on one pitch are one voice twice as loud, which sounds
-            // thinner than the voice count claims. This is the only place the
-            // rest of the chord gets a say, and it is a floor rather than a
-            // layout.
-            //
-            // Whole octaves up until it clears, computed in closed form so the
-            // bound is in the arithmetic rather than in a loop condition. Octaves,
-            // so a voice stays a whole number of them from its pitch class.
+            // Never two voices within a quarter-tone: whole octaves up until it
+            // clears, in closed form so the bound is in the arithmetic.
             let floor = previous + MIN_SEPARATION_CENTS;
             let cents = if placed < floor {
                 placed + 1200.0 * ((floor - placed) / 1200.0).ceil()
@@ -248,9 +158,8 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
             previous = cents;
             voices[v][i] = base * 2f32.powf(cents / 1200.0);
 
-            // Weight tipped toward the top of the chord or the bottom of it,
-            // pivoting on the middle so the chord's overall loudness is left to
-            // the energy envelope where it belongs.
+            // Weight tipped toward the top or bottom of the chord, pivoting on
+            // the middle so overall loudness stays the envelope's.
             let weighted = (1.0 + LEAN * lean * (v as f32 / top - 0.5) * 2.0).max(0.0);
             gains[v][i] = voice_gain(level[i], stir[i], v, &params, weighted);
         }

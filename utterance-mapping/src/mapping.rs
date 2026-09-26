@@ -12,12 +12,9 @@ use crate::params::Params;
 use crate::score::Score;
 use crate::voice::Voice;
 
-/// What a mapping produces, and therefore what it competes for.
-///
-/// A score carries one continuous field and one list of events, so two mappings
-/// making the same material cannot both be heard. Naming the material rather
-/// than writing the clash out as a rule between named pairs means a new
-/// mapping inherits the answer instead of needing a new line.
+/// What a mapping produces, and so what it competes for: a score holds one field
+/// and one list of events. Clashes follow from the material, so a new mapping
+/// needs no new rule.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -39,14 +36,9 @@ impl Material {
     }
 }
 
-/// One mapping a render may ask for.
-///
-/// Serde decides the wire spelling. [`Mapping::name`] restates it, because a
-/// `&'static str` is what an error message and a URL both want and serialising
-/// a value to get one needs a `Serializer` this crate has no other use for. The
-/// restatement is held honest by `name_round_trips_through_serde`: `from_name`
-/// goes through the derive, so a `name` that drifted from the attribute stops
-/// parsing and fails the test.
+/// One mapping a render may ask for. [`Mapping::name`] restates serde's spelling
+/// for error messages and URLs; `name_round_trips_through_serde` holds them
+/// together.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -58,12 +50,8 @@ pub enum Mapping {
 }
 
 impl Mapping {
-    /// Every mapping, in the order a UI should offer them.
-    ///
-    /// An array rather than an iterator so its length is the variant count at
-    /// compile time: `[Mapping; 3]` stops compiling when a fourth is added, and
-    /// a mapping missing from a list a person chooses from is a mapping that
-    /// exists and cannot be heard.
+    /// Every mapping, in the order a UI offers them. A sized array, so adding a
+    /// variant fails to compile until it is listed.
     pub const ALL: [Mapping; 3] = [Mapping::Field, Mapping::Tonnetz, Mapping::Notes];
 
     /// The wire spelling, from the same serde attribute that writes it.
@@ -75,11 +63,8 @@ impl Mapping {
         }
     }
 
-    /// The wire spelling read back, or `None` for a name no mapping has.
-    ///
-    /// Through `serde` rather than a hand-written match so there is one table of
-    /// spellings and not two — the same trick `CalibrationStep::from_label`
-    /// uses, for the same reason.
+    /// The wire spelling read back through serde, or `None` for a name no
+    /// mapping has.
     pub fn from_name(name: &str) -> Option<Self> {
         use serde::de::value::StrDeserializer;
         Self::deserialize(StrDeserializer::<serde::de::value::Error>::new(name)).ok()
@@ -121,12 +106,8 @@ impl Mapping {
         }
     }
 
-    /// Sound this mapping.
-    ///
-    /// **The dispatch lives here and not in the route.** `routes::api` is the
-    /// composition root and has no business knowing that a lattice is a kind of
-    /// texture. Here the match is exhaustive, so adding a variant is a compile
-    /// error until it has a score to produce.
+    /// Sound this mapping. The dispatch lives here, exhaustively, so the route
+    /// never needs to know what kind of thing a mapping is.
     pub fn score_with(self, vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
         match self {
             Mapping::Field => crate::field::score_with(vp, voice, params),
@@ -136,10 +117,7 @@ impl Mapping {
     }
 }
 
-/// Mappings that sound a continuous field, and so read the field knobs.
-///
-/// A `const` rather than a filter over [`Mapping::ALL`], because `Knob::mappings`
-/// is a `const` too and a const context cannot filter an array. That makes it
-/// the one restatement left in this module, so `continuous_is_every_texture_mapping`
-/// in `tests/mapping.rs` holds it to [`Mapping::makes`].
+/// Mappings that sound a continuous field, and so read the field knobs. A
+/// `const` because `Knob::mappings` is one; `continuous_is_every_texture_mapping`
+/// holds it to [`Mapping::makes`].
 pub const CONTINUOUS: &[Mapping] = &[Mapping::Field, Mapping::Tonnetz];

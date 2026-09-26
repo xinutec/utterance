@@ -3,18 +3,11 @@ import type { Mapping } from "./Mapping";
 import type { Material } from "./Material";
 
 /**
- * One mapping a render may ask for, described well enough to be offered.
- *
- * A wire type over [`Mapping`] rather than the enum alone, because a UI needs
- * the label and the blurb beside the name and a bare variant carries neither.
- * The name itself is the enum, so the browser reads `"field" | "tonnetz" |
- * "notes"` and a mapping this backend does not serve cannot be named there.
+ * One mapping a render may ask for, with the label and blurb a UI offers it by.
  */
 export type MappingChoice = { name: Mapping, label: string, 
 /**
- * The material this mapping makes. Two of a kind cannot sound together.
- *
- * Sent so the UI can turn one off when the other is chosen, rather than
- * letting someone select a combination the render route refuses.
+ * The material this mapping makes. Two of a kind cannot sound together, so
+ * the UI turns one off when the other is chosen.
  */
 makes: Material, about: string, };

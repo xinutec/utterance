@@ -1,17 +1,9 @@
 /**
  * Concrete colours for canvas drawing, resolved from the Material theme.
  *
- * Canvas needs a colour string it can parse. Material's system tokens are not
- * that: `--mat-sys-on-surface` computes to `light-dark(#1a1b1f, #e3e2e6)`, a CSS
- * function that only the style engine understands. Assigning it to
- * `ctx.fillStyle` fails *silently* — the property keeps whatever it held before,
- * which for a fresh context is black. That produced black text on a dark
- * background, and no error anywhere to say so.
- *
- * The way out is to make the style engine do the resolving. A real property like
- * `color` computes to a used value — an actual `rgb(...)` with `light-dark()`
- * already collapsed to the branch in force — so setting the token on a throwaway
- * element and reading `color` back gives something canvas can use.
+ * Material's tokens compute to `light-dark(…)`, which canvas cannot parse and
+ * silently ignores, keeping black. So the token is set as `color` on a
+ * throwaway element and read back resolved, as an `rgb(...)`.
  */
 
 /** The palette every canvas in this app draws with. */
@@ -29,15 +21,12 @@ const TOKENS = {
 export type ThemeColours = Record<keyof typeof TOKENS, string>;
 
 /**
- * Resolve the palette in `host`'s context.
- *
- * `host` must be attached to the document: custom properties inherit down from
- * `:root`, and an orphaned element sees none of them.
+ * Resolve the palette in `host`'s context; `host` must be attached, or it
+ * inherits no custom properties.
  */
 export function resolveThemeColours(host: HTMLElement): ThemeColours {
   const probe = document.createElement("span");
-  // Out of flow and invisible, but still rendered — `display: none` would leave
-  // the computed colour unresolved in some engines.
+  // Hidden but rendered: `display: none` can leave the colour unresolved.
   probe.style.position = "absolute";
   probe.style.opacity = "0";
   probe.style.pointerEvents = "none";
@@ -48,9 +37,7 @@ export function resolveThemeColours(host: HTMLElement): ThemeColours {
       probe.style.color = "";
       probe.style.color = `var(${token})`;
       const resolved = getComputedStyle(probe).color;
-      // An unknown token makes the declaration invalid at computed-value time,
-      // so `color` falls back to the inherited one — still a legible foreground,
-      // never an unparseable string.
+      // An unknown token falls back to the inherited colour: legible, parseable.
       return resolved || "#888888";
     };
 
@@ -66,13 +53,8 @@ export function resolveThemeColours(host: HTMLElement): ThemeColours {
 }
 
 /**
- * Call `onChange` whenever the light/dark preference flips.
- *
- * A canvas holds pixels, not a stylesheet: nothing repaints it when the theme
- * changes, so without this a page left open through a switch keeps drawing in
- * the colours of the scheme it was opened in.
- *
- * Returns a teardown function.
+ * Call `onChange` whenever the light/dark preference flips — nothing repaints a
+ * canvas otherwise. Returns a teardown function.
  */
 export function onColourSchemeChange(onChange: () => void): () => void {
   const query = window.matchMedia("(prefers-color-scheme: dark)");

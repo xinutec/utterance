@@ -3,46 +3,27 @@
 //!     nix develop --command cargo run --bin mutate
 //!     nix develop --command cargo run --bin mutate -- separation   # one subject
 //!
-//! Sibling of `scripts/coverage.sh`, and the answer to the question that script
-//! cannot answer. Coverage says which lines a test executed; it says nothing
-//! about whether the test would have complained had those lines been wrong. A
-//! suite that calls everything and asserts nothing scores well. Every mutant
-//! below is a line of shipped logic changed to something a careless edit could
-//! plausibly produce, run against the tests, and put back.
+//! Coverage says which lines a test executed, not whether it would notice them
+//! being wrong. Each mutant here is a line of shipped logic changed the way a
+//! careless edit might, run against the tests, and put back. Not in the gate
+//! and not thresholded: it takes tens of minutes, and the output is a name to
+//! look at, not a number.
 //!
-//! NOT in the gate and not thresholded, for the same reason coverage is not:
-//! it takes tens of minutes, it rebuilds and re-runs a test suite once per
-//! mutant, and the useful output is a name to go and look at rather than a
-//! number to keep above a line.
-//!
-//! **Each mutant is judged by its OWN crate's tests**, not the whole workspace.
-//! Partly arithmetic — the workspace suite is several times slower than any one
-//! crate's, and a tool nobody waits for answers nothing. Mostly, though, it is
-//! the sharper question: these are designated pure cores, and "utterance-mapping's own suite
-//! notices when utterance-mapping is wrong" is the claim worth holding. A mutant
-//! that survives its crate and dies in `tests/api.rs` is being caught by
-//! accident, three layers away, and that is worth knowing separately — so a
-//! survivor is worth re-running with `--workspace` by hand before concluding
-//! nothing sees it.
+//! **Each mutant is judged by its own crate's tests**, which is faster and the
+//! sharper claim: a pure core's own suite should notice when it is wrong. A
+//! survivor is worth re-running with `--workspace` before concluding nothing
+//! sees it.
 //!
 //! **Three traps.**
 //!
-//! 1. *A pattern that does not apply reports nothing wrong.* The suite passes,
-//!    the mutant is recorded as survived-or-killed on a file that was never
-//!    edited, and the run looks like evidence. So a pattern must match EXACTLY
-//!    ONCE or the entry is reported broken and no test is run for it.
-//! 2. *`cargo fmt` silently breaks patterns.* Rewrapping one line is enough for
-//!    a `from` string to stop matching, and the failure mode is trap 1. Nothing
-//!    here reformats, and trap 1's check is what catches the day someone else
-//!    does.
-//! 3. *An uncompilable mutant looks exactly like a killed one.* Both are a
-//!    non-zero cargo exit. A mutant that does not build tested nothing, so the
-//!    compiler's own verdict is read out of the output and reported separately.
+//! 1. *A pattern that does not apply looks like evidence.* So a pattern must
+//!    match exactly once, or the entry is reported broken and nothing runs.
+//! 2. *`cargo fmt` rewraps a line and a pattern stops matching* — caught by 1.
+//! 3. *A mutant that does not compile looks like a killed one.* The compiler's
+//!    verdict is read out and reported separately.
 //!
-//! Equivalent mutants — a change that genuinely cannot alter behaviour — are
-//! expected, and are a fact about the code rather than a weakness in the tests.
-//! They are declared as [`Expect::Survives`] with the argument for why, and a
-//! declared survivor that gets killed is as much a finding as the reverse.
+//! Equivalent mutants are declared as [`Expect::Survives`] with the argument
+//! why; a declared survivor that gets killed is as much a finding.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -53,9 +34,7 @@ enum Expect {
     /// Something must fail. The normal case.
     Killed,
     /// Nothing can fail, because the change cannot alter behaviour. The string
-    /// is the argument for that, and it has to be an argument about the code —
-    /// "no test covers it" is a finding, not an equivalence.
-    ///
+    /// argues why from the code — "no test covers it" is a finding instead.
     Survives(&'static str),
 }
 
@@ -70,11 +49,8 @@ struct Mutant {
     expect: Expect,
 }
 
-/// Each entry names a claim some test is supposed to be making. Spread across
-/// the three pure crates rather than concentrated, because the question is
-/// whether the SUITE notices, and the suites differ in how they were written:
-/// the mapping tests assert on structure, the realisation tests on rendered
-/// samples, and the analysis tests on real recordings under `tests/fixtures`.
+/// Each entry names a claim some test should be making, spread across the three
+/// pure crates, whose suites are written differently.
 const MUTANTS: &[Mutant] = &[
     // ---- utterance-mapping ----
     Mutant {
@@ -179,10 +155,7 @@ fn main() -> std::process::ExitCode {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let filter = std::env::args().nth(1);
 
-    // A clean tree is the safety net. Everything below restores the file it
-    // edited, but a kill -9 between write and restore cannot, and then the next
-    // thing to run is a mutated workspace. Starting clean means the damage is
-    // whatever `git status` shows and `git checkout --` undoes.
+    // Start clean, so a mutant left by a kill -9 is whatever `git status` shows.
     if !git_is_clean(&root) {
         eprintln!(
             "mutate: the working tree is dirty.\n\
@@ -263,8 +236,7 @@ fn main() -> std::process::ExitCode {
         println!("{unexpected} mutant(s) did not:\n{report}");
     }
 
-    // Belt and braces: if a write failed silently or a panic skipped a restore,
-    // the tree says so and the run must not read as clean.
+    // If a restore was skipped, the tree says so and the run must not look clean.
     if !git_is_clean(&root) {
         eprintln!(
             "mutate: the tree is dirty at exit — a mutation was NOT put back. \
@@ -284,14 +256,12 @@ enum Outcome {
     Failed,
     /// Everything passed — nothing noticed.
     Passed,
-    /// It never got as far as running. Trap 3: this is a non-zero exit that
-    /// looks identical to a kill and means the opposite, since a mutant that
-    /// does not build put no changed behaviour in front of any test.
+    /// It never ran (trap 3): a non-zero exit that looks like a kill and means
+    /// nothing was tested.
     Uncompilable,
 }
 
-/// The crate that owns a source file — its first path component, so there is no
-/// second field to fall out of step with the path.
+/// The crate that owns a source file: its first path component.
 fn package_of(file: &str) -> &str {
     match file.split_once('/') {
         Some((pkg, _)) if pkg != "src" => pkg,
@@ -340,16 +310,10 @@ fn explain(outcome: &Outcome, expect: &Expect) -> String {
 }
 
 fn git_is_clean(root: &Path) -> bool {
-    // ⚠ **`-C` and `current_dir` set the DIRECTORY; they do not clear
-    // `GIT_INDEX_FILE`, which wins over both.** A pre-commit hook exports its
-    // own repository to every descendant, so without this scrub `git status`
-    // answers about the repository being committed rather than about `root` —
-    // and this function decides whether a tool that REWRITES FILES may start.
-    //
-    // ⚠ Chained rather than a loop over the names: `rust-git-env-unscrubbed`
-    // matches the spawn only when the scrub is in the same call chain.
-    // `GIT_EXEC_PATH` deliberately survives — it names git's own helper
-    // directory, and under nix dropping it breaks git rather than containing it.
+    // ⚠ `-C` sets the directory but not `GIT_INDEX_FILE`, which a pre-commit
+    // hook exports and which wins — so it is scrubbed, or `git status` answers
+    // about the wrong repository before this rewrites files. Chained so the
+    // lint sees the scrub; `GIT_EXEC_PATH` survives, since nix's git needs it.
     Command::new("git")
         .arg("-C")
         .arg(root)

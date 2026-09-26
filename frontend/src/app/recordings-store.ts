@@ -4,12 +4,8 @@ import type { RecordingDetail, RecordingMeta, Role, SpeakerCorner } from "./mode
 import { ApiError, RecordingsApi, type ApiFailure } from "./recordings-api";
 
 /**
- * The collection of takes, held for the lifetime of the app.
- *
- * Root-provided rather than owned by the studio component: a component-local
- * list is emptied and re-fetched every time the component is destroyed and
- * recreated, so the page blanks on every navigation. The list is application
- * state, not view state.
+ * The collection of takes, root-provided so it outlives any page — a
+ * component-owned list would blank on every navigation.
  */
 @Injectable({ providedIn: "root" })
 export class RecordingsStore {
@@ -19,12 +15,8 @@ export class RecordingsStore {
   readonly selected = signal<RecordingDetail | null>(null);
 
   /**
-   * This speaker's own vowel corners, from the guided vowels.
-   *
-   * Application state beside the take list rather than something a chart fetches
-   * for itself: they describe the speaker, so they are the same for every take
-   * on screen and they change only when a calibration take does. Empty until the
-   * guided vowels have been recorded.
+   * This speaker's own vowel corners, beside the take list: they describe the
+   * speaker, not a take. Empty until the guided vowels are recorded.
    */
   readonly corners = signal<readonly SpeakerCorner[]>([]);
   /** True while a request that the person is waiting on is in flight. */
@@ -35,8 +27,7 @@ export class RecordingsStore {
     this.api.list().subscribe({
       next: (list) => {
         this.recordings.set(list);
-        // Open the newest take automatically: the common case is having just
-        // recorded something and wanting to see it.
+        // Open the newest take: usually the one just recorded.
         const [newest] = list;
         if (!this.selected() && newest) this.select(newest);
       },
@@ -48,17 +39,9 @@ export class RecordingsStore {
   }
 
   /**
-   * Re-read the speaker's corners.
-   *
-   * Folded into `refresh` because every route that changes which takes define
-   * the speaker — recording one, deleting one, changing a role — already ends
-   * there. A corner list that kept describing a deleted take would be a claim
-   * about a mouth, sourced from nothing.
-   *
-   * A failure here leaves the corners as they were and does not raise the
-   * page's error: this is the chart's reference grid, and losing it is not worth
-   * covering the screen a take was just recorded onto. The chart falls back to
-   * generic positions and says so.
+   * Re-read the speaker's corners — part of `refresh`, which every change to
+   * the calibration set ends in. A failure keeps the old corners quietly: the
+   * chart falls back to generic positions and says so.
    */
   private refreshCorners(): void {
     this.api.speakerCorners().subscribe({
@@ -98,12 +81,8 @@ export class RecordingsStore {
   }
 
   /**
-   * Say whether a stored take defines the voice or is only material.
-   *
-   * Refreshes the list rather than patching the row in place: the role decides
-   * which takes the speaker is derived from, so changing it changes the scale,
-   * the vowel space and the tonic — and a list that quietly disagreed with the
-   * voice on screen would be worse than a reload.
+   * Say whether a stored take defines the voice. Refreshes the whole list,
+   * since the role changes the scale, the vowel space and the tonic.
    */
   setRole(meta: RecordingMeta, role: Role): void {
     this.busy.set(true);
@@ -151,11 +130,8 @@ export class RecordingsStore {
 }
 
 /**
- * Wording for each failure class.
- *
- * Every branch says what happened and, where there is one, what to do about it.
- * The backend's message is used verbatim for a rejected recording because it is
- * specific — how short the take was, how far off the minimum.
+ * Wording for each failure class: what happened and what to do. A rejected
+ * recording uses the backend's message, which says how short it was.
  */
 function explain(failure: ApiFailure): string {
   switch (failure.kind) {

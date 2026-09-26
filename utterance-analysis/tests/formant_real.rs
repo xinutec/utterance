@@ -1,13 +1,6 @@
-//! Formant tracking against real recorded audio.
-//!
-//! Unlike the onset tests next door, these can assert something specific,
-//! because this fixture has known content: *ee → ah → oo*, glided continuously,
-//! confirmed with the speaker. Those three vowels are the corners of the vowel
-//! space, and where they sit in F1/F2 is not a matter of opinion — it is the
-//! most thoroughly measured fact in acoustic phonetics.
-//!
-//! So the recording makes a real prediction: **F1 low, high, low; F2 high, mid,
-//! low.** If the tracker cannot reproduce that, it is not measuring vowels.
+//! Formant tracking against a real glide of known content, *ee → ah → oo*, whose
+//! positions are the best-measured fact in phonetics: **F1 low, high, low; F2
+//! high, mid, low.** A tracker that cannot reproduce that is not measuring vowels.
 
 use utterance_analysis::analyse_wav;
 use utterance_analysis::voiceprint::Voiceprint;
@@ -79,9 +72,7 @@ fn the_three_vowels_land_where_those_vowels_live() {
 
 #[test]
 fn the_trajectory_has_the_shape_the_glide_describes() {
-    // Stated as relations rather than absolute values, so this still means
-    // something for a speaker with a different-sized vocal tract: whoever is
-    // talking, /ɑ/ is more open than /i/ and /u/ is further back than /i/.
+    // Relations rather than values, so they hold for any vocal tract.
     let vp = analyse_wav(GLIDE).unwrap();
     let f1 = |w: (f32, f32)| median_over(&vp, &vp.formants.f1, w.0, w.1);
     let f2 = |w: (f32, f32)| median_over(&vp, &vp.formants.f2, w.0, w.1);
@@ -94,9 +85,7 @@ fn the_trajectory_has_the_shape_the_glide_describes() {
 
 #[test]
 fn no_formant_is_reported_outside_its_anatomical_range() {
-    // The failure the range constraint exists to prevent: when a formant drops
-    // out of the fit, the one above shifts down a slot and F2 gets reported at a
-    // frequency no human F2 occupies.
+    // A missed formant shifts the rest down a slot, out of range.
     let vp = analyse_wav(GLIDE).unwrap();
 
     for &f1 in vp.formants.f1.iter().flatten() {
@@ -109,9 +98,7 @@ fn no_formant_is_reported_outside_its_anatomical_range() {
 
 #[test]
 fn most_voiced_frames_yield_a_vowel_space_position() {
-    // The measurement has to be available often enough to be usable. Nulling
-    // every doubtful frame would satisfy the test above and produce nothing for
-    // a mapping to work with.
+    // Nulling every doubtful frame would pass the test above and leave nothing.
     let vp = analyse_wav(GLIDE).unwrap();
     let voiced = vp.pitch.hz.iter().flatten().count();
     let positioned = vp.formants.vowel_space().len();
@@ -126,10 +113,8 @@ fn most_voiced_frames_yield_a_vowel_space_position() {
 
 #[test]
 fn formants_move_while_the_pitch_stays_still() {
-    // On this fixture f0 barely moves, so this cannot show independence on its
-    // own — the synthetic tests do that. What it does show is the converse: the
-    // formants move a great deal *while* f0 is constant, so they are not simply
-    // tracking the source.
+    // f0 barely moves here while the formants swing: they are not tracking the
+    // source. (The synthetic tests show independence.)
     let vp = analyse_wav(GLIDE).unwrap();
     let f2_swing = median_over(&vp, &vp.formants.f2, EE.0, EE.1)
         - median_over(&vp, &vp.formants.f2, OO.0, OO.1);

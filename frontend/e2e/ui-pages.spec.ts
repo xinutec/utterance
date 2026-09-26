@@ -1,7 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-// The fleet-shared layout harness, consumed as the published @xinutec/ui-harness
-// package (source repo ~/Code/ui-harness). Ships compiled JS, loads from
-// node_modules.
+// The fleet-shared layout harness (@xinutec/ui-harness), from node_modules.
 import {
   expectNoTextOverlaps,
   expectNoHorizontalOverflow,
@@ -11,11 +9,8 @@ import {
 } from "@xinutec/ui-harness";
 
 /**
- * Layout-measurement checks against the built bundle with the API mocked. The
- * studio is a dense page — a take list, a stats line, a four-panel chart and a
- * vowel-space plot — and its failure modes (a stats line colliding with the
- * delete button, a canvas forcing the body wider than the screen) read fine in
- * source and only show in a real browser at a real width.
+ * Layout checks against the built bundle with the API mocked: collisions and
+ * overflow read fine in source and only show in a real browser at phone width.
  */
 
 /** One stored take, enough for the list and the detail pane to populate. */
@@ -57,8 +52,7 @@ function voiceprint(): unknown {
       onsetTimesS: frames.filter((i) => i % 50 === 0).map((i) => i * 0.01),
     },
     texture: {
-      // Tonal inside the bursts, noisy in the gaps — the shape a consonant
-      // makes, so the fixture exercises the same fields a real take does.
+      // Tonal in the bursts, noisy between: the shape a consonant makes.
       centroidHz: frames.map((i) => (i % 50 < 30 ? 700 : 5200)),
       flatness: frames.map((i) => (i % 50 < 30 ? 0.02 : 0.8)),
     },
@@ -95,8 +89,7 @@ const VOICE = {
   calibrationId: "0123456789abcdef",
   calibrationLabel: "steady-ah",
   takes: 7,
-  // Present and null, not absent. A mock missing a field the wire really
-  // carries makes every assertion about that field pass by not running.
+  // Present and null, not absent: a missing field makes its assertions vacuous.
   refusal: null,
 };
 
@@ -107,17 +100,10 @@ const REFUSAL =
   "intervals pointing different ways. Lowering the scale density keeps more of them.";
 
 /**
- * The mapping's knobs, as the backend publishes them.
- *
- * Copied from `utterance_mapping::params::KNOBS` rather than fetched, because this
- * suite is about layout: what matters is that a column of sliders, a toggle
- * group and a select fit on a phone, not that these are the current ranges.
- * Drift in the numbers costs nothing — they are checked against the mapping in
- * `tests/api.rs`, where getting them wrong actually matters.
- *
- * The `mappings` on each knob is not decoration here: the controls hide a knob
- * the playing mapping does not read, so a mock without it renders no sliders at
- * all and every layout assertion below passes over an empty page.
+ * The mapping's knobs, copied from `utterance_mapping::params::KNOBS` — this
+ * suite is about layout, and `tests/api.rs` checks the real ranges. `mappings`
+ * matters: the controls hide knobs the playing mapping ignores, so without it
+ * no sliders render and every assertion passes over an empty page.
  */
 const CONTROLS = {
   knobs: [
@@ -137,11 +123,8 @@ const CONTROLS = {
   ],
 };
 /**
- * A score, as the compare page charts it.
- *
- * Two of these are drawn on one axis, so what matters for layout is that the
- * series are long enough for the canvas to fill and the degrees long enough to
- * push the scale caption onto a second line on a phone.
+ * A score, as the compare page charts it: long enough to fill the canvas, with
+ * enough degrees to wrap the scale caption on a phone.
  */
 function score(offset: number) {
   const points = 600;
@@ -172,29 +155,22 @@ async function mockApi(page: Page): Promise<void> {
   await page.route("**/api/recordings/0123456789abcdef", (r) =>
     r.fulfill({ json: { meta: META, voiceprint: voiceprint() } }),
   );
-  // Trailing wildcard because the summary carries the mapping settings in
-  // its query string, and a glob without one stops matching the moment a
-  // parameter is added — silently, by falling through to the catch-all above.
+  // Trailing wildcard: the summary carries settings in its query, and a glob
+  // without one would silently fall through to the catch-all.
   await page.route("**/api/voice*", (r) => r.fulfill({ json: VOICE }));
   await page.route("**/api/controls", (r) => r.fulfill({ json: CONTROLS }));
-  // Both sides of the comparison, told apart by the query so the two charts are
-  // genuinely different curves rather than one drawn twice.
+  // The two sides told apart by the query, so the charts differ.
   await page.route("**/score*", (r) =>
     r.fulfill({ json: score(r.request().url().includes("bind=0") ? 2 : 0) }),
   );
 }
 
 /**
- * A strip beside the sliders that a thumb can land on without turning a knob.
- *
- * A Material slider takes its value from where a pointer goes down, before the
- * browser has decided the gesture was a scroll — so on a phone a full-width
- * column of them has no safe place to start a scroll, and reading down the page
- * quietly changes the settings. The fix is layout, so this is where it is
- * guarded: assert the gutter exists rather than trust a `calc()` nobody reads.
- *
- * Every slider is checked, not the first: the failure that matters is one knob
- * reaching the edge, and that is exactly the one a spot check misses.
+ * A strip beside the sliders a thumb can land on without turning a knob. A
+ * Material slider takes its value where a pointer goes down, before the browser
+ * decides it was a scroll, so a full-width column leaves nowhere to scroll from.
+ * Every slider is checked: the one that reaches the edge is the one a spot
+ * check misses.
  */
 async function expectSomewhereToScrollFrom(page: Page) {
   const gutters = await page.locator("app-mapping-controls .knob").evaluateAll((knobs) =>
@@ -207,8 +183,7 @@ async function expectSomewhereToScrollFrom(page: Page) {
 
   expect(gutters.length, "no knobs to check").toBeGreaterThan(0);
   for (const gutter of gutters) {
-    // Against the 44 px that touch guidance settles on for a thumb, less a
-    // little for rounding and the slider's own end padding.
+    // 44 px of touch target, less rounding and the slider's end padding.
     expect(gutter, `a slider reaches the edge, leaving ${gutter}px to scroll from`)
       .toBeGreaterThanOrEqual(40);
   }
@@ -224,12 +199,10 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
   await mockApi(page);
   await page.goto("/");
   await page.getByText("brother — take 1").first().waitFor();
-  // Two canvases — the time-series chart and the vowel space. Wait for
-  // both, so the layout assertions run against the fully painted page.
+  // Wait for both canvases, so the page is fully painted.
   await page.locator("app-voiceprint-chart canvas").waitFor();
   await page.locator("app-vowel-space canvas").waitFor();
-  // The knobs are the densest thing on the page — a column of sliders, a toggle
-  // group and a select — and a phone is where they are likeliest to collide.
+  // The knobs are the densest thing on the page.
   await page.locator("app-mapping-controls mat-slider").last().waitFor();
 
   await expectNoTextOverlaps(page, testInfo);
@@ -240,8 +213,7 @@ test("studio — take list and voiceprint lay out cleanly @ phone", async ({ pag
 });
 
 test("studio — empty state lays out cleanly @ phone", async ({ page }, testInfo) => {
-  // The first thing anyone sees, and the state where the record button has to
-  // be reachable without scrolling past anything.
+  // The record button must be reachable without scrolling.
   await page.route("**/api/**", (r) => r.fulfill({ json: [] }));
   await page.goto("/");
   await page.getByText("Nothing recorded yet.").waitFor();
@@ -253,9 +225,8 @@ test("studio — empty state lays out cleanly @ phone", async ({ page }, testInf
 });
 
 test("calibration — the guided steps lay out cleanly @ phone", async ({ page }, testInfo) => {
-  // This page is read while someone is standing at a microphone, so its failure
-  // mode is worse than the studio's: an instruction line colliding with the
-  // record button is the difference between a usable take and a wasted one.
+  // Read while standing at a microphone: an instruction colliding with the
+  // record button wastes a take.
   await mockApi(page);
   await page.goto("/calibrate");
   await page.getByText('Hold "ah" for about ten seconds, as steady as you can.').waitFor();
@@ -267,8 +238,7 @@ test("calibration — the guided steps lay out cleanly @ phone", async ({ page }
 });
 
 test("calibration — the longest step still fits @ phone", async ({ page }, testInfo) => {
-  // The speech step carries the longest instruction lines in the app, so it is
-  // the one that overflows first if the detail list ever stops wrapping.
+  // The speech step has the longest instructions, so it overflows first.
   await mockApi(page);
   await page.goto("/calibrate");
   await page.getByRole("button", { name: "Talk normally" }).click();
@@ -281,17 +251,14 @@ test("calibration — the longest step still fits @ phone", async ({ page }, tes
 });
 
 test("studio — the derived scale lays out cleanly @ phone", async ({ page }, testInfo) => {
-  // The densest row in the app: four numeric columns and a bar, one line per
-  // scale degree. It is the first thing to collide when the viewport narrows.
+  // The densest row in the app: four numeric columns and a bar per degree.
   await mockApi(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Render as music" }).click();
   await page.getByText("The scale this voice implies").waitFor();
 
-  // Clicking auto-scrolled the button into view, which leaves content under the
-  // sticky toolbar. The toolbar is opaque, so that is not a visual defect — but
-  // the overlap check measures geometry and cannot know that. Return to the top
-  // so the assertions describe the layout rather than the scroll position.
+  // The click scrolled content under the opaque sticky toolbar, which the
+  // overlap check would flag; return to the top to measure layout, not scroll.
   await page.evaluate(() => {
     window.scrollTo(0, 0);
   });
@@ -303,20 +270,16 @@ test("studio — the derived scale lays out cleanly @ phone", async ({ page }, t
 });
 
 test("studio — a scale that carries no lattice says so @ phone", async ({ page }, testInfo) => {
-  // Without this message the player would produce consonants and silence,
-  // which reads as a broken build rather than as a setting to move. It is a
-  // paragraph of prose in a page otherwise made of numbers and controls, so it
-  // is also the likeliest thing here to overflow a phone.
+  // Without this message the player would play consonants over silence; it is
+  // also the prose likeliest to overflow a phone.
   await mockApi(page);
   await page.route("**/api/voice*", (r) => r.fulfill({ json: { ...VOICE, refusal: REFUSAL } }));
   await page.goto("/");
   await page.getByRole("button", { name: "Render as music" }).click();
   await page.getByRole("alert").filter({ hasText: "Lattice cannot be played" }).waitFor();
 
-  // No player for the *derived* music: pointing one at a render the backend
-  // refuses gives a broken control and no reason, which is the failure this
-  // whole message exists for. Scoped to the component, because the page also
-  // carries a player for the recording itself and that one plays fine.
+  // No player for the derived music: a refused render shows a broken control.
+  // Scoped, since the recording's own player is fine.
   await expect(page.locator("app-derived-music audio.player")).toHaveCount(0);
 
   await page.evaluate(() => {
@@ -329,9 +292,8 @@ test("studio — a scale that carries no lattice says so @ phone", async ({ page
 });
 
 test("the sign-in wall lays out cleanly @ phone", async ({ page }, testInfo) => {
-  // The deployed app answers 401 until someone signs in with Nextcloud, so this
-  // is the first thing anyone sees off the LAN — and it is a card centred in a
-  // viewport, which is a layout nothing else in this app has.
+  // The first thing anyone sees off the LAN, and a centred card no other page
+  // has.
   await mockApi(page);
   await page.route("**/api/**", (r) =>
     r.fulfill({
@@ -342,8 +304,7 @@ test("the sign-in wall lays out cleanly @ phone", async ({ page }, testInfo) => 
   await page.goto("/");
   await page.getByRole("link", { name: "Sign in with Nextcloud" }).waitFor();
 
-  // Replaced, not covered. A toolbar still on screen would mean the app behind
-  // it rendered, and a page that rendered is a page that fetched.
+  // Replaced, not covered: a rendered app behind it would already have fetched.
   await expect(page.locator("mat-toolbar")).toHaveCount(0);
 
   await expectNoTextOverlaps(page, testInfo);
@@ -353,8 +314,7 @@ test("the sign-in wall lays out cleanly @ phone", async ({ page }, testInfo) => 
 });
 
 test("compare — two renders side by side lay out cleanly @ phone", async ({ page }, testInfo) => {
-  // The densest page in the app: a take picker, a transport, a five-panel chart
-  // and two full sets of sliders. A phone is where it collides first.
+  // The densest page: picker, transport, five-panel chart, two sets of sliders.
   await mockApi(page);
   await page.goto("/compare");
   await page.getByRole("button", { name: "Render both" }).click();
@@ -370,8 +330,7 @@ test("compare — two renders side by side lay out cleanly @ phone", async ({ pa
 });
 
 test("compare — both settings panels open lay out cleanly @ phone", async ({ page }, testInfo) => {
-  // Two `app-mapping-controls` side by side is every slider twice over, and
-  // the grid has to drop to one column rather than squeezing both in.
+  // Both settings panels open: the grid must drop to one column.
   await mockApi(page);
   await page.goto("/compare");
   await page.getByRole("button", { name: "Change settings" }).click();
@@ -387,15 +346,9 @@ test("compare — both settings panels open lay out cleanly @ phone", async ({ p
 });
 
 /**
- * Canvas drawing takes colour strings, and an unparseable one is ignored in
- * silence — `fillStyle` simply keeps its previous value, which starts out black.
- * Material's system tokens compute to `light-dark(#1a1b1f, #e3e2e6)`, a CSS
- * function no canvas can parse, so passing one straight through painted black
- * text on a dark background with nothing anywhere reporting a problem.
- *
- * Nothing else in this suite can see that: the layout checks measure geometry,
- * the unit tests never rasterise, and the page is perfectly valid. So this reads
- * the pixels.
+ * Canvas ignores an unparseable colour silently, keeping black — and Material's
+ * tokens compute to `light-dark(…)`, which no canvas parses, so black text on a
+ * dark background reports nothing. Only reading the pixels can see it.
  */
 for (const scheme of ["light", "dark"] as const) {
   test(`canvases stay legible in ${scheme} mode`, async ({ page }) => {
@@ -417,9 +370,8 @@ for (const scheme of ["light", "dark"] as const) {
 
         const background = getComputedStyle(document.body).backgroundColor;
         const [br, bg, bb] = background.match(/\d+/g)?.map(Number) ?? [];
-        // Every contrast ratio below is measured against this, so a background
-        // that did not parse has to stop the check rather than default to
-        // black — against which light marks would pass comfortably.
+        // A background that did not parse must stop the check, not default to
+        // black, against which light marks pass.
         if (br === undefined || bg === undefined || bb === undefined) {
           throw new Error(`body background is not an rgb() colour: ${background}`);
         }
@@ -428,11 +380,9 @@ for (const scheme of ["light", "dark"] as const) {
         const ctx = canvas.getContext("2d")!;
         const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-        // Solidly painted pixels only — antialiased glyph edges blend toward the
-        // background by design and would drag the measurement down.
+        // Solid pixels only: antialiased edges blend toward the background.
         const ratios: number[] = [];
-        // RGBA, so `data.length` is a multiple of four and all four reads at a
-        // stride-4 offset are in bounds; the `?? 0` is unreachable.
+        // RGBA stride 4, so these reads are in bounds.
         const at = (i: number): number => data[i] ?? 0;
         for (let i = 0; i < data.length; i += 4) {
           if (at(i + 3) < 200) continue;
@@ -442,7 +392,7 @@ for (const scheme of ["light", "dark"] as const) {
         }
         if (ratios.length === 0) return { painted: 0, best: 0 };
         ratios.sort((a, b) => a - b);
-        // `ratios` is non-empty here, so the 90th-centile index is in bounds.
+        // `ratios` is non-empty, so the index is in bounds.
         return { painted: ratios.length, best: ratios[Math.floor(ratios.length * 0.9)] ?? 0 };
       });
 
@@ -456,15 +406,9 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 /**
- * A comparison is the project's unit of evidence. Passed on as a description of
- * which controls to move, two people in two rooms listen to two slightly
- * different things and disagree about a result neither of them heard.
- *
- * Checked here rather than in a unit test because the failure is in the wiring
- * and not in the parsing: the read waits for the published knobs and the write
- * must not run before the read, and getting that order wrong overwrites a shared
- * link with this page's own defaults before anyone sees it. Nothing below the
- * component can see that happen.
+ * A comparison is a link. Checked end to end because the failure is in the
+ * wiring: the read waits for the published knobs and the write for the read, or
+ * a shared link is overwritten with defaults before anyone sees it.
  */
 test("compare — a shared link arrives at the settings it names", async ({ page }) => {
   await mockApi(page);
@@ -475,7 +419,7 @@ test("compare — a shared link arrives at the settings it names", async ({ page
       encodeURIComponent("mapping=tonnetz&bind=0"),
   );
 
-  // The one thing the two sides disagree about, as the page itself names it.
+  // What the two sides disagree about, as the page names it.
   const differing = page.locator("p.differing");
   await expect(differing).toContainText("Bind to the voice");
   await expect(differing.locator(".diff", { hasText: "Bind to the voice" })).toContainText("1");
@@ -483,21 +427,13 @@ test("compare — a shared link arrives at the settings it names", async ({ page
   // Both sides on the lattice, so the mapping is not listed as a difference.
   await expect(differing).not.toContainText("Mapping");
 
-  // And the link survives being opened: the page writes its own state back, so
-  // a URL that changed on arrival would mean the address bar no longer
-  // described what is playing.
+  // And opening the link leaves it unchanged.
   await expect(page).toHaveURL(/a=mapping%3Dtonnetz&b=mapping%3Dtonnetz%26bind%3D0/);
 });
 
 /**
- * Every slider at equal weight is an instrument panel for someone who already
- * knows what each one does. To anybody else it reads as a dozen things they
- * might be getting wrong.
- *
- * Checked end to end rather than on the component, because the property worth
- * guarding is that the split is driven by what the *backend* published: a
- * frontend that kept its own list of important knobs would pass a unit test and
- * still hide a knob added in Rust.
+ * Primary knobs shown, the rest folded — checked end to end, because the split
+ * must come from what the backend published, not a frontend list.
  */
 test("studio — the knobs that decide the piece come first, the rest fold away", async ({
   page,
@@ -509,32 +445,26 @@ test("studio — the knobs that decide the piece come first, the rest fold away"
   const knobs = page.locator("app-mapping-controls .knob");
   const panel = page.getByRole("button", { name: /More controls/ });
 
-  // The field mapping is playing, so `hold` is put away as belonging to the
-  // lattice — leaving the four primaries it does read.
+  // The field mapping is playing, so the lattice's `hold` is put away.
   await expect(knobs).toHaveCount(4);
   await expect(panel).toBeVisible();
 
   await panel.click();
-  // Everything the playing mapping reads is reachable, just not all at once:
-  // the four above plus spacing, drift and consonants. Counted in the DOM
-  // rather than by visibility, because a folded panel must not merely hide its
-  // sliders — one that is present and sized zero is what the layout harness
-  // reports as an occluded control, and it is what `.last()` waits forever for.
+  // The rest are reachable once opened. Counted in the DOM: folded sliders must
+  // be absent, not present and sized zero, which the harness reports as
+  // occluded.
   await expect(knobs).toHaveCount(7);
 });
 
 test("studio — a folded-away knob still says it was moved", async ({ page }) => {
-  // Closed, the panel would otherwise hide that something inside is no longer at
-  // its default — and a render nobody can explain then has its cause one click
-  // away and invisible.
+  // Closed, the panel must still say something inside has moved.
   await mockApi(page);
   await page.goto("/");
   const panel = page.getByRole("button", { name: /More controls/ });
   await expect(panel).toContainText("more");
 
   await panel.click();
-  // Any knob inside the panel will do; this one is there because following
-  // the vowel adjusts a piece rather than deciding what kind it is.
+  // A knob that adjusts a piece rather than choosing what kind it is.
   const folded = page.locator("app-mapping-controls .knob", { hasText: "Follow the vowel" });
   await folded.locator("input[matSliderThumb]").fill("2");
   await panel.click();
@@ -547,10 +477,8 @@ test("studio — a folded-away knob still says it was moved", async ({ page }) =
 
 
 test("the menu reaches every page @ phone", async ({ page }) => {
-  // Four destinations behind one button. The failure worth guarding is not that
-  // the menu opens but that a link inside it still navigates — a menu item that
-  // looks right and goes nowhere is indistinguishable from a broken app, and no
-  // layout assertion can see it.
+  // A menu link that looks right and goes nowhere is invisible to layout
+  // checks, so it is clicked.
   await mockApi(page);
   await page.goto("/");
 
@@ -566,8 +494,7 @@ test("the menu reaches every page @ phone", async ({ page }) => {
 });
 
 test("the menu says which page you are on", async ({ page }) => {
-  // Marked with aria-current rather than a class, so the thing a screen reader
-  // reads and the thing that is highlighted cannot drift apart.
+  // aria-current rather than a class, so highlight and screen reader agree.
   await mockApi(page);
   await page.goto("/compare");
   await page.getByRole("button", { name: "Open the menu" }).click();
@@ -583,9 +510,8 @@ test("the menu says which page you are on", async ({ page }) => {
 });
 
 test("the pages are inline when there is room for them", async ({ page }) => {
-  // The suite runs at phone geometry, so this one widens the window on purpose:
-  // the collapse is the behaviour under test, and a suite that only ever saw one
-  // width could not tell a responsive bar from a permanently collapsed one.
+  // Widened on purpose: a suite at one width cannot tell responsive from
+  // permanently collapsed.
   await mockApi(page);
   await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/");
@@ -594,8 +520,7 @@ test("the pages are inline when there is room for them", async ({ page }) => {
   for (const name of ["Calibrate", "Studio", "Compare"]) {
     await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   }
-  // And the current one is marked the same way it is in the menu, from the same
-  // component method — so the two renderings cannot disagree about where you are.
+  // Marked the same way as in the menu, by the same method.
   await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveAttribute(
     "aria-current",
     "page",
@@ -603,9 +528,7 @@ test("the pages are inline when there is room for them", async ({ page }) => {
 });
 
 test("studio — with no voice yet, the page offers the way to make one", async ({ page }) => {
-  // A page that knows the next move offers it, and offers it *before* anything
-  // is refused: a prompt that appears only after somebody presses render is a
-  // prompt most people never see.
+  // The next move is offered before anything is refused.
   await mockApi(page);
   await page.route("**/api/recordings", (r) =>
     r.fulfill({ json: [{ ...META, role: "material" }] }),
@@ -618,8 +541,7 @@ test("studio — with no voice yet, the page offers the way to make one", async 
 });
 
 test("studio — once there is a voice, it stops asking", async ({ page }) => {
-  // The other half, and the one that keeps it from being nagging: the prompt is
-  // shown only while it is true.
+  // ...and only while it is true.
   await mockApi(page);
   await page.goto("/");
   await page.getByRole("button", { name: "Render as music" }).waitFor();
@@ -632,12 +554,9 @@ test("studio — once there is a voice, it stops asking", async ({ page }) => {
 test("a question mark opens the explanation, and it is not there until asked", async ({
   page,
 }) => {
-  // The point of the control: a page says the short true thing, and the longer
-  // version exists only for somebody who wants it. Rendered eagerly it would sit
-  // in the page for a screen reader to read out unprompted.
+  // Deferred: rendered eagerly, a screen reader would read it unprompted.
   await mockApi(page);
-  // The one explanation on the studio belongs to the no-voice card, so this
-  // needs a store with nothing that defines the speaker.
+  // The studio's one explanation is on the no-voice card.
   await page.route("**/api/recordings", (r) =>
     r.fulfill({ json: [{ ...META, role: "material" }] }),
   );

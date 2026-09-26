@@ -16,17 +16,11 @@ export type Voiceprint = { schemaVersion: number, source: Source, frame: FrameGr
  */
 rmsDb: Array<number>, events: Events, 
 /**
- * The take's harmonic series, where it held a pitch long enough to have one.
- *
- * Not a per-frame series like the fields above: it describes the recording
- * as a whole, measured over whichever frames were steady enough to use.
- * `framesUsed` says how many those were, which on connected speech is few.
+ * The take's harmonic series, where it held a pitch long enough to have one
+ * — for the recording as a whole, not per frame.
  */
 partials: Partials, 
 /**
- * The shape of the noise, per frame.
- *
- * Defined everywhere but interesting mostly where the voice is unvoiced —
- * the consonants, which every other field here gates away.
+ * The shape of the noise, per frame — mostly interesting where unvoiced.
  */
 texture: Texture, };

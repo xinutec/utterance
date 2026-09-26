@@ -1,8 +1,5 @@
-//! End-to-end tests over the real router.
-//!
-//! Driven in-process through `tower::ServiceExt::oneshot` rather than over a
-//! socket: no port to clash on, no server to wait for, and the whole stack —
-//! routing, extractors, body limit, error mapping — is still exercised.
+//! End-to-end tests over the real router, driven in-process through
+//! `tower::ServiceExt::oneshot`: no socket, and the whole stack still runs.
 
 use axum::Router;
 use axum::body::Body;
@@ -35,9 +32,8 @@ impl TestApp {
         let cfg = Config {
             bind_addr: "127.0.0.1:0".into(),
             data_dir: dir.clone(),
-            // API-only: these tests are about the API, and a static dir would
-            // add a fallback that turns a routing mistake into a 200 with an
-            // HTML body.
+            // API-only: a static dir's fallback would turn a routing mistake
+            // into a 200 with an HTML body.
             static_dir: None,
         };
         Self {
@@ -49,33 +45,25 @@ impl TestApp {
 
 impl Drop for TestApp {
     fn drop(&mut self) {
-        // Best-effort: a test that already failed should report its own reason,
-        // not a cleanup error on top.
+        // Best-effort: a failed test should report its own reason.
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
-/// A spoken-ish vowel at 16 kHz mono: a harmonic series under a two-formant
-/// envelope, gated into bursts so there is something for every part of the
-/// voiceprint to find — pitch in the bursts, silence between them, onsets at
-/// the edges.
+/// A spoken-ish vowel at 16 kHz mono, gated into bursts so every part of the
+/// voiceprint has something to find.
 fn wav_fixture(secs: f32) -> Vec<u8> {
     wav_fixture_at(secs, 16_000, 1)
 }
 
-/// The same fixture at an arbitrary rate and channel count.
-///
-/// Built by tiling one second of audio: the fundamental and the burst period
-/// both divide a second exactly, so the tiles join seamlessly and a long file
-/// costs no more to synthesise than a short one. Without that, generating half a
-/// minute at 48 kHz dominates the runtime of the whole test suite.
+/// The same fixture at an arbitrary rate and channel count, tiled from one
+/// second (everything divides a second exactly) so long files are cheap.
 fn wav_fixture_at(secs: f32, rate: u32, channels: u16) -> Vec<u8> {
     /// Divides one second a whole number of times, so tiles join without a click.
     const F0: f32 = 125.0;
     let formant = |hz: f32, center: f32, bw: f32| 1.0 / (1.0 + ((hz - center) / bw).powi(2));
 
-    // Band-limited to 8 kHz whatever the sample rate: a real voice has next to
-    // nothing above that, and it keeps the harmonic sum the same size at 48 kHz.
+    // Band-limited to 8 kHz whatever the rate, as a voice nearly is.
     let ceiling = 8_000.0_f32.min(rate as f32 / 2.0);
     let harmonics: Vec<(f32, f32)> = (1..(ceiling / F0).ceil() as u32)
         .map(|k| k as f32 * F0)
@@ -123,12 +111,8 @@ fn wav_fixture_at(secs: f32, rate: u32, channels: u16) -> Vec<u8> {
     buf.into_inner()
 }
 
-/// Send a request to a JSON endpoint and parse the response.
-///
-/// Parsing failure is a hard failure, not an empty `Value::Null`: every endpoint
-/// reached through here answers in JSON on success *and* on error, so
-/// unparseable bytes mean the handler did something we did not expect — exactly
-/// the thing a test must not quietly turn into "no fields present".
+/// Send a request to a JSON endpoint and parse the response. Every endpoint here
+/// answers JSON, success or error, so unparseable bytes fail the test.
 async fn send(app: &TestApp, req: Request<Body>) -> (StatusCode, Value) {
     let res = app.router.clone().oneshot(req).await.expect("router call");
     let status = res.status();
@@ -147,12 +131,8 @@ async fn send(app: &TestApp, req: Request<Body>) -> (StatusCode, Value) {
     (status, body)
 }
 
-/// Store a take that defines the speaker.
-///
-/// Calibration rather than material, because in these tests the uploaded
-/// fixture *is* the voice: everything derived — the scale, the timbre, the vowel
-/// space — has to come from somewhere, and there is nothing else in the store.
-/// `upload_material` is for the tests that care about the difference.
+/// Store a take that defines the speaker. In these tests the fixture *is* the
+/// voice; `upload_material` is for the tests that care about the difference.
 async fn upload(app: &TestApp, label: &str, wav: Vec<u8>) -> (StatusCode, Value) {
     upload_as(app, label, wav, "calibration").await
 }
@@ -191,8 +171,7 @@ async fn uploading_a_recording_returns_its_voiceprint() {
     assert_eq!(body["voiceprint"]["schemaVersion"], SCHEMA_VERSION);
     assert_eq!(body["voiceprint"]["frame"]["analysisRateHz"], 16_000);
 
-    // The point of the whole pipeline: a voice-shaped input must come back with
-    // populated series, not an empty document that technically validates.
+    // A voice-shaped input must come back with populated series.
     let count = body["voiceprint"]["frame"]["count"].as_u64().unwrap();
     assert!(count > 100, "only {count} frames");
     assert_eq!(
@@ -205,8 +184,7 @@ async fn uploading_a_recording_returns_its_voiceprint() {
         body["meta"]["voicedFraction"]
     );
 
-    // Recording quality reaches the summary, so the take list can flag a bad
-    // take without opening every voiceprint. This fixture sits below the rail.
+    // Recording quality reaches the summary; this fixture sits below the rail.
     assert_eq!(body["meta"]["clipped"], false);
     assert!(body["meta"]["peak"].as_f64().unwrap() < 0.99);
 
@@ -344,11 +322,8 @@ async fn a_traversal_id_is_a_404_not_a_file_read() {
 
 #[tokio::test]
 async fn an_upload_larger_than_the_default_axum_limit_is_accepted() {
-    // Comfortably past axum's 2 MB default, using 48 kHz stereo to get there in
-    // twelve seconds of fixture. The app itself records 48 kHz *mono* (~96 KB/s),
-    // where a real half-minute take is about 2.9 MB — over the default either
-    // way, so without the raised limit every recording would be rejected at the
-    // door. Stereo is used here only to keep the fixture short.
+    // Past axum's 2 MB default, which a real half-minute take (48 kHz mono,
+    // about 2.9 MB) also exceeds. Stereo only keeps the fixture short.
     let app = TestApp::new();
     let wav = wav_fixture_at(12.0, 48_000, 2);
     assert!(
@@ -365,13 +340,8 @@ async fn an_upload_larger_than_the_default_axum_limit_is_accepted() {
     assert_eq!(body["voiceprint"]["frame"]["analysisRateHz"], 16_000);
 }
 
-/// A take whose vowel actually moves, so the speaker profile has a vowel space
-/// with width to it.
-///
-/// The plain fixture holds one vowel throughout, which is correct for what it
-/// tests and useless here: a speaker who never moved their tongue has a vowel
-/// space of zero extent, and calibration rightly refuses to normalise into one.
-/// This alternates two vowels burst by burst — roughly *ah* and *ee*.
+/// A take whose vowel moves — roughly *ah* and *ee* alternating — so the
+/// profile has a vowel space with width to it.
 fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
     const RATE: u32 = 16_000;
     const F0: f32 = 125.0;
@@ -387,11 +357,8 @@ fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
             if (t / 0.5).fract() >= 0.6 {
                 return 0.0;
             }
-            // The last 80 ms of each burst is a fricative rather than a vowel:
-            // band-limited noise where the tone would be. Without it the fixture
-            // is all vowel and all silence, and nothing exercises the consonant
-            // path — a knob that turns consonants off then changes nothing, and
-            // a test that sweeps it passes while proving nothing.
+            // The last 80 ms of each burst is a fricative, so the consonant path
+            // and the knob that controls it have something to act on.
             if (t / 0.5).fract() >= 0.52 {
                 state ^= state << 13;
                 state ^= state >> 17;
@@ -403,23 +370,14 @@ fn wav_fixture_moving_vowel(secs: f32) -> Vec<u8> {
                 return y * 0.12;
             }
 
-            // Alternate vowels every half second, so both ends of the space are
-            // visited often enough to survive the profile's percentile trim.
+            // Alternate vowels every half second, so both ends of the space
+            // survive the profile's percentile trim.
             //
-            // **Three formants, and a source shallower than the textbook.** A
-            // real *ah* measured through this same code gives eight scale
-            // degrees; two formants and a 1/k source give four, of which the
-            // two deepest are the fourth and the fifth — the one pair of
-            // intervals that spans no harmonic lattice, so the mapping built on
-            // that geometry would have nothing to stand on.
-            //
-            // A glottal source really does fall at about 6 dB per octave once
-            // radiation is counted, so the slope here is not physics: it stands
-            // in for everything else that puts energy in a real voice's upper
-            // partials and that a sum of pure sines has none of — jitter,
-            // shimmer, glottal noise, source-tract coupling. Tuned until the
-            // measured partials look like a measured voice's, which is the only
-            // thing this fixture is for.
+            // Three formants and a source shallower than 1/k: two formants and
+            // a 1/k source yield a four-degree scale whose deepest pair is the
+            // fourth and fifth, which spans no lattice. The slope stands in for
+            // what puts energy in a real voice's upper partials (jitter,
+            // shimmer, glottal noise); tuned until the partials look measured.
             let (f1, f2, f3) = if ((t / 0.5) as u32).is_multiple_of(2) {
                 (730.0, 1090.0, 2440.0)
             } else {
@@ -493,8 +451,7 @@ async fn rendering_a_take_returns_playable_audio() {
     assert_eq!(content_type, "audio/wav");
     assert_eq!(&bytes[0..4], b"RIFF");
 
-    // Eight seconds at 44.1 kHz in 16-bit mono is about 700 KB. Anything much
-    // smaller is a header with no music behind it.
+    // Eight seconds at 44.1 kHz, 16-bit mono, is about 700 KB.
     assert!(
         bytes.len() > 400_000,
         "rendered only {} bytes — the score was probably empty",
@@ -504,9 +461,8 @@ async fn rendering_a_take_returns_playable_audio() {
 
 #[tokio::test]
 async fn a_render_is_the_same_every_time() {
-    // Determinism reaches all the way to the output: the same take, the same
-    // calibration and the same mapping must give byte-identical audio, or "the
-    // mapping changed" cannot be told from "the renderer wandered".
+    // Byte-identical, or "the mapping changed" cannot be told from "the
+    // renderer wandered".
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(8.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -544,8 +500,7 @@ async fn the_voice_summary_describes_the_derived_scale() {
         "no fifth in {degrees:?}"
     );
 
-    // The palette is what gives the tone somewhere to travel; an empty one
-    // renders silence, and a single entry renders a colour that never moves.
+    // An empty palette renders silence; one entry, a colour that never moves.
     let palette = body["palette"].as_array().unwrap();
     assert!(!palette.is_empty(), "no spectra to synthesise from");
     assert!(
@@ -565,8 +520,7 @@ async fn asking_for_a_voice_before_recording_anything_explains_itself() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    // The message has to say what to do, since this is the state every new
-    // installation starts in.
+    // Every new installation starts here, so the message must say what to do.
     let message = body["error"].as_str().unwrap_or_default().to_string()
         + body["message"].as_str().unwrap_or_default();
     assert!(
@@ -577,9 +531,7 @@ async fn asking_for_a_voice_before_recording_anything_explains_itself() {
 
 #[tokio::test]
 async fn refuses_to_calibrate_from_material_that_never_held_a_pitch() {
-    // A take with no sustained phonation cannot give a harmonic series, and a
-    // scale derived from one would be arithmetic on noise reported with full
-    // confidence.
+    // No sustained phonation, no harmonic series worth a scale.
     let app = TestApp::new();
     upload(&app, "too-short", wav_fixture_moving_vowel(1.0)).await;
 
@@ -593,9 +545,7 @@ async fn refuses_to_calibrate_from_material_that_never_held_a_pitch() {
 
 #[tokio::test]
 async fn calibration_can_be_pointed_at_a_chosen_take() {
-    // Which vowel a tuning comes from is unsettled, and the automatic choice is
-    // a heuristic. A listener who disagrees has to be able to say so, or the
-    // heuristic quietly becomes the decision.
+    // The automatic choice is a heuristic; a listener must be able to overrule it.
     let app = TestApp::new();
     let (_, first) = upload(&app, "one", wav_fixture_moving_vowel(8.0)).await;
     let (_, second) = upload(&app, "two", wav_fixture_moving_vowel(9.0)).await;
@@ -616,8 +566,7 @@ async fn calibration_can_be_pointed_at_a_chosen_take() {
 
 #[tokio::test]
 async fn an_unknown_calibration_take_is_refused_rather_than_ignored() {
-    // Silently falling back to the automatic choice would render music in a
-    // scale the caller did not ask for and report success.
+    // Falling back to the automatic choice would render a scale not asked for.
     let app = TestApp::new();
     upload(&app, "calibration", wav_fixture_moving_vowel(8.0)).await;
 
@@ -633,10 +582,8 @@ async fn an_unknown_calibration_take_is_refused_rather_than_ignored() {
 
 #[tokio::test]
 async fn a_short_lively_take_does_not_block_a_usable_one() {
-    // Eligibility before preference. A brief take can measure a rich-looking
-    // spectrum, and choosing on richness alone would pick it and then refuse it
-    // for being too short — reporting no music while a good calibration take sat
-    // in the store unexamined.
+    // Eligibility before preference: a brief take can look rich and then be
+    // refused as too short, while a good one goes unexamined.
     let app = TestApp::new();
     upload(&app, "brief", wav_fixture_moving_vowel(1.5)).await;
     upload(&app, "usable", wav_fixture_moving_vowel(9.0)).await;
@@ -652,9 +599,7 @@ async fn a_short_lively_take_does_not_block_a_usable_one() {
 
 #[tokio::test]
 async fn the_two_mappings_render_differently() {
-    // They are alternatives over one voiceprint, and the only way to judge
-    // either is against the other. If they rendered the same bytes, the choice
-    // would be doing nothing.
+    // If they rendered the same bytes, the choice would be doing nothing.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -670,20 +615,15 @@ async fn the_two_mappings_render_differently() {
     assert_ne!(field, notes, "both mappings rendered identical audio");
 }
 
-/// The density at which the fixture's scale stops spanning a plane.
-///
-/// Top of the knob's published range. Which value does it is a property of the
-/// speaker rather than a constant — a real take goes thin somewhere near 0.14 —
-/// so the tests that use this check the scale really did collapse rather than
-/// trusting the number.
+/// The density at which the fixture's scale stops spanning a plane: the top of
+/// the knob's range. Where a real take goes thin depends on the speaker, so the
+/// tests check the scale really collapsed.
 const DENSITY_TOO_HIGH: &str = "density=0.5";
 
 #[tokio::test]
 async fn a_scale_too_thin_for_a_lattice_says_so_rather_than_rendering_silence() {
-    // Without the refusal the failure is silent and looks exactly like a bug:
-    // the lattice mapping declines a scale that points one way only, a score
-    // with no field in it renders to consonants over silence, and the response
-    // is a perfectly good 200 full of nothing.
+    // Without the refusal, a scale that points one way renders consonants over
+    // silence and answers a perfectly good 200.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -697,8 +637,7 @@ async fn a_scale_too_thin_for_a_lattice_says_so_rather_than_rendering_silence() 
     .await;
     assert_eq!(status, StatusCode::OK, "{summary}");
 
-    // Checked rather than assumed, so this cannot quietly become a test of a
-    // scale that was fine all along.
+    // Checked, so this cannot quietly test a scale that was fine all along.
     let interior = summary["degrees"]
         .as_array()
         .unwrap()
@@ -713,9 +652,7 @@ async fn a_scale_too_thin_for_a_lattice_says_so_rather_than_rendering_silence() 
         "the fixture still spans a plane at this density: {summary}"
     );
 
-    // The summary is what the studio reads before it points a player anywhere,
-    // because an `<audio>` element handed a failing URL shows a broken control
-    // and no message.
+    // The studio reads the summary before pointing a player anywhere.
     let refusal = summary["refusal"]
         .as_str()
         .unwrap_or_else(|| panic!("no refusal in {summary}"));
@@ -738,10 +675,8 @@ async fn a_scale_too_thin_for_a_lattice_says_so_rather_than_rendering_silence() 
 
 #[tokio::test]
 async fn only_the_mapping_that_needs_a_plane_is_refused_for_want_of_one() {
-    // The refusal is the lattice's, not the density knob's. Every other mapping
-    // works from a list of degrees and plays whatever is left, so a scale pruned
-    // past a plane must still make music by some other route — otherwise this
-    // reads as the knob having a broken upper half.
+    // Only the lattice refuses; every other mapping plays whatever degrees are
+    // left, or the knob would seem to have a broken upper half.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -771,9 +706,7 @@ async fn only_the_mapping_that_needs_a_plane_is_refused_for_want_of_one() {
 
 #[tokio::test]
 async fn a_scale_that_spans_a_plane_is_not_reported_as_a_problem() {
-    // The other half of the claim, and the one that catches a check left
-    // permanently on: at the default density the lattice plays, and a warning
-    // shown then would train someone to ignore it.
+    // A warning shown at the default density would train someone to ignore it.
     let app = TestApp::new();
     upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
 
@@ -793,8 +726,7 @@ async fn a_scale_that_spans_a_plane_is_not_reported_as_a_problem() {
 
 #[tokio::test]
 async fn an_unknown_mapping_is_refused_rather_than_ignored() {
-    // Silently falling back to the default would render something the caller
-    // did not ask for and report success.
+    // Falling back to the default would render something not asked for.
     let app = TestApp::new();
     upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let (_, body) = send(
@@ -814,8 +746,7 @@ async fn an_unknown_mapping_is_refused_rather_than_ignored() {
 
 #[tokio::test]
 async fn both_mappings_can_sound_together() {
-    // Freedom to combine, not only to choose: a stream of events over a texture
-    // is a third thing, and neither mapping alone can produce it.
+    // Events over a texture is a third thing neither mapping makes alone.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -841,10 +772,8 @@ async fn both_mappings_can_sound_together() {
 
 #[tokio::test]
 async fn every_published_knob_changes_what_is_rendered() {
-    // A knob that silently does nothing is worse than no knob — and the list is
-    // taken from what the API publishes rather than written out here, so a knob
-    // added to the table and never wired into the render fails this test instead
-    // of appearing in the UI as a slider that does nothing.
+    // Taken from what the API publishes, so a knob in the table but not wired
+    // into the render fails here instead of reaching the UI as a dead slider.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -858,10 +787,7 @@ async fn every_published_knob_changes_what_is_rendered() {
     let knobs = controls["knobs"].as_array().unwrap();
     assert!(!knobs.is_empty(), "no knobs published at all");
 
-    // Each knob is swept against the mappings it says it reaches, so a knob
-    // belonging to one mapping is not asked to change another. A claim made in
-    // the table is a claim checked here — and one made falsely fails, which is
-    // the point of letting a knob make it.
+    // Each knob against every mapping it claims to reach, so a false claim fails.
     let every: Vec<String> = controls["mappings"]
         .as_array()
         .unwrap()
@@ -890,13 +816,8 @@ async fn every_published_knob_changes_what_is_rendered() {
                     altered, plain,
                     "{name}={value} changed nothing in {mapping}"
                 ),
-                // A refusal is a change, and the loudest one available: a value
-                // the slider can reach that this mapping has no answer for.
-                // Density does it to the lattice a quarter of the way up, by
-                // pruning the scale past a plane. Accepted only when it explains
-                // itself — an unexplained one is the silence this check exists
-                // to catch — and safe to accept because
-                // `every_published_mapping_can_be_rendered` fails if a mapping
+                // A refusal is a change — accepted only when it explains itself.
+                // `every_published_mapping_can_be_rendered` fails a mapping that
                 // refuses everything.
                 StatusCode::UNPROCESSABLE_ENTITY => {
                     let body: Value = serde_json::from_slice(&altered)
@@ -915,16 +836,10 @@ async fn every_published_knob_changes_what_is_rendered() {
 
 #[tokio::test]
 async fn every_setting_a_slider_can_reach_either_sounds_or_says_why_not() {
-    // `density` past about a quarter of its travel prunes this speaker's scale
-    // below a plane, and a lattice mapping that answered with a perfectly good
-    // 200 containing no field would be audible as nothing and reported as
-    // success. The test above sweeps one value per
-    // knob, which is the wrong shape for this: what a published range promises
-    // is that *every* position on the slider means something, and the ends are
-    // exactly where nobody drags by hand.
-    //
-    // Two acceptable answers per position, and the whole point is that there is
-    // no third: it makes sound, or it refuses and says which setting to move.
+    // A published range promises that *every* position means something, and
+    // the ends are where nobody drags by hand. Two acceptable answers per
+    // position, and no third: it makes sound, or it refuses and says which
+    // setting to move.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -941,8 +856,7 @@ async fn every_setting_a_slider_can_reach_either_sounds_or_says_why_not() {
         .map(|m| m["name"].as_str().unwrap().to_string())
         .collect();
 
-    // Tallied so this cannot pass by refusing everything, which would satisfy
-    // the letter of the check and leave an app that makes no sound.
+    // Tallied, so this cannot pass by refusing everything.
     let mut sounded = 0usize;
 
     for knob in controls["knobs"].as_array().unwrap() {
@@ -957,9 +871,8 @@ async fn every_setting_a_slider_can_reach_either_sounds_or_says_why_not() {
 
         for value in ends_and_middle(knob) {
             for mapping in against {
-                // The score rather than the render: it is the same decision made
-                // by the same code, without the seconds of synthesis after it,
-                // and it is the thing that says whether anything sounds.
+                // The score rather than the render: the same decision without
+                // the seconds of synthesis.
                 let (status, view) = send(
                     &app,
                     Request::get(format!(
@@ -992,13 +905,9 @@ async fn every_setting_a_slider_can_reach_either_sounds_or_says_why_not() {
     );
 }
 
-/// Whether a score has anything in it a listener would hear.
-///
-/// Either material counts, because the mappings make different ones — a texture
-/// is heard through its gains and a note mapping through its events. The
-/// consonants deliberately do not count: they are carried by every mapping, so a
-/// pitched layer that fell silent would hide behind them, which is precisely how
-/// the lattice failure sounded.
+/// Whether a score has anything a listener would hear: a texture's gains or a
+/// note mapping's events. Consonants do not count — every mapping carries them,
+/// so a pitched layer that fell silent would hide behind them.
 fn sounds(view: &Value) -> bool {
     let gains = view["gains"].as_array().unwrap();
     let audible = gains.iter().any(|voice| {
@@ -1011,12 +920,8 @@ fn sounds(view: &Value) -> bool {
     audible || !view["events"].as_array().unwrap().is_empty()
 }
 
-/// Both ends of a knob's published range, and one position between them.
-///
-/// The ends because they are what the range promises and what a slider dragged
-/// to its stop produces; the middle because a range can also fail in the part
-/// everyone does use. All three land on the step grid, which is the only place
-/// the UI can put a value.
+/// Both ends of a knob's published range and one position between, on the step
+/// grid: the ends are what the range promises, the middle what everyone uses.
 fn ends_and_middle(knob: &Value) -> Vec<f32> {
     let (min, max, step) = (
         knob["min"].as_f64().unwrap() as f32,
@@ -1029,11 +934,8 @@ fn ends_and_middle(knob: &Value) -> Vec<f32> {
     values
 }
 
-/// A value a quarter of the way from a knob's default toward its far end.
-///
-/// Far enough to be audible, near enough that it stays somewhere a person would
-/// plausibly leave the slider — so a knob failing the test above has failed at a
-/// setting someone would really use, not at an extreme nothing was built for.
+/// A value a quarter of the way from a knob's default toward its far end:
+/// audible, and somewhere a person would plausibly leave the slider.
 fn a_quarter_from_default(knob: &Value) -> f32 {
     let (min, max, step, default) = (
         knob["min"].as_f64().unwrap() as f32,
@@ -1053,9 +955,7 @@ fn a_quarter_from_default(knob: &Value) -> f32 {
 
 #[tokio::test]
 async fn the_scale_shown_is_the_scale_that_sounds() {
-    // The summary is what someone reads while deciding whether they like the
-    // tuning. Reporting the derived degrees beside a render that snapped them to
-    // equal temperament would misrepresent the one claim this project makes.
+    // The scale shown must be the scale the render plays.
     let app = TestApp::new();
     upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
 
@@ -1080,8 +980,7 @@ async fn the_scale_shown_is_the_scale_that_sounds() {
 
 #[tokio::test]
 async fn every_published_mapping_can_be_rendered() {
-    // Same contract in the other direction: the UI offers exactly what the
-    // render route accepts, so a listed mapping cannot 400.
+    // The UI offers exactly what the render accepts, so a listed mapping cannot 400.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -1101,9 +1000,8 @@ async fn every_published_mapping_can_be_rendered() {
         assert_eq!(status, StatusCode::OK, "{name} was refused");
         assert!(!audio.is_empty(), "{name} rendered nothing");
 
-        // ...and rendered the pitched material, not only the consonants. A
-        // mapping that quietly produces no tones still answers 200 with a file
-        // of the right length, which is a way for one to be broken and listed.
+        // ...and made tones, not only consonants: a toneless render still has
+        // the right length.
         let (_, score) = send(
             &app,
             Request::get(format!("/api/recordings/{id}/score?mapping={name}"))
@@ -1135,9 +1033,7 @@ async fn taking_no_knobs_renders_the_defaults() {
 
 #[tokio::test]
 async fn the_score_describes_the_render_it_shares_a_url_with() {
-    // The chart drawn from this sits beside a player pointed at the render. A
-    // score that described a different set of parameters would be worse than no
-    // chart at all, because the chart is the part someone would believe.
+    // The chart must describe the audio at the matching URL.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -1151,8 +1047,7 @@ async fn the_score_describes_the_render_it_shares_a_url_with() {
     .await;
     assert_eq!(status, StatusCode::OK, "{plain}");
 
-    // Every per-frame stream is the same length, or they cannot be drawn on one
-    // time axis — which is the only thing this endpoint exists for.
+    // Every stream the same length, or they cannot share a time axis.
     let points = plain["colour"].as_array().unwrap().len();
     assert!(points > 0, "no colour stream");
     assert_eq!(plain["breath"].as_array().unwrap().len(), points);
@@ -1165,8 +1060,7 @@ async fn the_score_describes_the_render_it_shares_a_url_with() {
         plain["voices"].as_array().unwrap().len()
     );
 
-    // The time axis has to be real, or a click on the chart seeks to the wrong
-    // second.
+    // The time axis must be real, or a click seeks to the wrong second.
     let step = plain["stepS"].as_f64().unwrap();
     let duration = plain["durationS"].as_f64().unwrap();
     let spanned = step * points as f64;
@@ -1175,8 +1069,7 @@ async fn the_score_describes_the_render_it_shares_a_url_with() {
         "{points} points of {step}s span {spanned}s against a {duration}s take"
     );
 
-    // And the knobs have to reach it, or the two sides of a comparison are the
-    // same picture twice.
+    // The knobs must reach it, or both sides are the same picture.
     let (_, bound) = send(
         &app,
         Request::get(format!("/api/recordings/{id}/score?bind=0"))
@@ -1192,8 +1085,7 @@ async fn the_score_describes_the_render_it_shares_a_url_with() {
 
 #[tokio::test]
 async fn the_score_never_exceeds_what_a_chart_can_draw() {
-    // A 46-second take is thousands of frames per stream across a dozen streams.
-    // Sending all of it costs megabytes to draw sub-pixel detail nobody sees.
+    // Thousands of frames per stream would be megabytes of sub-pixel detail.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(20.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -1213,9 +1105,7 @@ async fn the_score_never_exceeds_what_a_chart_can_draw() {
 
 #[tokio::test]
 async fn a_note_mapping_reports_its_notes_and_no_streams() {
-    // `notes` has no per-frame material at all. Empty series is the honest shape;
-    // a field synthesised from the notes so the chart has something to draw would
-    // be the chart inventing its own subject.
+    // `notes` has no per-frame material: empty series, not invented ones.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -1238,10 +1128,8 @@ async fn a_note_mapping_reports_its_notes_and_no_streams() {
 
 #[tokio::test]
 async fn audio_can_be_seeked_in() {
-    // An `<audio>` element only moves its playhead to a position it can fetch,
-    // and without this it has no way to ask for one — so `currentTime = 27.5`
-    // is dropped in silence and the compare page's jump-to-the-difference
-    // button appears to do nothing.
+    // Without `Accept-Ranges` an `<audio>` element cannot seek, and the compare
+    // page's jump button does nothing.
     let app = TestApp::new();
     let (_, body) = upload(&app, "calibration", wav_fixture_moving_vowel(9.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -1299,8 +1187,7 @@ async fn a_range_request_is_answered_with_that_range() {
 
     let part = res.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(part.len(), 1000);
-    // The bytes served have to be the bytes asked for, or a seek lands somewhere
-    // other than where the chart said it would.
+    // The bytes served must be the bytes asked for, or a seek lands elsewhere.
     assert_eq!(&part[..], &whole[1000..2000]);
 }
 
@@ -1312,8 +1199,7 @@ async fn a_range_past_the_end_is_refused_rather_than_truncated_wrongly() {
     let path = format!("/api/recordings/{id}/render");
     let (_, _, whole) = fetch(&app, &path).await;
 
-    // A start beyond the file has no sensible partial answer; the whole file is
-    // the safe response and is what an element recovers from.
+    // A start past the end gets the whole file, which an element recovers from.
     let res = app
         .router
         .clone()
@@ -1346,15 +1232,9 @@ async fn a_range_past_the_end_is_refused_rather_than_truncated_wrongly() {
 
 #[tokio::test]
 async fn other_peoples_singing_does_not_shape_the_speaker() {
-    // **The bug this whole distinction exists to prevent.** A singer uploads
-    // other voices to render, and pooling them into the profile measures a vowel
-    // space, a pitch range and a timbre belonging to nobody. The project's claim
-    // is that *this* speaker's spectrum gives *this* speaker's scale, and it is
-    // worth nothing if the spectrum is a crowd.
-    //
-    // Two takes with genuinely different anatomy: one is the speaker, the other
-    // is somebody else. The derived voice must not move when the stranger
-    // arrives.
+    // Other people's singing, pooled into the profile, would describe an
+    // anatomy belonging to nobody. The derived voice must not move when a
+    // stranger's take arrives.
     let app = TestApp::new();
     upload(&app, "vowel-ah", wav_fixture_moving_vowel(8.0)).await;
     let (status, before) = send(
@@ -1384,9 +1264,7 @@ async fn other_peoples_singing_does_not_shape_the_speaker() {
 
 #[tokio::test]
 async fn a_store_with_nothing_but_material_says_to_calibrate() {
-    // Refusing is right and the message has to say what to do about it. The
-    // alternative — deriving a voice from whatever happens to be lying around —
-    // is the failure above, reported as success.
+    // Refusing is right, and the message must say what to do.
     let app = TestApp::new();
     upload_material(&app, "somebody-else", wav_fixture_moving_vowel(8.0)).await;
 
@@ -1405,14 +1283,12 @@ async fn a_store_with_nothing_but_material_says_to_calibrate() {
 
 #[tokio::test]
 async fn a_stored_take_can_be_told_what_it_is_for() {
-    // Settable only at upload, a take could never *become* a calibration one,
-    // so a store of takes that predate roles would hold the guided vowels and
-    // refuse to derive a voice from them, short of recording them again.
+    // A take stored as material must be able to become a calibration one.
     let app = TestApp::new();
     let (_, body) = upload_material(&app, "vowel-ah", wav_fixture_moving_vowel(8.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
 
-    // Refuses first, which is what makes the rest of this test mean anything.
+    // Refuses first, which is what makes the rest of the test mean anything.
     let (status, _) = send(
         &app,
         Request::get("/api/voice").body(Body::empty()).unwrap(),
@@ -1449,10 +1325,8 @@ async fn a_stored_take_can_be_told_what_it_is_for() {
 
 #[tokio::test]
 async fn saying_what_a_take_is_for_does_not_touch_the_audio() {
-    // Why this is safe to expose at all: the role lives in the metadata, the
-    // voiceprint is a pure function of the audio, and neither the audio nor any
-    // measurement taken from it is a thing this endpoint can reach. A render is
-    // the sharpest test available — it runs the whole chain.
+    // Safe to expose because the role is metadata and the voiceprint a pure
+    // function of the audio; a render runs the whole chain to prove it.
     let app = TestApp::new();
     let (_, body) = upload(&app, "vowel-ah", wav_fixture_moving_vowel(8.0)).await;
     let id = body["meta"]["id"].as_str().unwrap().to_string();
@@ -1491,12 +1365,8 @@ async fn a_role_set_on_an_unknown_take_is_a_404() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-/// A held vowel with the given formants, continuous rather than in bursts.
-///
-/// The corner steps ask for a sound to be held, so the fixture holds it: the
-/// burst pattern the other fixtures use is there to give onsets something to
-/// find, and here it would spend most of the take on silence carrying no
-/// formants at all.
+/// A held vowel with the given formants, continuous rather than in bursts —
+/// bursts would spend most of the take on silence with no formants.
 fn wav_fixture_held_vowel(secs: f32, f1: f32, f2: f32) -> Vec<u8> {
     const RATE: u32 = 16_000;
     const F0: f32 = 125.0;
@@ -1507,9 +1377,7 @@ fn wav_fixture_held_vowel(secs: f32, f1: f32, f2: f32) -> Vec<u8> {
         .map(|hz| {
             (
                 hz,
-                // Same shallow source as the moving-vowel fixture, for the same
-                // reason recorded there: a 1/k sum of sines is less of a voice
-                // than any voice, and the formant fit is what reads it.
+                // The moving-vowel fixture's shallow source, for its reason.
                 (F0 / hz).sqrt()
                     * (formant(hz, f1, 90.0)
                         + 0.7 * formant(hz, f2, 110.0)
@@ -1546,8 +1414,7 @@ fn wav_fixture_held_vowel(secs: f32, f1: f32, f2: f32) -> Vec<u8> {
 #[tokio::test]
 async fn the_speakers_own_vowel_corners_come_from_the_steps_they_recorded() {
     let app = TestApp::new();
-    // Labelled as the guided flow labels them — the label is what says which
-    // vowel this is, and nothing in the audio is marked.
+    // Labelled as the guided flow labels them; the label says which vowel.
     upload(&app, "vowel-ee", wav_fixture_held_vowel(3.0, 300.0, 2300.0)).await;
     upload(&app, "vowel-ah", wav_fixture_held_vowel(3.0, 730.0, 1100.0)).await;
 
@@ -1569,11 +1436,9 @@ async fn the_speakers_own_vowel_corners_come_from_the_steps_they_recorded() {
     assert_eq!(corners[1]["step"], "vowel-ah");
     assert_eq!(corners[1]["corner"], "open");
 
-    // The measurement, asserted as the relation between the two vowels rather
-    // than as absolute frequencies: what has to hold is that this speaker's *ee*
-    // comes out closer and fronter than their *ah*, which is the whole content
-    // of a vowel chart. Exact centres would be asserting the formant tracker's
-    // accuracy, which `formant_real.rs` is for.
+    // Asserted as the relation between the vowels — *ee* closer and fronter than
+    // *ah* — not exact centres, which would test the formant tracker
+    // (`formant_real.rs`).
     let (ee_f1, ee_f2) = (
         corners[0]["f1Hz"].as_f64().unwrap(),
         corners[0]["f2Hz"].as_f64().unwrap(),
@@ -1597,9 +1462,8 @@ async fn the_speakers_own_vowel_corners_come_from_the_steps_they_recorded() {
 #[tokio::test]
 async fn a_take_that_names_no_step_places_no_corner() {
     let app = TestApp::new();
-    // Marked as calibration, so it pools into the profile — but its label names
-    // no step, which is what an uploaded file looks like. It cannot claim to be
-    // a particular vowel, and a chart must not show it as one.
+    // Calibration, but its label names no step, as an uploaded file's does: it
+    // pools into the profile and must not be shown as a vowel.
     upload(
         &app,
         "some-recording.wav",
@@ -1623,9 +1487,8 @@ async fn a_take_that_names_no_step_places_no_corner() {
 #[tokio::test]
 async fn corners_are_reported_from_takes_too_short_to_derive_a_scale_from() {
     let app = TestApp::new();
-    // Under MIN_CALIBRATION_FRAMES: no scale can be derived from this store, and
-    // /api/voice says so. The corners are still measured — which is the reason
-    // they are not a field on the voice summary.
+    // Too short for a scale, so `/api/voice` refuses; the corners are still
+    // measured, which is why they are not part of the voice summary.
     upload(&app, "vowel-ee", wav_fixture_held_vowel(1.6, 300.0, 2300.0)).await;
 
     let (status, _) = send(

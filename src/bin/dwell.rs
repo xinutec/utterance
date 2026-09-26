@@ -1,22 +1,10 @@
-//! How long a chord actually rings, measured across every take in the store.
+//! How long a chord actually rings, across every take in the store.
 //!
-//! **Why durations and not a fraction.** The Tonnetz mapping was built to make
-//! the derived tuning audible, and the perceptual threshold is a single chord
-//! ringing for roughly a second, because that is how long a 5–14 Hz beat
-//! between two voices' partials needs to establish. The *fraction* of a take
-//! spent holding one chord cannot see the difference between eight seconds of
-//! held harmony and eighty chords of a hundred milliseconds, and only the first
-//! of those is audible as a tuning.
-//!
-//! So this measures *durations*, one per ring, and reports the distribution.
-//! It reads [`utterance_mapping::tonnetz::harmonic_path`] — the mapping's own
-//! walk — rather than reimplementing it, because a tool that drifted from the
-//! code would report on a mapping nobody is listening to.
-//!
-//! **Silence splits a ring.** A run of frames is only counted while the take is
-//! actually sounding: if the voice stops and resumes on the same triangle, the
-//! ear heard two chords, not one held through the gap. Without that, a pause
-//! would be scored as the longest chord in the piece.
+//! Durations, one per ring, not the fraction of a take spent holding a chord:
+//! a tuning takes about a second of stable chord to hear, and a fraction cannot
+//! tell eight held seconds from eighty flickers. Reads the mapping's own walk
+//! ([`utterance_mapping::tonnetz::harmonic_path`]) so it cannot drift from it.
+//! Silence splits a ring: stopping and resuming on one triangle is two chords.
 //!
 //! ```text
 //! cargo run --bin dwell             # the default hold, plus a sweep
@@ -32,20 +20,13 @@ use utterance_mapping::lattice::Triangle;
 use utterance_mapping::params::Params;
 use utterance_mapping::tonnetz;
 
-/// How far below a take's loudest frame still counts as sounding.
-///
-/// 40 dB down is inaudible in any room this will be played in, and the field
-/// keeps its lowest voice at a floor of 0.02 forever — so without a gate every
-/// take would score one enormous chord held through its own silence.
+/// How far below a take's loudest frame still counts as sounding: 40 dB. The
+/// field never quite falls silent, so without a gate a pause is one long chord.
 const PEAK_DROP_DB: f32 = 40.0;
 
-/// How long one chord must ring before its tuning is perceptible, in seconds.
-///
-/// From the `bind` measurement (`beating.rs`): the five strongest partial
-/// coincidences beat at 4.8–14.3 Hz when the tuning is equal-tempered and at
-/// 0.01–0.26 Hz when it is the speaker's own, and telling those apart takes
-/// about a second of stable chord. This is the number the whole question turns
-/// on, which is why it is named here rather than written into a comparison.
+/// How long one chord must ring before its tuning is perceptible, in seconds:
+/// the tempered and derived beats `beating.rs` measured (4.8–14.3 Hz against
+/// 0.01–0.26 Hz) take about a second of stable chord to tell apart.
 const RING_S: f32 = 1.0;
 
 /// One take's rings at one setting.
@@ -65,11 +46,9 @@ impl Dwells {
         self.durations[at]
     }
 
-    /// Share of sounding time inside rings long enough to have a tuning.
-    ///
-    /// Weighted by duration rather than counted, because the question is how
-    /// much of what someone hears is a held chord — and a hundred flickers and
-    /// one long ring are not half-and-half to a listener.
+    /// Share of sounding time inside rings long enough to have a tuning —
+    /// weighted by duration, since a hundred flickers and one long ring are not
+    /// half-and-half to a listener.
     fn ring_share(&self) -> f32 {
         if self.sounding_s <= 0.0 {
             return 0.0;
@@ -120,9 +99,8 @@ fn main() -> anyhow::Result<()> {
         calibrated.voice.tuning.degrees.len()
     );
 
-    // The published range's ends and its middle, plus the default — the same
-    // discipline the knob tests use, because a knob is judged by what it does
-    // across its travel and not at the setting someone happened to leave it on.
+    // The range's ends and middle plus the default: a knob is judged across its
+    // travel.
     let holds: Vec<f32> = if let Some(one) = std::env::args().nth(1) {
         vec![one.parse()?]
     } else {
@@ -134,10 +112,8 @@ fn main() -> anyhow::Result<()> {
         set.into_iter().map(|h| h as f32 / 1000.0).collect()
     };
 
-    // The second knob that decides how long a chord rings, and the one the
-    // sweep above cannot reach: `hold` is hysteresis in space and `settle` is
-    // hysteresis in time, so a mouth that crosses a boundary and comes straight
-    // back is invisible to the first and caught by the second.
+    // `settle` catches what `hold` cannot: a mouth that crosses and comes
+    // straight back.
     let settle: f32 = match std::env::args().nth(2) {
         Some(s) => s.parse()?,
         None => Params::default().settle,

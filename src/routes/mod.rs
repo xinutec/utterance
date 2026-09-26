@@ -17,40 +17,21 @@ use crate::http_trace;
 use crate::state::AppState;
 use crate::webauth::{self, WebAuth};
 
-/// Largest accepted upload.
-///
-/// Half a minute of 48 kHz 16-bit stereo is under 6 MB; the headroom covers a
-/// long take at 96 kHz without inviting anyone to post a film. axum's 2 MB
-/// default would reject a normal recording.
+/// Largest accepted upload: roomy enough for a long take at 96 kHz; axum's 2 MB
+/// default would reject an ordinary one.
 const MAX_UPLOAD_BYTES: usize = 64 * 1024 * 1024;
 
 /// How long a static response may be reused without asking again.
 ///
-/// ⚠ **`index.html` MUST REVALIDATE.** With no `Cache-Control` at all a client
-/// falls back to HEURISTIC freshness, roughly a tenth of the document's age, and
-/// may keep it for days without ever asking. The document names the
-/// content-hashed bundle, so the new `main-*.js` is never fetched either and a
-/// deploy is invisible: the app keeps running a build behind, with nothing but
-/// a missing feature as the symptom.
-///
-/// `no-cache` means "ask first", not "never keep" — the `ETag` still turns the
-/// usual case into a 304 with no body.
-///
-/// Everything else Angular emits carries a content hash in its NAME, so a new
-/// build is a new URL and the old one can never be wrong. Those are the one
-/// kind of response `immutable` is honestly available for.
-///
-/// Generic over the body: `ServeDir`'s response body type depends on what it
-/// falls back to, and this predicate only ever reads a header.
+/// ⚠ **`index.html` must revalidate.** Without `Cache-Control` a client may keep
+/// it for days, and since it names the content-hashed bundle, a deploy stays
+/// invisible. `no-cache` means "ask first"; the `ETag` makes that a cheap 304.
+/// Everything else Angular emits has a hash in its name, so `immutable` is
+/// honest there. Generic over the body, which is never read.
 fn cache_control_for<B>(res: &Response<B>) -> Option<HeaderValue> {
-    // ⚠ **A 404 is not an asset.** `SetResponseHeaderLayer::overriding` stamps
-    // whatever the service returned, and a missing file answered with a year of
-    // `immutable` is a client that will not ask for that name again this year.
-    // Only a response that carried something may say how long it keeps.
-    //
-    // ⚠ NOT `!is_success()`. That excludes **304 Not Modified**, which must
-    // carry the headers a 200 would so the client can refresh what it already
-    // holds; without them every revalidation becomes a full re-fetch.
+    // ⚠ A 404 is not an asset: a year of `immutable` on a missing file stops the
+    // client asking again. But not `!is_success()`, which would strip the
+    // headers from a 304 and turn every revalidation into a full fetch.
     if res.status().is_client_error() || res.status().is_server_error() {
         return None;
     }
@@ -66,16 +47,9 @@ fn cache_control_for<B>(res: &Response<B>) -> Option<HeaderValue> {
     })
 }
 
-/// Serve the app's page for a client-side ROUTE, and 404 anything that plainly
-/// named a file.
-///
-/// ⚠ **A missing FILE must not be handed the page, and this mistake is
-/// invisible**: the wrong answer is a `200`, so a browser that asked for a
-/// woff2 and got HTML renders broken icons and reports nothing anywhere.
-///
-/// The test is a dot in the last path segment. It is a heuristic, and the
-/// alternative — enumerating the bundle's own asset names — would have to be
-/// rebuilt whenever `ng build` changes a hash.
+/// Serve the app's page for a client-side route, and 404 anything that named a
+/// file — a font answered with HTML is a silent 200. A file is a name with a
+/// dot in its last segment; the heuristic beats listing the hashed assets.
 fn spa(index: &str, path: &str) -> axum::response::Response {
     use axum::response::IntoResponse as _;
 
@@ -89,8 +63,7 @@ fn spa(index: &str, path: &str) -> axum::response::Response {
     match std::fs::read_to_string(index) {
         Ok(page) => axum::response::Html(page).into_response(),
         Err(error) => {
-            // STATIC_DIR set with no index is a misconfigured deployment, and
-            // saying so beats serving an empty page that looks like the app.
+            // A misconfigured deployment says so rather than serving a blank app.
             tracing::error!("the app's index could not be read: {error}");
             (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "no index").into_response()
         }
@@ -101,9 +74,8 @@ pub fn router(state: AppState) -> Router {
     router_with(state, WebAuth::from_env().map(Arc::new))
 }
 
-/// The router with sign-in decided explicitly rather than read from the
-/// environment, so a test can raise the gate without setting process-wide state
-/// that every other test in the binary would then be running inside.
+/// The router with sign-in passed in rather than read from the environment, so
+/// a test's gate does not leak into the others.
 pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
     let api = Router::new()
         .route("/recordings", post(api::upload).get(api::list))
@@ -118,8 +90,7 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         .route("/telemetry", post(telemetry::record))
         .layer(DefaultBodyLimit::max(MAX_UPLOAD_BYTES));
 
-    // Applied to the API router alone, so the health check the cluster probes
-    // and the sign-in routes themselves stay reachable without a session.
+    // The API alone, so `/healthz` and the sign-in routes stay open.
     let api = match &auth {
         Some(gate) => {
             let gate = gate.clone();
@@ -130,36 +101,29 @@ pub fn router_with(state: AppState, auth: Option<Arc<WebAuth>>) -> Router {
         None => api,
     };
 
-    // **Outside the gate, and that ordering is the whole point.** A later
-    // `layer` wraps the earlier ones, so tracing added before the gate sees
-    // only requests the gate let through — and a refused request is exactly the
-    // one worth a line.
+    // Outside the gate: a later `layer` wraps earlier ones, and a refused
+    // request is the one most worth a line.
     let api = api.layer(http_trace::layer());
 
     let mut app = Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .nest("/api", api);
 
-    // Only when the gate is up: with no sign-in configured there is nothing for
-    // `/login` to do, and a route that redirects to a Nextcloud this deployment
-    // never heard of is worse than a 404.
+    // Only when the gate is up, and traced: a sign-in that fails silently is
+    // undiagnosable.
     if let Some(gate) = auth {
-        // Traced too, and the reason this module exists: a sign-in that fails
-        // silently is the failure nobody can diagnose from the outside.
         app = app.merge(webauth::routes(gate).layer(http_trace::layer()));
     }
 
-    // Serve the built Angular bundle from the same origin, falling back to
-    // index.html so client-side routes resolve on reload. API-only when unset,
-    // which is the dev arrangement: ng serve holds the app and proxies here.
+    // The built bundle from the same origin, with index.html for client routes.
+    // Unset in dev, where ng serve holds the app and proxies here.
     if let Some(dir) = state.cfg.static_dir.clone() {
         let index = dir.join("index.html").to_string_lossy().into_owned();
         let serve = ServeDir::new(&dir).fallback(get(move |uri: axum::http::Uri| {
             let index = index.clone();
             async move { spa(&index, uri.path()) }
         }));
-        // ⚠ The layer wraps the STATIC SERVICE ALONE. Hooking every route would
-        // stamp a year of `immutable` onto API JSON.
+        // The header layer wraps the static service alone, not the API.
         app = app.fallback_service(
             ServiceBuilder::new()
                 .layer(SetResponseHeaderLayer::overriding(

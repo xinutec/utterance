@@ -3,13 +3,8 @@ import type { CalibrationStep } from "./CalibrationStep";
 import type { Corner } from "./Corner";
 
 /**
- * Where one of this speaker's held vowels actually sat.
- *
- * A wire type rather than `utterance_analysis::speaker::VowelCorner` re-exported,
- * for the reason `ScaleDegree` is one: the analysis crate carries no
- * serialisation for a UI. It also carries the step, so a chart can label the
- * point with the vowel the person was asked for rather than with a corner's
- * technical name — "ee" is what they said; "close front" is what it means.
+ * Where one of this speaker's held vowels actually sat, with the step it was
+ * recorded for — "ee" is what the person was asked to say.
  */
 export type SpeakerCorner = { step: CalibrationStep, corner: Corner, f1Hz: number, f2Hz: number, 
 /**

@@ -1,37 +1,19 @@
 //! Whether there is anything to hear when the tuning changes.
 //!
-//! **The claim under test.** `bind` is supposed to work by making partials of
-//! different voices *lock* rather than *beat*. Two partials a few hertz apart do
-//! not sound like two tones: they sound like one tone whose loudness pulses at
-//! their difference frequency. So the whole effect of `bind` — if it has one —
-//! is an amplitude modulation, and an amplitude modulation is something a
-//! machine can measure in the rendered audio.
+//! `bind` should make partials of different voices *lock* rather than *beat*,
+//! and beating is an amplitude modulation at the difference frequency — so it
+//! can be measured in the rendered **audio**, which the score cannot show. This
+//! renders one take twice and compares the slow modulation in each.
 //!
-//! This renders the same take twice and compares how much slow modulation each
-//! carries. It measures the **audio**, not the score: everything before this
-//! measured frequencies the synthesiser was *asked* for, which cannot show
-//! beating at all, because beating is what happens when two of those frequencies
-//! are added together.
+//! It can falsify audibility but not establish it: no difference means nothing
+//! to hear; a difference still has to clear someone's threshold. The analysis
+//! bands are ERB-spaced and wide on purpose — beating shows only when both
+//! partials share a band, as they share a place on the cochlea.
 //!
-//! **What it can and cannot settle, which is the point of running it.** The two
-//! directions are not symmetric:
-//!
-//! - *No modulation difference* → there is nothing to hear. Decisive, and no
-//!   ears required: the mechanism does not work, rather than the listener
-//!   failing to notice.
-//! - *A modulation difference* → something is physically there, and whether it
-//!   is above anyone's threshold is still a listening question.
-//!
-//! So this can falsify audibility but not establish it — which is the direction
-//! worth having when listeners report "very little difference".
-//!
-//! **Why the analysis bands are wide.** Beating appears as modulation only when
-//! the two partials fall inside *one* band — resolve them into separate bins and
-//! each looks like a steady tone and the pulsing vanishes. That is also how the
-//! ear works, which is why the bands here are ERB-spaced rather than uniform:
-//! the measurement has to be as blunt as a cochlea or it will not see what a
-//! cochlea sees.
-//!
+//! ```text
+//! cargo run --bin beating                          # the sung take, default hold
+//! cargo run --bin beating -- 0356e27885ef254c 0.9  # a take, and a hold
+//! ```
 //! ```text
 //! cargo run --bin beating                          # the sung take, default hold
 //! cargo run --bin beating -- 0356e27885ef254c 0.9  # a take, and a hold
@@ -46,28 +28,17 @@ use utterance_mapping::mapping::{CONTINUOUS, Mapping};
 use utterance_mapping::params::Params;
 use utterance_realisation::synth::{self, RENDER_RATE};
 
-/// Samples per analysis window.
-///
-/// 512 at 44.1 kHz is 12 ms, giving bins about 86 Hz wide. Chosen to be
-/// *coarse*: two partials 16 cents apart near 500 Hz sit around 5 Hz apart, and
-/// they have to land in the same bin for their sum to pulse. A longer window
-/// resolves them into two steady tones and reports no beating at all — which
-/// would be an artefact of the ruler, not a fact about the sound.
+/// Samples per analysis window: 12 ms, bins about 86 Hz wide. Coarse on purpose,
+/// so partials a few hertz apart share a bin and their sum pulses; a longer
+/// window would resolve them into steady tones.
 const WINDOW: usize = 512;
 
-/// Samples between one window and the next.
-///
-/// A quarter of the window, so the envelope is sampled at about 344 Hz — far
-/// above the 20 Hz ceiling below, with room to spare for the modulation FFT.
+/// Samples between windows: the envelope is sampled at about 344 Hz.
 const HOP: usize = 128;
 
-/// Slowest and fastest modulation counted as beating, in hertz.
-///
-/// From the measurement this exists to check: at `bind = 1` the five strongest
-/// partial coincidences beat at 0.01–0.26 Hz, and at `bind = 0` the same ones
-/// beat at 4.8–14.3 Hz. The floor is above the first of those on purpose — a
-/// beat slower than 2 Hz is heard as the chord being steady — and the ceiling is
-/// where beating stops being a pulse and starts being roughness.
+/// Slowest and fastest modulation counted as beating, in hertz. Measured: at
+/// `bind = 1` the strongest coincidences beat at 0.01–0.26 Hz, at 0 at 4.8–14.3.
+/// Below 2 Hz a chord sounds steady; above 20 a beat becomes roughness.
 const BEAT_LO_HZ: f32 = 2.0;
 const BEAT_HI_HZ: f32 = 20.0;
 
@@ -75,10 +46,8 @@ const BEAT_HI_HZ: f32 = 20.0;
 const BAND_LO_HZ: f32 = 60.0;
 const BAND_HI_HZ: f32 = 8000.0;
 
-/// Equivalent rectangular bandwidth at a centre frequency, in hertz.
-///
-/// Glasberg and Moore's fit. Bands this wide are what makes two nearby partials
-/// share one channel and so beat, rather than being resolved into two tones.
+/// Equivalent rectangular bandwidth at a centre frequency, in hertz (Glasberg
+/// and Moore).
 fn erb(hz: f32) -> f32 {
     24.7 * (0.00437 * hz + 1.0)
 }
@@ -100,8 +69,7 @@ fn envelopes(samples: &[f32], bands: &[(f32, f32)]) -> Vec<Vec<f32>> {
     let mut planner = FftPlanner::<f32>::new();
     let fft = planner.plan_fft_forward(WINDOW);
 
-    // Hann, so a partial sitting between two bins does not smear across the
-    // spectrum and put energy in bands it is nowhere near.
+    // Hann, so a partial between bins does not leak into distant bands.
     let window: Vec<f32> = (0..WINDOW)
         .map(|i| {
             let x = std::f32::consts::PI * i as f32 / WINDOW as f32;
@@ -125,21 +93,15 @@ fn envelopes(samples: &[f32], bands: &[(f32, f32)]) -> Vec<Vec<f32>> {
             let first = (lo / bin_hz).floor() as usize;
             let last = ((hi / bin_hz).ceil() as usize).min(WINDOW / 2);
             let energy: f32 = (first..last).map(|k| buffer[k].norm_sqr()).sum();
-            // Amplitude rather than power, because that is what modulates
-            // linearly with a beat: two equal partials in phase sum to twice the
-            // amplitude and out of phase to nothing.
+            // Amplitude, not power: amplitude is what a beat modulates linearly.
             out[b].push(energy.sqrt());
         }
     }
     out
 }
 
-/// How deeply one band's envelope pulses in the beating range, 0..1-ish.
-///
-/// Normalised by the band's own mean, so this is a modulation *depth* rather
-/// than a loudness: a quiet band that pulses fully counts as much as a loud one
-/// that does, which is roughly how hearing treats it and is certainly how the
-/// question is posed.
+/// How deeply one band's envelope pulses in the beating range, 0..1-ish —
+/// normalised by the band's mean, so a quiet band that pulses fully counts.
 fn modulation_depth(envelope: &[f32]) -> f32 {
     if envelope.len() < 8 {
         return 0.0;
@@ -171,11 +133,8 @@ fn modulation_depth(envelope: &[f32]) -> f32 {
     (energy.sqrt() / n as f32) / mean
 }
 
-/// Modulation depth across the whole render, weighted by how loud each band is.
-///
-/// Weighted because an empty band's envelope is noise, and noise has plenty of
-/// modulation at every frequency — unweighted, thirty silent high bands would
-/// drown the handful carrying the chord.
+/// Modulation depth across the render, weighted by band loudness: an empty
+/// band's envelope is noise, which modulates at every frequency.
 fn beating(samples: &[f32]) -> f32 {
     let bands = bands();
     let envelopes = envelopes(samples, &bands);
@@ -189,16 +148,9 @@ fn beating(samples: &[f32]) -> f32 {
     if weight > 0.0 { total / weight } else { 0.0 }
 }
 
-/// Whether changing `bind` on this mapping leaves the chord's structure alone.
-///
-/// **This is the whole validity of the comparison.** The claim is that a derived
-/// scale makes partials lock where a tempered one makes them beat, which is a
-/// statement about one chord under two tunings. A mapping where retuning also
-/// changed which chords are played would confound any difference in beating.
-///
-/// Matched exhaustively rather than defaulted to true: a mapping added to the
-/// crate has to answer this before it can be measured here, and answering wrong
-/// by omission is how a confounded comparison gets published as a result.
+/// Whether changing `bind` on this mapping leaves the chords alone — the whole
+/// validity of the comparison. Matched exhaustively, so a new mapping must
+/// answer before it can be measured.
 #[expect(
     clippy::match_same_arms,
     reason = "Field and Tonnetz both answer true for unrelated reasons, and each \
@@ -207,14 +159,11 @@ fn beating(samples: &[f32]) -> f32 {
 )]
 fn holds_the_chord_still(mapping: Mapping) -> bool {
     match mapping {
-        // Voices stacked at a fixed spacing in scale degrees, so retuning the
-        // scale moves the *same* chord. The controlled experiment.
+        // Voices at a fixed spacing in degrees: retuning moves the same chord.
         Mapping::Field => true,
-        // `bind` is applied to each sounding pitch, not to the lattice axes, so
-        // retuning leaves the chord sequence alone.
+        // `bind` applies per sounding pitch, so the chord sequence is unchanged.
         Mapping::Tonnetz => true,
-        // Onsets, not a sustained chord. There are no partials held together
-        // long enough to beat, so the measurement has nothing to look at.
+        // Onsets: nothing held long enough to beat.
         Mapping::Notes => false,
     }
 }
@@ -258,9 +207,8 @@ fn main() -> anyhow::Result<()> {
         meta.label, meta.duration_s
     );
 
-    // The scale, and the chord the lattice actually builds from it. Printed
-    // because the curve the scale comes from measures *dyads against the
-    // tonic*, and a triangle's third interval is one nobody ever measured.
+    // The scale and the chord the lattice builds from it: the curve only
+    // measures dyads against the tonic, so the triangle's third is worth seeing.
     let lattice = utterance_mapping::lattice::Lattice::from_tuning(&voice.tuning)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let degrees: Vec<String> = voice
@@ -287,10 +235,8 @@ fn main() -> anyhow::Result<()> {
         ..Params::default()
     };
 
-    // **A measurement that cannot say "different" cannot be believed when it
-    // says "same".** Two settings nobody would confuse — a cluster against an
-    // open chord — have to move this number, or a null result below is a
-    // property of the ruler.
+    // A ruler that cannot say "different" cannot be believed saying "same": a
+    // cluster against an open chord must move this number.
     let cluster = at(
         Mapping::Field,
         Params {
@@ -314,9 +260,7 @@ fn main() -> anyhow::Result<()> {
     }
     println!();
 
-    // The continuous mappings only: this measures partials of a sustained chord
-    // beating against each other, and discrete onsets hold nothing long enough
-    // to have any.
+    // Continuous mappings only: onsets hold nothing long enough to beat.
     for mapping in CONTINUOUS.iter().copied() {
         let (locked, tempered) = (at(mapping, with(1.0)), at(mapping, with(0.0)));
         let ratio = if locked > 0.0 { tempered / locked } else { 0.0 };

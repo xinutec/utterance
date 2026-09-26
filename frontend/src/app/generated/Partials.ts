@@ -6,10 +6,8 @@ import type { Partial } from "./Partial";
  */
 export type Partials = { 
 /**
- * Frames that were voiced and close enough to the median pitch to use.
- *
- * The honest measure of how much this series is worth. Sustained phonation
- * yields hundreds; connected speech yields few, because its pitch moves.
+ * Frames voiced and near enough the median pitch to use: hundreds for a
+ * sustained vowel, few for speech.
  */
 framesUsed: number, 
 /**

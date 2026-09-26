@@ -1,20 +1,10 @@
-//! The score: the artefact between mapping and realisation.
+//! The score: the artefact between mapping and realisation, and the second
+//! stable interface beside the voiceprint.
 //!
-//! The second stable interface in the project, alongside the voiceprint, and it
-//! earns its keep the same way — realisation can be rewritten without touching a
-//! mapping, and a mapping can be replaced without touching a synthesiser.
-//!
-//! **Frequencies are absolute, in hertz.** No degrees, no scale, no key. This is
-//! the mirror image of the rule that keeps analysis from knowing what a scale is:
-//! realisation must not know either, or the choice of tuning leaks into the
-//! synthesiser and the two stop being separable. By the time a score exists,
-//! every musical decision has already been made.
-//!
-//! **What a score carries is the ceiling on how the music can sound.** No amount
-//! of synthesiser craft gets past it: a spectrum the score cannot change produces
-//! a tone that does not move, which is the dead-organ sound of every naive
-//! additive synthesiser. Widening this interface is how the output gets richer,
-//! not tinkering downstream of it.
+//! **Frequencies are absolute, in hertz** — no degrees, no scale — so tuning
+//! cannot leak into the synthesiser. By the time a score exists, every musical
+//! decision is made. **What a score carries is the ceiling on how the music can
+//! sound**: widening it is how the output gets richer.
 
 use serde::{Deserialize, Serialize};
 
@@ -33,27 +23,16 @@ pub struct Event {
     pub amplitude: f32,
     /// Where this note starts on the palette's dark-to-bright axis, 0..1.
     pub colour_from: f32,
-    /// Where it has arrived by the end. Interpolated across the note.
-    ///
-    /// Two values rather than one because a spectrum that holds still is the
-    /// whole problem this interface was widened to fix. A note whose colour
-    /// moves is the difference between a tone and a drone.
+    /// Where it has arrived by the end, interpolated across the note: a colour
+    /// that moves is the difference between a tone and a drone.
     pub colour_to: f32,
-    /// Fraction of this note's energy that is breath rather than partials, 0..1.
-    ///
-    /// Every real sound has a noise component, and its absence is most of what
-    /// makes pure additive synthesis sound sterile. Carried per note because the
-    /// speaker's own breathiness varies through an utterance.
+    /// Fraction of this note's energy that is breath, 0..1 — per note, because
+    /// the speaker's breathiness varies.
     pub breath: f32,
 }
 
-/// A stretch of noise: a consonant, sounded.
-///
-/// Separate from [`Event`] rather than a flag on it because the two are not
-/// variations of one thing. A note has a pitch and a place in a scale; this has
-/// neither, and never should — a consonant is not a note played badly, it is a
-/// different kind of sound with its own timing, and speech has more of them than
-/// it has vowels.
+/// A stretch of noise: a consonant, sounded. Not a flag on [`Event`]: a
+/// consonant has no pitch and no place in a scale, and its own timing.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NoiseEvent {
@@ -61,43 +40,28 @@ pub struct NoiseEvent {
     pub duration_s: f32,
     /// Centre of the noise band, in Hz — where the speaker put the energy.
     pub centre_hz: f32,
-    /// Width of that band, in Hz.
-    ///
-    /// Narrow reads as a whistle or a hiss with a pitch to it; wide reads as
-    /// air. The speaker's own measured flatness decides which.
+    /// Width of that band, in Hz: narrow whistles, wide is air.
     pub bandwidth_hz: f32,
     /// Relative loudness, 0..1.
     pub amplitude: f32,
 }
 
-/// A continuously sounding field: the music as parameter streams rather than
-/// as a list of things that happen.
+/// A continuously sounding field: the music as parameter streams rather than a
+/// list of events.
 ///
-/// **Why this exists.** A note is a quantiser. It takes a continuously varying
-/// measurement and declares one value for its whole span, so every note is a
-/// decision to discard whatever happened during it: a few dozen notes from
-/// thousands of frames keeps a few per cent of what was measured, and no amount
-/// of taste in choosing those notes recovers the rest.
-///
-/// Here every frame contributes. The field never stops; silence in the speech is
-/// a quiet field rather than an absent one. That also makes the weakest
-/// measurement in the project stop mattering: onsets mean *the spectrum changed*
-/// rather than *a syllable began*, and nothing below asks.
+/// A note is a quantiser — one value for its whole span — so a few dozen notes
+/// keep a few per cent of what thousands of frames measured. Here every frame
+/// contributes, silence is a quiet field rather than an absent one, and onsets'
+/// weakness stops mattering because nothing asks for them.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Field {
     /// Seconds between frames of every series below.
     pub hop_s: f32,
     /// Frequency per voice per frame, in Hz. Outer index is the voice.
-    ///
-    /// Absolute, like everything else here: the scale is already resolved.
     pub voices: Vec<Vec<f32>>,
-    /// Amplitude per voice per frame, 0..1, indexed the same way.
-    ///
-    /// Separate from the frequencies so a voice can fade without moving, and
-    /// move without changing level. Tying them together is what makes generated
-    /// polyphony sound like one instrument playing chords rather than several
-    /// things sounding at once.
+    /// Amplitude per voice per frame, 0..1, indexed the same way — separate, so
+    /// a voice can fade without moving and move without changing level.
     pub gains: Vec<Vec<f32>>,
     /// Position on the palette's dark-to-bright axis per frame, shared by every
     /// voice.
@@ -125,46 +89,25 @@ pub struct Score {
     pub duration_s: f32,
     /// Spectra the colour axis interpolates between, ordered dark to bright.
     ///
-    /// Carried in the score rather than chosen by the synthesiser, because a
-    /// derived tuning is only consonant for tones that actually have the
-    /// spectrum it was derived from. Tune to one spectrum and play another and
-    /// the roughness minima no longer line up with the notes — the scale keeps
-    /// its numbers and loses its justification.
-    ///
-    /// Ordered by spectral centroid so that `colour` means *brightness*, which
-    /// is a thing a listener can hear moving. The ordering is a reduction: three
-    /// measured vowels are a two-dimensional space and this walks a line through
-    /// it, chosen because one axis a listener can name beats two they cannot.
+    /// In the score, not chosen by the synthesiser: a derived tuning is only
+    /// consonant for tones with the spectrum it was derived from. Ordered by
+    /// centroid so `colour` means brightness — one axis a listener can name.
     pub palette: Vec<Spectrum>,
-    /// Spread among partials in cents — how far each is pulled off its exact
-    /// harmonic.
-    ///
-    /// Perfectly locked partials are what a computer produces and nothing else
-    /// does. A voice's own cycle-to-cycle instability is where this comes from,
-    /// so the liveliness is the speaker's rather than a synthesiser preset's.
+    /// Spread among partials in cents, from the speaker's own pitch instability:
+    /// perfectly locked partials sound machine-made.
     pub detune_cents: f32,
-    /// The continuously sounding part, where there is one.
-    ///
-    /// Rendered alongside [`Score::events`]. Both exist so a field mapping and a
-    /// note mapping can be compared by ear against the same recording, which is
-    /// the only way any of this gets judged.
+    /// The continuously sounding part, where there is one. Rendered alongside
+    /// [`Score::events`].
     pub field: Option<Field>,
     /// Discrete notes, for mappings that produce them. Ascending by start time.
     pub events: Vec<Event>,
     /// The consonants, ascending by start time.
-    ///
-    /// A second stream rather than more notes. In ordinary speech there are more
-    /// of these than there are voiced stretches, and dropping them makes the
-    /// output sound like a reduction of a voice rather than a use of it.
     pub noise: Vec<NoiseEvent>,
 }
 
 impl Score {
-    /// The spectrum at position `colour` on the palette's axis.
-    ///
-    /// Lives here rather than in the synthesiser because it defines what the
-    /// colour numbers above *mean*, and a renderer that interpolated differently
-    /// would be playing a different score than the one written.
+    /// The spectrum at position `colour` on the palette's axis. Here rather than
+    /// in the synthesiser because it defines what `colour` means.
     pub fn spectrum_at(&self, colour: f32) -> Spectrum {
         match self.palette.len() {
             0 => Vec::new(),
@@ -179,10 +122,8 @@ impl Score {
     }
 }
 
-/// Linear blend of two spectra, padded to the longer of the two.
-///
-/// Padding rather than truncating: a partial present in one spectrum and absent
-/// from the other should fade in, not vanish at the midpoint.
+/// Linear blend of two spectra, padded so a partial in only one fades in rather
+/// than vanishing at the midpoint.
 fn blend_spectra(a: &[f32], b: &[f32], t: f32) -> Spectrum {
     let length = a.len().max(b.len());
     (0..length)
@@ -194,11 +135,8 @@ fn blend_spectra(a: &[f32], b: &[f32], t: f32) -> Spectrum {
         .collect()
 }
 
-/// Order spectra dark to bright, by spectral centroid.
-///
-/// The centroid — the amplitude-weighted mean harmonic number — is the standard
-/// correlate of perceived brightness, and using it means the palette's axis is
-/// something a listener can follow rather than an arbitrary ordering of vowels.
+/// Order spectra dark to bright by spectral centroid, the standard correlate of
+/// perceived brightness.
 pub fn order_by_brightness(mut spectra: Vec<Spectrum>) -> Vec<Spectrum> {
     spectra.sort_by(|a, b| centroid(a).total_cmp(&centroid(b)));
     spectra

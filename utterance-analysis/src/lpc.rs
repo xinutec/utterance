@@ -1,33 +1,17 @@
-//! Linear prediction: fitting an all-pole filter to a frame of speech.
-//!
-//! The source-filter model of the voice says a vowel is a buzz from the glottis
-//! shaped by the resonances of the throat and mouth. Linear prediction recovers
-//! the *filter* — the resonances — while ignoring what drove it. That separation
-//! is the whole reason to use it here: the resonances are a property of the
-//! speaker's anatomy and what they are doing with it, independent of the pitch
-//! they happen to be saying it at.
-//!
-//! Everything in this module is arithmetic on one frame. Turning poles into
-//! formants is [`crate::formant`]'s job.
+//! Linear prediction: fitting an all-pole filter to one frame of speech. A vowel
+//! is a glottal buzz shaped by the tract's resonances, and linear prediction
+//! recovers the resonances apart from the pitch. Turning poles into formants is
+//! [`crate::formant`]'s job.
 
 use rustfft::num_complex::Complex64;
 
-/// Pre-emphasis coefficient, a one-zero high-pass at roughly +6 dB/octave.
-///
-/// The glottal source rolls off at about -12 dB/octave and lip radiation adds
-/// +6, leaving a net tilt that linear prediction would otherwise spend its poles
-/// modelling. Flattening it first means the poles go where they are wanted — on
-/// the vocal-tract resonances rather than on the spectral slope.
+/// Pre-emphasis coefficient (+6 dB/octave), flattening the source's net tilt so
+/// the poles go on the resonances, not the slope.
 const PRE_EMPHASIS: f32 = 0.97;
 
-/// Prediction order.
-///
-/// The standard rule of thumb is one pole per kilohertz of sample rate plus two
-/// — 18 at our 16 kHz analysis rate. That works out at two poles for each of the
-/// four or five formants below Nyquist, plus a pair spare for whatever spectral
-/// tilt survives pre-emphasis. Too low merges neighbouring formants into a single
-/// pole; too high spends poles on individual harmonics of the source, which is
-/// exactly what this is supposed to see past.
+/// Prediction order: the rule of thumb of one pole per kHz plus two — a pair
+/// per formant below Nyquist and a spare for residual tilt. Too low merges
+/// formants; too high fits individual harmonics.
 pub const ORDER: usize = 18;
 
 /// Iterations of the root solver before giving up.
@@ -57,19 +41,15 @@ fn autocorrelate(x: &[f32], max_lag: usize) -> Vec<f64> {
         .collect()
 }
 
-/// Linear-prediction coefficients for one frame, as the polynomial
-/// `1 + a₁z⁻¹ + … + a_p z⁻ᵖ`.
-///
-/// Returns `None` for a frame with no energy, where the fit is meaningless
-/// rather than merely poor — silence has no resonances to find.
+/// Linear-prediction coefficients for one frame, as `1 + a₁z⁻¹ + … + a_p z⁻ᵖ`,
+/// or `None` for a silent frame.
 pub fn coefficients(frame: &[f32], order: usize) -> Option<Vec<f64>> {
     let r = autocorrelate(frame, order);
     if r[0] <= f64::EPSILON {
         return None;
     }
 
-    // Levinson-Durbin. Solves the Toeplitz normal equations in O(p²) by building
-    // the order-i solution from the order-(i-1) one, rather than inverting.
+    // Levinson-Durbin: O(p²), building each order from the last.
     let mut a = vec![0.0f64; order + 1];
     a[0] = 1.0;
     let mut error = r[0];
@@ -78,8 +58,8 @@ pub fn coefficients(frame: &[f32], order: usize) -> Option<Vec<f64>> {
         let acc: f64 = r[i] + (1..i).map(|j| a[j] * r[i - j]).sum::<f64>();
         let k = -acc / error;
 
-        // The reflection coefficient leaving the unit circle means the recursion
-        // has gone numerically unstable; the fit so far is still usable.
+        // A reflection coefficient outside the unit circle means the recursion
+        // went unstable; the fit so far is usable.
         if !k.is_finite() || k.abs() >= 1.0 {
             break;
         }
@@ -97,16 +77,11 @@ pub fn coefficients(frame: &[f32], order: usize) -> Option<Vec<f64>> {
     Some(a)
 }
 
-/// Roots of the prediction polynomial, i.e. the poles of the fitted filter.
+/// Roots of the prediction polynomial — the poles of the fitted filter.
 ///
-/// Solved by Durand-Kerner: all roots are refined simultaneously from a fixed
-/// starting spiral, which needs no derivative and no deflation. Deflation is the
-/// thing worth avoiding — dividing out each root as it is found accumulates
-/// error into the later ones, and the later ones here are the high formants.
-///
-/// The fixed initialisation matters for more than convergence: analysis has to
-/// be a pure function of the audio, so the solver may not start anywhere that
-/// varies between runs.
+/// Durand-Kerner refines all roots together, with no deflation to push error
+/// into the later roots (the high formants). It starts from a fixed spiral,
+/// so analysis stays a pure function of the audio.
 pub fn roots(coefficients: &[f64]) -> Vec<Complex64> {
     // Descending powers of z: A(z)·zᵖ = zᵖ + a₁zᵖ⁻¹ + … + a_p.
     let degree = coefficients.len() - 1;
@@ -114,9 +89,7 @@ pub fn roots(coefficients: &[f64]) -> Vec<Complex64> {
         return Vec::new();
     }
 
-    // The conventional off-axis spiral. Off the real axis so that conjugate
-    // pairs — which is what every resonance is — do not start on top of each
-    // other and stall.
+    // Off the real axis, so conjugate pairs do not start together and stall.
     let seed = Complex64::new(0.4, 0.9);
     let mut z: Vec<Complex64> = (0..degree).map(|k| seed.powu(k as u32)).collect();
 

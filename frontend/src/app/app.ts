@@ -30,36 +30,20 @@ import { Telemetry } from "./telemetry";
 })
 export class App {
   /**
-   * The client activity trace, started here because this is the one component
-   * guaranteed to exist for the app's whole life.
-   *
-   * Wired in the shell rather than per page for the reason the service exists:
-   * a trace that each screen has to remember to join is a trace with holes in
-   * exactly the screens nobody thought about.
+   * The client activity trace, started in the shell — the one component alive
+   * for the app's whole life — so no screen has to remember to join it.
    */
   private readonly telemetry = inject(Telemetry);
   private readonly swUpdates = inject(SwUpdates);
 
   /**
-   * Read by the template to decide whether there is an app to show.
-   *
-   * Nothing sets this on startup — it is raised by the first request the
-   * backend refuses. On a deployment with no sign-in configured it stays false
-   * forever and the wall is not merely hidden but never rendered.
+   * Whether the sign-in wall shows. Raised by the first request the backend
+   * refuses; with no sign-in configured it never is.
    */
   readonly auth = inject(AuthState);
 
-  /**
-   * Every page, described once.
-   *
-   * The bar renders this list twice — as buttons on a wide screen and as menu
-   * items on a narrow one — so writing the destinations out in the template
-   * would mean maintaining each of them in two places, and the copy that drifts
-   * is always the one nobody has open.
-   */
+  /** Every page, described once for both the button bar and the menu. */
   readonly pages = [
-    // `exact` on the studio alone: every route is a prefix of "/", so without it
-    // the studio reads as current on every page.
     // In the order somebody does them: nothing works before a voice exists.
     { path: "/calibrate", label: "Calibrate", exact: false },
     { path: "/", label: "Studio", exact: true },
@@ -69,14 +53,8 @@ export class App {
   private readonly breakpoints = inject(BreakpointObserver);
 
   /**
-   * Whether there is only room for one button.
-   *
-   * The same `Breakpoints.Handset` recall uses, so the two apps collapse at the
-   * same width rather than at two hand-picked ones. On a wide screen the
-   * destinations are worth their space; on a phone they are not, and there is
-   * nothing else for the menu to hold — which is why the button appears only
-   * here, where recall keeps one at every width for an overflow set utterance
-   * does not have.
+   * Whether there is only room for one button — recall's `Breakpoints.Handset`,
+   * so both apps collapse at the same width.
    */
   readonly handset = toSignal(
     this.breakpoints.observe(Breakpoints.Handset).pipe(map((state) => state.matches)),
@@ -86,12 +64,8 @@ export class App {
   private readonly router = inject(Router);
 
   /**
-   * Where the app currently is.
-   *
-   * Held here rather than read from `routerLinkActive`, so that which item is
-   * current and which is announced to a screen reader are one fact instead of a
-   * class and an attribute that have to agree. (The directive does work inside
-   * a `mat-menu`; that is not the reason.)
+   * Where the app currently is — one fact for both the highlight and
+   * `aria-current`, rather than a class and an attribute that must agree.
    */
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -102,12 +76,8 @@ export class App {
   );
 
   /**
-   * Whether `path` is the page being shown.
-   *
-   * The studio matches exactly and everything else by prefix, because every
-   * route is a prefix of `"/"` — without that, the studio would read as current
-   * on every page. Query strings are ignored: `/compare?take=…` is still the
-   * compare page.
+   * Whether `path` is the page being shown: the studio exactly (every route is a
+   * prefix of `/`), the rest by prefix, ignoring query strings.
    */
   isCurrent(page: { path: string; exact: boolean }): boolean {
     const here = this.url().replace(/\?.*$/, "");
@@ -115,11 +85,10 @@ export class App {
   }
 
   constructor() {
-    // After the field initialisers, so the router this subscribes to exists.
-    // Idempotent, so a shell recreated in a test does not stack listeners.
+    // After the field initialisers, so the router exists; idempotent, so a
+    // recreated shell does not stack listeners. The same for service-worker
+    // updates.
     this.telemetry.init();
-    // Same seam, same argument: wired once here so no view has to know a
-    // service worker exists.
     this.swUpdates.start();
   }
 }

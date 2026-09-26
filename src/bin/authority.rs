@@ -1,17 +1,8 @@
-//! What each knob actually changes, measured on the mapping being listened to.
+//! What each knob actually changes, on each continuous mapping, along several
+//! axes that are reported side by side and never summed: a knob is loud if it is
+//! loud on *any* of them.
 //!
-//! **Why several axes.** A single scalar under-reports any knob that does not
-//! work by moving pitch: measured as pitch travel on the field mapping, `bind`
-//! scores a few cents, not because it is feeble but because pitch travel is the
-//! wrong ruler for it. Its whole effect is whether partials of different voices
-//! lock or beat, which a measure of how far the notes moved cannot see at all.
-//! And each mapping is measured separately, because the Tonnetz is a different
-//! geometry from the field.
-//!
-//! So this reports several axes side by side and refuses to rank them into one
-//! number: a knob is loud if it is loud on *any* of them.
-//!
-//! | axis | what it sees | the knobs it is the right ruler for |
+//! | axis | what it sees | the right ruler for |
 //! | --- | --- | --- |
 //! | pitch | how far the voices move, in cents | density, spacing, reach, drift |
 //! | roughness | beating between voices' partials | bind |
@@ -20,12 +11,9 @@
 //! | noise | loudness of the unpitched material | consonants |
 //! | ring | how long one chord holds, in seconds | hold, reach |
 //!
-//! **Every axis here exists because its absence produces a false zero**: a
-//! field-only comparison reports `consonants` as doing nothing, holding one
-//! derived voice fixed reports `density` as doing nothing, and pitch travel
-//! alone reports `bind` as nearly doing nothing. A knob measured on the wrong
-//! axis is indistinguishable from a knob that does not work, which is the
-//! reading that gets one deleted.
+//! Every axis exists because its absence produces a false zero — pitch travel
+//! alone says `bind` does almost nothing, when its effect is whether partials
+//! lock or beat. A knob measured on the wrong ruler looks broken.
 //!
 //! ```text
 //! cargo run --bin authority                  # the default take, both mappings
@@ -44,33 +32,21 @@ use utterance_mapping::score::{Field, NoiseEvent};
 use utterance_mapping::tonnetz;
 use utterance_mapping::voice::Voice;
 
-/// Harmonics per voice when estimating how rough the chord is.
-///
-/// Six, with amplitude falling as 1/n — a plain harmonic stack rather than the
-/// speaker's measured spectrum. The measure is only ever used to compare two
-/// settings against each other, and both sides get the same proxy, so what it
-/// costs is the absolute value and not the comparison. Using the real partials
-/// would cost an FFT per frame per knob per setting.
+/// Harmonics per voice when estimating chord roughness: a plain 1/n stack, not
+/// the measured spectrum. Only ever used to compare two settings, both with the
+/// same proxy, and far cheaper than an FFT per frame.
 const PARTIALS: usize = 6;
 
-/// Frames to sample when measuring, at most.
-///
-/// Every knob is rendered at both ends on every mapping, so this is the
-/// difference between a measurement that takes a second and one that takes a
-/// minute. Spread across the take rather than taken from the front, because the
-/// beginning of a take is the part least like the rest of it.
+/// Frames to sample when measuring, at most, spread across the take — the start
+/// is the least typical part.
 const SAMPLES: usize = 400;
 
 /// How different two renders are, along axes that do not reduce to each other.
 #[derive(Default, Clone, Copy)]
 struct Change {
-    /// Widest pitch move of any voice, in cents.
-    ///
-    /// A maximum, so it says what the knob *can* do and not what it usually
-    /// does. Read beside [`Change::pitch_typical`], which is the median over
-    /// every voice and frame: the two differ by an order of magnitude wherever
-    /// a knob mostly nudges and occasionally re-registers a voice by an octave,
-    /// and those are different things to listen for.
+    /// Widest pitch move of any voice, in cents — what the knob *can* do. Read
+    /// beside [`Change::pitch_typical`]: a knob that mostly nudges and sometimes
+    /// re-registers a voice an octave does two things.
     pitch_cents: f32,
     /// Median pitch move across every voice and frame, in cents.
     pitch_typical: f32,
@@ -82,21 +58,15 @@ struct Change {
     colour: f32,
     /// Change in how long one chord holds, in seconds.
     ring_s: f32,
-    /// Change in the loudness of the unpitched material, 0..1.
-    ///
-    /// Its own axis because the consonants are not in the field at all: they
-    /// are a separate list of events on the score, and a measurement that
-    /// compared only fields reported `consonants` as a knob that does nothing.
-    /// It does nothing *to the field*, which is not the same sentence.
+    /// Change in the loudness of the unpitched material, 0..1 — its own axis,
+    /// since consonants are separate events, not part of the field.
     noise: f32,
 }
 
 impl Change {
-    /// Whether this knob does anything a listener could notice, on any axis.
-    ///
-    /// Deliberately a disjunction and deliberately not a weighted sum. A sum
-    /// needs weights, weights are a claim about what matters, and that claim is
-    /// exactly the thing nobody has settled — it is what the listening is for.
+    /// Whether this knob does anything a listener could notice, on any axis. A
+    /// disjunction, not a weighted sum: weights would claim what matters, which
+    /// is what the listening is for.
     fn audible(&self) -> bool {
         self.pitch_cents > 5.0
             || self.roughness > 0.01
@@ -149,9 +119,7 @@ fn difference(a: &Field, b: &Field) -> Change {
     let at = sampled(frames);
     let voices = a.voices.len().min(b.voices.len());
 
-    // The widest move of any voice, not the average. A knob that re-registers
-    // one voice by an octave and leaves four alone has done something a
-    // listener hears, and a mean across five voices would report a fifth of it.
+    // The widest move of any voice: a mean would dilute one voice re-registered.
     let pitch_cents = at
         .iter()
         .flat_map(|&i| {
@@ -190,9 +158,7 @@ fn difference(a: &Field, b: &Field) -> Change {
         0.0
     };
 
-    // Balance compares the *shape* of the chord's loudness rather than its
-    // level, so a knob that only makes everything quieter does not read as one
-    // that rearranged the chord.
+    // The *shape* of the chord's loudness, so plain quieter is not rearranged.
     let share = |f: &Field, i: usize| {
         let total: f32 = (0..voices).map(|v| f.gains[v][i]).sum();
         let total = if total > 0.0 { total } else { 1.0 };
@@ -218,11 +184,8 @@ fn difference(a: &Field, b: &Field) -> Change {
     }
 }
 
-/// How far apart two takes' unpitched material is.
-///
-/// Mean amplitude across the events, compared as a fraction of the louder — the
-/// consonants keep their positions and change only their level, so a difference
-/// in *when* they happen would be a different bug entirely.
+/// How far apart two takes' unpitched material is: mean event amplitude, as a
+/// fraction of the louder.
 fn noise_change(a: &[NoiseEvent], b: &[NoiseEvent]) -> f32 {
     let level = |events: &[NoiseEvent]| mean(events.iter().map(|e| e.amplitude));
     let (x, y) = (level(a), level(b));
@@ -261,18 +224,12 @@ fn ring_s(vp: &Voiceprint, voice: &Voice, params: Params) -> f32 {
 }
 
 /// Whether a mapping quantises its harmony, and so has a ring worth timing.
-///
-/// The only thing this measurement needs to know about a mapping that the
-/// mapping crate does not already say.
 fn holds_a_chord(mapping: Mapping) -> bool {
     matches!(mapping, Mapping::Tonnetz)
 }
 
-/// The speaker's voice as it would be derived at these settings.
-///
-/// Not a constant across a sweep: `density` is the depth a dip in the roughness
-/// curve must clear to count as a note, so it decides what the *scale* is before
-/// any mapping runs. Held fixed, it measures as a knob that changes nothing.
+/// The speaker's voice as derived at these settings — re-derived per setting,
+/// because `density` decides the scale before any mapping runs.
 fn voice_at(store: &Store, params: Params) -> anyhow::Result<Voice> {
     Ok(voice::calibrate_with(store, None, params.density)
         .map_err(|e| anyhow::anyhow!("{e}"))?
@@ -291,8 +248,7 @@ fn main() -> anyhow::Result<()> {
             .iter()
             .find(|m| m.label == *label || m.id == *label)
             .ok_or_else(|| anyhow::anyhow!("no take called {label}"))?,
-        // The calibration take by default: the one the speaker's scale comes
-        // from, and so the one every mapping is tuned against.
+        // The calibration take by default: the one the scale comes from.
         None => takes
             .iter()
             .find(|m| m.id == calibrated.source.id)
@@ -315,18 +271,15 @@ fn main() -> anyhow::Result<()> {
         );
 
         let mut silent = Vec::new();
-        // Sorted by name so two runs can be diffed; the table's own order is
-        // how it was written, which is not a fact about the measurement.
+        // Sorted by name, so two runs can be diffed.
         let mut rows: BTreeMap<&str, Change> = BTreeMap::new();
 
         for knob in KNOBS.iter().filter(|k| k.reaches(mapping)) {
             let low = Params::default().with(knob.name, knob.min);
             let high = Params::default().with(knob.name, knob.max);
 
-            // **`density` acts on the calibration, not on the composition**, so
-            // a sweep holding one derived voice fixed measures it at exactly
-            // zero on every axis. The scale is re-derived at each end, which is
-            // what the render route does too.
+            // `density` acts on the calibration, so the voice is re-derived at
+            // each end, as the render route does.
             let (Ok(va), Ok(vb)) = (voice_at(&store, low), voice_at(&store, high)) else {
                 println!("  {:<14} {:>10}", knob.name, "no scale");
                 continue;
@@ -337,9 +290,7 @@ fn main() -> anyhow::Result<()> {
                 mapping.score_with(&vp, &vb, high),
             );
             let (Some(a), Some(b)) = (&lo.field, &hi.field) else {
-                // A refusal is a real answer — see `Lattice::from_tuning` — and
-                // the honest report is that this end of the range has no sound
-                // to compare rather than that the knob changed nothing.
+                // A refusal is an answer: this end has no sound to compare.
                 println!("  {:<14} {:>10}", knob.name, "refused");
                 continue;
             };

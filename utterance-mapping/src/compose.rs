@@ -1,32 +1,18 @@
-//! A voiceprint and a voice become a score.
+//! A voiceprint and a voice become a score of notes — the `notes` mapping.
 //!
-//! Every rule below is a decision, none is forced by the measurements, and all
-//! of them are meant to be replaced:
+//! Every rule is a decision, meant to be replaced:
 //!
-//! - **when** a note happens: at a detected onset
-//! - **how long** it lasts: until the next onset
-//! - **which** degree it takes: from where the vowel sat left-to-right in the
-//!   speaker's own vowel space
-//! - **which octave**: from where it sat top-to-bottom in that same space
-//! - **how loud**: from the energy envelope at that moment
-//! - **what colour**: from how bright the vowel was, and where it moved to
-//!   during the note
-//! - **how breathy**: from how periodic the voice was there
+//! - **when**: at a detected onset, lasting until the next
+//! - **which degree**: from where the vowel sat front-to-back in the speaker's
+//!   own vowel space; **which octave**: from open-to-closed
+//! - **how loud**: from the energy envelope
+//! - **what colour**: from where the vowel sat and moved during the note
+//! - **how breathy**: from how periodic the voice was
 //!
-//! The last two read streams a note otherwise discards — aperiodicity and
-//! formant *movement* — against the failure `docs/architecture.md` warns about,
-//! a controller richer than the thing it controls.
-//!
-//! The weak link remains the first rule. Onsets mean *the spectrum changed
-//! here*, not *a syllable began here*, and until the stress hierarchy exists the
-//! rhythm will be wrong in ways that have nothing to do with this mapping's
-//! taste.
-//!
-//! **Where this stops short of resynthesis.** Colour follows the speaker's own
-//! formant movement, which is articulation driving timbre — control, not
-//! playback. What keeps it from sounding like speech is that those spectra are
-//! applied to derived pitches at derived timings: the mouth shapes the tone, it
-//! does not utter it.
+//! The weak link is the first: onsets mean *the spectrum changed*, not *a
+//! syllable began*, so the rhythm is wrong until the stress hierarchy exists.
+//! Colour follows the speaker's formant movement, but on derived pitches at
+//! derived times: the mouth shapes the tone, it does not utter it.
 
 use utterance_analysis::voiceprint::Voiceprint;
 
@@ -35,58 +21,37 @@ use crate::score::{Event, Field, NoiseEvent, Score};
 use crate::streams;
 use crate::voice::Voice;
 
-/// Octaves the register spans above the tonic.
-///
-/// Two, so the vowel space maps onto a range a listener holds as one voice
-/// rather than as separate instruments at either end.
+/// Octaves the register spans above the tonic: two, so it holds as one voice.
 const REGISTER_OCTAVES: f32 = 2.0;
 
-/// Longest a single note is held, in seconds.
-///
-/// A gap between onsets can be several seconds — a pause for breath, a silence
-/// between phrases — and sustaining across one turns a rest into a drone.
+/// Longest a single note is held, in seconds: sustaining across a pause turns a
+/// rest into a drone.
 const MAX_NOTE_S: f32 = 1.2;
 
-/// Shortest note worth sounding.
-///
-/// Below this the attack and release overlap and the result is a click rather
-/// than a pitch, so a note this brief says nothing about the tuning it came from.
+/// Shortest note worth sounding: below it attack and release overlap into a
+/// click.
 const MIN_NOTE_S: f32 = 0.08;
 
-/// How far from an onset to look for a frame that knows its vowel.
-///
-/// Onsets often land on the consonant that begins a syllable, where there is no
-/// vowel to read yet. The following frames are where the vowel actually arrives,
-/// so the search runs forward: 120 ms is long enough to cross a plosive burst
-/// and short enough not to reach the next syllable.
+/// How far after an onset to look for a frame that knows its vowel. Onsets often
+/// land on the consonant before it; 120 ms crosses a plosive burst without
+/// reaching the next syllable.
 const VOWEL_SEARCH_FRAMES: usize = 12;
 
-/// Quietest note kept, relative to the loudest in the take.
-///
-/// Onsets fire in near-silence too, and a note rendered there is an artefact of
-/// the detector rather than anything the speaker did.
+/// Quietest note kept, relative to the loudest in the take: onsets fire in
+/// near-silence too.
 const SILENCE_FLOOR: f32 = 0.02;
 
-/// Aperiodicity at which a note is treated as fully breathy.
-///
-/// YIN's normalised difference runs from 0 for a perfectly periodic frame to
-/// about 1 for noise. Voicing is decided far below this, so a frame reaching it
-/// is one where the tracker found a pitch it barely believes.
+/// Aperiodicity at which a note is fully breathy. Voicing is decided far below,
+/// so a frame here is one the tracker barely believed.
 const FULL_BREATH_APERIODICITY: f32 = 0.6;
 
-/// Most of a note that may be noise.
-///
-/// Set by listening. Breath is meant to keep a tone from sounding sterile, and
-/// past about a third of the energy it stops being a quality of the tone and
-/// becomes a hiss laid over it.
+/// Most of a note that may be noise, set by listening: past about a third,
+/// breath stops being a quality of the tone and becomes hiss over it.
 const MAX_BREATH: f32 = 0.3;
 
-/// Turn a voiceprint into a score, in the world a [`Voice`] describes.
-///
-/// The voice comes from the speaker's calibration rather than from this take.
-/// Those are facts about the person, and reading them from the utterance would
-/// make the same sentence produce a different piece depending on how much of the
-/// speaker's range it happened to use.
+/// Turn a voiceprint into a score, in the world a [`Voice`] describes — the
+/// speaker's calibration, not this take, so one sentence does not change key
+/// with how much of the range it happened to use.
 pub fn compose(vp: &Voiceprint, voice: &Voice) -> Score {
     compose_with(vp, voice, Params::default())
 }
@@ -118,8 +83,7 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
 
         let (open, front) = voice.space.normalise(f1, f2);
         let degree = choices[index_of(front, choices.len())];
-        // Inverted: an open vowel is the big, low end of the register, which is
-        // the same direction the mouth moves.
+        // Inverted: an open vowel is the big, low end of the register.
         let register = ((1.0 - open).clamp(0.0, 1.0) * REGISTER_OCTAVES).floor();
 
         let start_s = frame as f32 * vp.frame.hop_s;
@@ -128,13 +92,8 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
             .map_or(vp.source.duration_s, |&f| f as f32 * vp.frame.hop_s);
         let duration_s = (next_s - start_s).clamp(MIN_NOTE_S, MAX_NOTE_S);
 
-        // Colour tracks the vowel across the note rather than freezing it at the
-        // attack, so a syllable whose mouth moves produces a tone that moves.
-        //
-        // Clamped to the last frame that exists: a note running to the end of
-        // the take lands one past the series, and without this the final note —
-        // and any note held to the end — would silently lose its colour
-        // movement while every other note kept it.
+        // Colour tracks the vowel across the note, clamped to the last frame so
+        // a note held to the end keeps its movement too.
         let end_frame = (frame + (duration_s / vp.frame.hop_s) as usize)
             .min(vp.formants.f1.len().saturating_sub(1));
         let colour_from = front.clamp(0.0, 1.0);
@@ -158,20 +117,14 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
         palette: voice.palette.clone(),
         detune_cents: voice.detune_cents,
         noise: compose_noise(vp, params.consonants),
-        // This mapping produces notes, not a field. Emitting both would sound
-        // both at once; they are alternatives to be judged against each other,
-        // which is what the mapping layer is for.
+        // Notes, not a field: the mappings are alternatives.
         field: None,
         events,
     }
 }
 
 /// A score whose pitched material is a continuous field, plus the speaker's
-/// consonants.
-///
-/// The consonants come from the same place the note mapping gets them: they are
-/// events by nature — a consonant is a thing that happens at a moment — so they
-/// stay a list whether the pitched material is a field or a stream of notes.
+/// consonants — events whichever way the pitched material is made.
 pub(crate) fn field_score(
     vp: &Voiceprint,
     voice: &Voice,
@@ -200,17 +153,10 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
     }
 }
 
-/// How much of a note should be breath, from how periodic the phonation was.
-///
-/// **Median over the voiced frames the note spans**, and every part of that
-/// matters. A single frame at the onset measures the transition into the note
-/// rather than the note — on real speech about five times as aperiodic — and
-/// builds every note with a hiss over it.
-///
-/// Voiced frames only, because unvoiced frames inside a
-/// note's span are its consonants, and those are already sounded by the noise
-/// stream; counting them here plays them twice, once as themselves and once as
-/// a wash across the note beside them.
+/// How much of a note should be breath: the median aperiodicity over the voiced
+/// frames it spans. A single onset frame measures the transition, several times
+/// as aperiodic, and unvoiced frames are consonants the noise stream already
+/// sounds.
 fn breath_at(vp: &Voiceprint, from: usize, to: usize) -> f32 {
     let mut voiced: Vec<f32> = (from..to.min(vp.pitch.hz.len()))
         .filter(|&i| vp.pitch.hz[i].is_some())
@@ -225,17 +171,11 @@ fn breath_at(vp: &Voiceprint, from: usize, to: usize) -> f32 {
     (median / FULL_BREATH_APERIODICITY).clamp(0.0, 1.0) * MAX_BREATH
 }
 
-/// Which degree a normalised position picks.
+/// Which degree a normalised position picks. Clamping happens here, where a
+/// scale's ends make it necessary, not in the measurement.
 ///
-/// Positions outside `0..1` are real — the vowel-space bounds are percentiles,
-/// so a frame past the speaker's usual reach is a measurement rather than an
-/// error — and this is where they stop being real, because a scale has ends.
-/// Clamping is the decision; it happens once, here, rather than being smeared
-/// through the measurement layers that had no business making it.
-///
-/// The same frontness also picks the colour above, which is a real cost worth
-/// naming: two dimensions of the output move together where the voice offered
-/// them separately. Untangling that needs a mapping that spends F2 once.
+/// Frontness also picks the colour, so those two move together where the voice
+/// offered them separately — a known cost of this mapping.
 fn index_of(position: f32, count: usize) -> usize {
     let scaled = position * (count - 1) as f32;
     (scaled.round().max(0.0) as usize).min(count - 1)
@@ -255,59 +195,34 @@ fn amplitude_at(vp: &Voiceprint, frame: usize, loudest_db: f32) -> f32 {
 
 /// Flatness above which a frame counts as noise rather than tone.
 ///
-/// A vowel's energy sits in harmonics and measures near zero; a fricative's is
-/// spread across everything and measures high.
-///
-/// Set on real speech by sweeping this and [`NOISE_FLOOR`] together and counting
-/// selected runs centred below 1.5 kHz — too low for any fricative, so room
-/// rather than voice. The answer was to be **strict about shape and lenient
-/// about level**: a looser shape bar lets room tone through in quantity. Shape
-/// is what identifies a consonant; quietness is a property consonants genuinely
-/// have, so screening hard on level throws away the real ones first.
+/// Set on real speech with [`NOISE_FLOOR`], counting selected runs centred below
+/// 1.5 kHz (room, not voice): **strict about shape, lenient about level**.
+/// Quietness is a property consonants genuinely have, so screening hard on level
+/// throws away the real ones first.
 const NOISE_FLATNESS: f32 = 0.20;
 
-/// Shortest run of noise worth sounding, in frames.
-///
-/// Three frames, 30 ms. Shorter than a plosive burst and far shorter than a
-/// fricative, so nothing real is lost — but it does discard the single stray
-/// frames that appear at the edge of every voiced stretch, which would otherwise
-/// pepper the render with clicks nobody made.
+/// Shortest run of noise worth sounding (30 ms): discards the stray frames at
+/// the edge of every voiced stretch, which would sound as clicks.
 const MIN_NOISE_FRAMES: usize = 3;
 
-/// Longest a run of noise is sounded, in seconds.
-///
-/// A silence between phrases measures as flat as a fricative does — there is no
-/// energy in it, so there is no shape to it either. Loudness screens most of
-/// that out; this catches the rest, since no consonant lasts a second.
+/// Longest a run of noise is sounded, in seconds: silence is as flat as a
+/// fricative, and no consonant lasts a second.
 const MAX_NOISE_S: f32 = 0.5;
 
-/// Quietest noise run kept, relative to the loudest moment in the take.
-///
-/// About 36 dB below the loudest moment, which is low. A fricative is far
-/// quieter than a stressed vowel — that is what a fricative is — so a floor set
-/// where it feels comfortable removes the consonants before it removes the room.
-/// See [`NOISE_FLATNESS`] for the measurement that set both.
+/// Quietest noise run kept, relative to the loudest moment (about 36 dB down):
+/// a fricative is far quieter than a stressed vowel. See [`NOISE_FLATNESS`].
 const NOISE_FLOOR: f32 = 0.015;
 
-/// How wide a band the measured flatness is spread across, in Hz.
-///
-/// Flatness runs from 0 for a pure tone to 1 for white noise, and this turns
-/// that into a bandwidth: a peaked spectrum becomes a narrow band that whistles,
-/// a flat one becomes air. The ceiling is what a fully flat frame gets.
+/// Bandwidth given to a fully flat frame, in Hz: flatness maps a peaked spectrum
+/// to a narrow band that whistles and a flat one to air.
 const MAX_NOISE_BANDWIDTH_HZ: f32 = 4_000.0;
 
 /// The narrowest band, so a highly tonal frame still sounds like something.
 const MIN_NOISE_BANDWIDTH_HZ: f32 = 250.0;
 
-/// Turn the unvoiced stretches of a take into noise events.
-///
-/// Nearly three quarters of ordinary speech carries no fundamental, and without
-/// this it would reach a mapping only as a trigger for a note built out of the
-/// *following* vowel.
-///
-/// Each run of consecutive noise-like frames becomes one event, keeping the
-/// speaker's own consonant timing — which is also the fastest structural layer
-/// in speech, and the only one the note stream cannot carry.
+/// Turn the unvoiced stretches of a take into noise events, one per run of
+/// noise-like frames, keeping the speaker's own consonant timing — the fastest
+/// structural layer in speech.
 pub fn compose_noise(vp: &Voiceprint, level: f32) -> Vec<NoiseEvent> {
     if level <= 0.0 {
         return Vec::new();
@@ -353,9 +268,7 @@ fn noise_run(
         return None;
     }
 
-    // Loudest frame rather than the mean: a plosive is a burst followed by
-    // nothing, and averaging across it reports a quiet event where a sharp one
-    // happened.
+    // Loudest frame, not the mean: a plosive is a burst followed by nothing.
     let amplitude = (start..end)
         .map(|i| amplitude_at(vp, i, loudest_db))
         .fold(0.0f32, f32::max);

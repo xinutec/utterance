@@ -1,13 +1,7 @@
 /**
- * The sign-in wall, driven by what the backend answers rather than by a check
- * of its own.
- *
- * There is deliberately no "am I logged in?" probe on startup. The gate is
- * absent on the Mac and in dev — the backend only raises it when Nextcloud
- * credentials are in its environment — so a frontend that asked would have to
- * understand two deployments. Instead every request is allowed to go out, and a
- * 401 is what raises the wall. Where there is no gate, nothing ever answers 401
- * and the wall never exists.
+ * The sign-in wall, raised by what the backend answers rather than by a check
+ * of its own: with no gate configured, nothing ever answers 401 and the wall
+ * never exists, so the frontend need not know which deployment it is.
  */
 
 import type { HttpInterceptorFn } from "@angular/common/http";
@@ -17,12 +11,7 @@ import { tap } from "rxjs/operators";
 import type { ErrorCode } from "./models";
 import { classifyApiError } from "./recordings-api";
 
-/**
- * The backend's stable codes for the two ways in can be refused.
- *
- * Typed as `ErrorCode`, so these are checked against the generated union
- * rather than merely spelled carefully.
- */
+/** The backend's codes for the two ways in can be refused, typed as `ErrorCode`. */
 const NOT_AUTHENTICATED: ErrorCode = "not_authenticated";
 const NOT_PERMITTED: ErrorCode = "not_permitted";
 
@@ -32,11 +21,8 @@ export class AuthState {
   readonly needsSignIn = signal(false);
 
   /**
-   * Set when a real Nextcloud user signed in and is not on this app's list.
-   *
-   * Held apart from {@link needsSignIn} because the two need opposite advice:
-   * one is fixed by signing in, and the other is not fixed by anything the
-   * person at the screen can do.
+   * Set when a signed-in Nextcloud user is not on this app's list — apart from
+   * {@link needsSignIn}, since signing in again cannot fix it.
    */
   readonly refused = signal<string | null>(null);
 
@@ -48,17 +34,9 @@ export class AuthState {
 }
 
 /**
- * Turn the backend's refusals into the wall.
- *
- * Classification is borrowed from `recordings-api` rather than repeated here:
- * `HttpErrorResponse.error` is typed `any` and holds whatever came back on the
- * wire, so reading `.code` off it directly is a belief rather than a check —
- * and a proxy's HTML 401 would then set a `code` of `undefined` and quietly do
- * nothing, or worse, something.
- *
- * Only these two codes are claimed. Any other 401 or 403 is left to be reported
- * as an ordinary error, because a wall raised by an unrelated failure sends
- * someone to sign in over and over about something signing in cannot fix.
+ * Turn the backend's refusals into the wall, classified by `recordings-api` —
+ * a proxy's HTML 401 has no `code`. Only these two codes raise it; any other 401
+ * or 403 is an ordinary error, not a reason to sign in again.
  */
 export const authInterceptor: HttpInterceptorFn = (request, next) => {
   const auth = inject(AuthState);

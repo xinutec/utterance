@@ -1,37 +1,20 @@
 /**
- * What a listener has chosen, and how it reaches the backend.
- *
- * A separate module from the controls component because the query string is the
- * thing worth testing and worth sharing: two renders are comparable only if the
- * URL that produced each of them is, and someone who finds a setting they like
- * hands over a link rather than a description.
+ * What a listener has chosen, and the query string that carries it — the thing
+ * worth testing and sharing, since a setting is passed on as a link.
  */
 
 import type { Knob, KnobName, Mapping, MappingChoice } from "../../models";
 
 /** Every choice a render depends on, beyond which take is being rendered. */
 export interface MappingSettings {
-  /**
-   * Mappings to hear. Never empty — silence is not a choice.
-   *
-   * The generated union rather than `string[]`, so a name this backend does not
-   * serve cannot be written here at all.
-   */
+  /** Mappings to hear; never empty. Typed by the generated union. */
   readonly mapping: readonly Mapping[];
   /** Take the scale comes from, or `null` to let the backend choose. */
   readonly calibration: string | null;
   /**
-   * Knob values by name.
-   *
-   * Only knobs moved away from their default appear. That keeps the URL short
-   * and, more usefully, keeps it honest: a link with nothing but `bind=0` in it
-   * says exactly what was changed, where a link carrying every value makes the
-   * interesting one impossible to spot.
-   *
-   * `Partial<Record<KnobName, …>>` rather than `Record<string, …>`: the names
-   * are generated from the Rust knob table, so a key this backend never
-   * published cannot be written here. Partial because absent means *at its
-   * default*, which is the whole point of the shape.
+   * Knob values by name, only those moved from their default — so a link says
+   * exactly what changed. Keys are the generated `KnobName`, so an unpublished
+   * knob cannot be written; absent means at its default.
    */
   readonly knobs: Readonly<Partial<Record<KnobName, number>>>;
 }
@@ -44,11 +27,8 @@ export const INITIAL_SETTINGS: MappingSettings = {
 };
 
 /**
- * The query string these settings imply, without the leading `?`.
- *
- * Built in a fixed order — mapping, calibration, then knobs as the backend
- * published them — so the same choices always produce the same URL and two of
- * them can be compared by eye.
+ * The query string these settings imply, without the leading `?`, in a fixed
+ * order so the same choices always give the same URL.
  */
 export function settingsQuery(settings: MappingSettings, knobs: readonly Knob[]): string {
   const query = new URLSearchParams();
@@ -64,16 +44,9 @@ export function settingsQuery(settings: MappingSettings, knobs: readonly Knob[])
 /**
  * The settings a query string describes — the inverse of {@link settingsQuery}.
  *
- * **A URL is input from outside**, whether it was typed, edited or pasted from a
- * message, so nothing here is trusted: a knob nobody published is dropped, a
- * value that is not a number is dropped, and one outside the published range is
- * clamped to it. The alternative is a slider sitting somewhere it cannot be
- * dragged to, rendering audio the sliders on screen do not describe.
- *
- * A knob left at its default is dropped rather than recorded, so that reading a
- * link and writing it back produces the same link. Without that, opening a
- * shared comparison would immediately rewrite the address bar into a longer URL
- * saying the same thing.
+ * **A URL is input from outside**: an unpublished knob or a non-number is
+ * dropped, an out-of-range value clamped. A knob at its default is dropped too,
+ * so reading a link and writing it back gives the same link.
  */
 export function parseSettings(
   query: string,
@@ -83,9 +56,8 @@ export function parseSettings(
 ): MappingSettings {
   const params = new URLSearchParams(query);
 
-  // Kept only if the backend published it. An unknown name passed through
-  // would make the render return a 400, so a link with one bad character would
-  // play nothing at all rather than the rest of what it asked for.
+  // Only published names: an unknown one would make the render 400 and lose
+  // the rest of the link.
   const served = new Set<string>(offered.map((m) => m.name));
   const mapping = (params.get("mapping") ?? "")
     .split(",")
@@ -102,14 +74,11 @@ export function parseSettings(
     if (clamped !== knob.default) chosen[knob.name] = clamped;
   }
 
-  // An empty `calibration=` means the same as no calibration at all — let the
-  // backend choose. Written out rather than leaning on truthiness, because the
-  // two cases really are different values and one of them is a take id.
+  // An empty `calibration=` means none: let the backend choose.
   const calibration = params.get("calibration");
 
   return {
-    // Never empty: silence is not a choice, and a link with a typo in its
-    // mapping name should play the default rather than nothing at all.
+    // Never empty: a typo in the mapping name plays the default.
     mapping: mapping.length > 0 ? mapping : fallback.mapping,
     calibration: calibration === null || calibration === "" ? null : calibration,
     knobs: chosen,
@@ -122,12 +91,8 @@ export function knobValue(settings: MappingSettings, knob: Knob): number {
 }
 
 /**
- * The settings with one knob moved.
- *
- * Setting a knob back to its default removes it rather than recording it, so
- * the URL of a knob returned to where it started is the URL of one never
- * touched — otherwise exploring and then undoing would leave a trail that makes
- * two identical renders look different.
+ * The settings with one knob moved. Moving it back to its default removes it,
+ * so undoing leaves the URL of a knob never touched.
  */
 export function withKnob(
   settings: MappingSettings,

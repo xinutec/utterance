@@ -1,8 +1,5 @@
-//! Noise characterisation against signals whose spectrum is known.
-//!
-//! The measurements have textbook values on textbook signals, so these are not
-//! a matter of judgement: white noise is flat and a sine is not, and a band of
-//! noise has its centroid in the middle of the band.
+//! Noise characterisation against signals with textbook answers: white noise is
+//! flat, a sine is not, and a noise band's centroid is in the band.
 
 mod common;
 
@@ -80,8 +77,7 @@ fn white_noise_is_flat_and_a_tone_is_not() {
 
 #[test]
 fn a_vowel_is_far_more_tonal_than_a_fricative() {
-    // The distinction the mapping actually needs: this is what separates the
-    // material that carries pitch from the material that carries texture.
+    // What separates the pitched material from the texture.
     let vowel = track(&common::vowel(120.0, 1.0));
     let fricative = track(&band(6_000.0, 2_000.0, 1.0));
 
@@ -106,8 +102,7 @@ fn the_centroid_lands_inside_the_band_it_measures() {
 
 #[test]
 fn a_hissed_s_reads_brighter_than_a_hushed_sh() {
-    // The two most common fricatives in English sit about an octave apart, and
-    // telling them apart is most of what makes consonants sound individual.
+    // *s* and *sh* sit about an octave apart.
     let ess = steady_median(&track(&band(7_000.0, 3_000.0, 1.0)).centroid_hz);
     let esh = steady_median(&track(&band(3_500.0, 1_500.0, 1.0)).centroid_hz);
     assert!(ess > esh * 1.4, "s {ess:.0} Hz against sh {esh:.0} Hz");
@@ -115,9 +110,7 @@ fn a_hissed_s_reads_brighter_than_a_hushed_sh() {
 
 #[test]
 fn silence_reports_no_energy_anywhere_rather_than_a_confident_zero() {
-    // A geometric mean collapses to zero if any bin does, so without a floor a
-    // digitally silent frame reports itself as perfectly tonal — the most
-    // confident possible answer about nothing at all.
+    // Without a floor, a geometric mean makes silence "perfectly tonal".
     let quiet = track(&vec![0.0; ANALYSIS_RATE as usize]);
     assert!(
         quiet.flatness.iter().all(|&f| f > 0.5),
@@ -144,9 +137,8 @@ fn is_a_pure_function_of_its_input() {
 
 #[test]
 fn a_fricative_under_room_rumble_still_reads_as_noise() {
-    // Every recording has low-frequency energy in it — room, proximity, the tail
-    // of the last vowel — and measuring across the whole spectrum lets that
-    // dominate both numbers, so genuine consonants read as tonal.
+    // Low-frequency energy — room, proximity, vowel tails — must not make a
+    // consonant read as tonal.
     let hiss = band(6_000.0, 3_000.0, 1.0);
     let rumble = band(80.0, 40.0, 1.0);
     let mixed: Vec<f32> = hiss
@@ -171,8 +163,7 @@ fn a_fricative_under_room_rumble_still_reads_as_noise() {
 
 #[test]
 fn nothing_below_the_band_reaches_either_measure() {
-    // A pure low tone carries no information about consonants, and must not be
-    // able to move a measurement that is about them.
+    // A low tone must not move a measurement about consonants.
     let t = track(&common::sine(120.0, ANALYSIS_RATE, 1.0));
     assert!(
         steady_median(&t.centroid_hz) > texture::NOISE_BAND_LOW_HZ,
@@ -180,16 +171,11 @@ fn nothing_below_the_band_reaches_either_measure() {
     );
 }
 
-/// White noise shaped to a known slope, by a one-pole filter with a known one.
-///
-/// A single pole rolls off at 6 dB per octave above its corner, so cascading `n`
-/// of them at a corner below the measured band gives −6·n dB/octave across it.
-/// That makes the expected answer arithmetic rather than a number read off a
-/// previous run of the code being tested.
+/// White noise through `n` one-pole low-passes below the band: −6·n dB/octave
+/// across it, an answer known from arithmetic rather than a previous run.
 fn sloped(poles: usize, secs: f32) -> Vec<f32> {
     let mut signal = white(secs);
-    // Well below NOISE_BAND_LOW_HZ, so the whole fitted band is in the roll-off
-    // rather than straddling the corner.
+    // Well below the band, so the whole fit is in the roll-off.
     let corner_hz = 50.0;
     let alpha = 1.0 - (-2.0 * std::f32::consts::PI * corner_hz / ANALYSIS_RATE as f32).exp();
     for _ in 0..poles {
@@ -210,9 +196,7 @@ fn sloped(poles: usize, secs: f32) -> Vec<f32> {
 
 #[test]
 fn tilt_reads_a_known_slope_in_decibels_per_octave() {
-    // Not "steeper than the other one" — the actual number. A slope measurement
-    // that only orders things correctly can be wrong by a factor and never say
-    // so, and the unit is what a mapping would normalise against.
+    // The actual number, not just the ordering: a mapping normalises the unit.
     for poles in [1usize, 2, 3] {
         let measured = steady_median(&track(&sloped(poles, 1.0)).tilt_db_per_octave);
         let expected = -6.0 * poles as f32;
@@ -225,14 +209,9 @@ fn tilt_reads_a_known_slope_in_decibels_per_octave() {
 
 #[test]
 fn tilt_measures_the_voice_and_not_the_resampler() {
-    // The design decision, made falsifiable. Everything is analysed at 16 kHz and
-    // a band-limited resampler's anti-aliasing filter collapses approaching 8 kHz.
-    // A fit taken to Nyquist would measure that cliff on every frame of every
-    // recording and report it as a property of the speaker — steeply, and
-    // consistently enough to look like a real result.
-    //
-    // White noise is the signal that catches it: genuinely flat, so anything the
-    // measurement finds is the machinery.
+    // Fitted to Nyquist, the tilt would measure the resampler's anti-alias
+    // cliff on every take. White noise is flat, so anything found is the
+    // machinery.
     let flat = steady_median(&track(&white(1.0)).tilt_db_per_octave);
     assert!(
         flat.abs() < 2.0,
@@ -242,10 +221,7 @@ fn tilt_measures_the_voice_and_not_the_resampler() {
 
 #[test]
 fn tilt_separates_two_vowels_the_centroid_agrees_about() {
-    // Why this is a stream rather than a restatement of the brightness already
-    // read. Two bands with the same centre have the same centroid by
-    // construction, and a spectrum that falls away from it steeply is a different
-    // sound from one that does not.
+    // Same centroid, different tilt: why tilt is a stream of its own.
     let narrow = track(&band(1_200.0, 200.0, 1.0));
     let wide = track(&band(1_200.0, 2_000.0, 1.0));
 
@@ -263,8 +239,7 @@ fn tilt_separates_two_vowels_the_centroid_agrees_about() {
         tilts.0,
         tilts.1
     );
-    // Stated so the test fails loudly if the fixtures stop sharing a centroid and
-    // the comparison quietly becomes about brightness after all.
+    // Fails loudly if the fixtures stop sharing a centroid.
     assert!(
         (centroids.0 - centroids.1).abs() < 600.0,
         "the two bands no longer share a centroid: {:.0} and {:.0} Hz",
@@ -275,20 +250,9 @@ fn tilt_separates_two_vowels_the_centroid_agrees_about() {
 
 #[test]
 fn the_band_never_reaches_below_its_stated_low_edge() {
-    // `NOISE_BAND_LOW_HZ` is a claim the rest of the system reads: the series
-    // are documented as measured above 300 Hz, and the consonant thresholds
-    // downstream were set from a sweep against a real take *on that basis* —
-    // room rumble swamping a consonant measure is the mistake this constant
-    // exists to have fixed.
-    //
-    // The first bin is `ceil(300 / 31.25)` = 10, at 312.5 Hz. Rounding that down
-    // instead admits bin 9 at 281.25 Hz, and a tone sitting exactly there is
-    // then measured as if it were part of the noise band.
-    //
-    // The centroid is a power-weighted mean of the bins in the band, so it
-    // cannot fall below the band's first bin. That makes this an invariant
-    // rather than a tolerance, and 281.25 Hz is the signal that makes a lower
-    // edge show up in it.
+    // The band's first bin is `ceil(300 / 31.25)` = 10, at 312.5 Hz; rounding
+    // down would admit bin 9 at 281.25 Hz. The centroid cannot fall below the
+    // band's first bin, so a tone at 281.25 Hz makes a wrong edge visible.
     let below = common::sine(281.25, ANALYSIS_RATE, 0.5);
     let t = track(&below);
     assert!(!t.centroid_hz.is_empty(), "no frames to measure");

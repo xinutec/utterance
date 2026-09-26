@@ -1,13 +1,7 @@
-//! **`index.html` must revalidate; the hashed bundle may be kept forever.**
-//!
-//! A test and not a curl, because a header verified by hand once is a header
-//! nobody is watching.
-//!
-//! What goes wrong without it: with no `Cache-Control` a client falls back to
-//! HEURISTIC freshness, roughly a tenth of the document's age, and may keep
-//! `index.html` for days without asking. That document names the content-hashed
-//! bundle, so the new `main-*.js` is never fetched either and the deploy is
-//! invisible.
+//! **`index.html` must revalidate; the hashed bundle may be kept forever.** A test,
+//! because a header checked by hand once is not being watched. Without
+//! `Cache-Control` a client can keep `index.html` for days, and with it the old
+//! bundle, making a deploy invisible.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -17,9 +11,8 @@ use utterance::routes;
 use utterance::state::AppState;
 use utterance::store::Store;
 
-/// Data dir and static dir together, so one `Drop` clears both. The static dir
-/// is shaped like a real `ng build` output: the document, and one asset whose
-/// NAME carries the content hash.
+/// Data dir and static dir together, one `Drop` for both; the static dir looks
+/// like `ng build` output.
 struct TestApp {
     router: axum::Router,
     dir: std::path::PathBuf,
@@ -84,10 +77,8 @@ async fn the_document_is_asked_for_every_time() {
     assert_eq!(cc, "no-cache");
 }
 
-/// The path that actually matters on a phone. A deep link matches no route, so
-/// it reaches the SPA fallback and is served the document — which means the
-/// fallback needs the header just as much as the file does, and it is reached
-/// by a different arm of `ServeDir`.
+/// A deep link reaches the SPA fallback — a different arm of `ServeDir` — and
+/// needs the header just as much.
 #[tokio::test]
 async fn a_deep_link_served_the_shell_revalidates_too() {
     let (status, cc) = TestApp::new().cache_control("/recordings").await;
@@ -104,10 +95,8 @@ async fn the_content_hashed_bundle_may_be_kept() {
     assert_eq!(cc, "public, max-age=31536000, immutable");
 }
 
-/// ⚠ **A 304 is not an error, and the difference is not cosmetic.** A guard
-/// written as `!status.is_success()` also catches `304 Not Modified` — and a 304
-/// must carry the headers a 200 would, so the client can refresh what it already
-/// holds. Without them every revalidated asset becomes a full re-fetch.
+/// ⚠ A 304 must carry the headers a 200 would, or every revalidation becomes a
+/// full fetch — which a `!status.is_success()` guard would cause.
 #[tokio::test]
 async fn a_revalidated_asset_is_still_told_it_may_be_kept() {
     let harness = TestApp::new();
@@ -148,24 +137,16 @@ async fn a_revalidated_asset_is_still_told_it_may_be_kept() {
     );
 }
 
-/// **A missing FILE must 404, not be handed the page.**
-///
-/// Handed the SPA shell, a browser that asked for a font renders broken icons
-/// and reports nothing at all, so the failure is silent on both sides; the wrong
-/// answer being a 200 is exactly what makes this invisible.
-///
-/// The rule is a dot in the last path segment: `/recordings` is a route and
-/// `/main-ABC123.js` is a file. A heuristic, and the alternative — enumerating
-/// the bundle's own asset names — would have to be rebuilt whenever `ng build`
-/// changes a hash.
+/// **A missing file must 404, not be handed the page** — a font answered with
+/// HTML fails silently on both sides. A file is a name with a dot in its last
+/// segment.
 #[tokio::test]
 async fn a_missing_asset_is_a_404_and_not_the_page() {
     let (status, _) = TestApp::new().cache_control("/media/nope.woff2").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-/// The other half, and it is the one a careless fix breaks: a client-side route
-/// has no dot and must still load the shell, or every deep link 404s.
+/// The other half: a client-side route has no dot and must still load the shell.
 #[tokio::test]
 async fn a_deep_link_still_gets_the_page() {
     let (status, _) = TestApp::new().cache_control("/recordings").await;

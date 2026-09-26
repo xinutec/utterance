@@ -13,24 +13,13 @@ import { RecordingsStore } from "../../recordings-store";
 import { knobValue, withKnob, type MappingSettings } from "./mapping-settings";
 
 /**
- * The mapping's knobs, as things you can turn.
+ * The mapping's knobs, as things you can turn — the open questions are settled
+ * by moving a slider and listening, not by editing URLs.
  *
- * Exploring is how the open questions in `docs/roadmap.md` get answered, so the
- * person the music is for has to be able to reach every knob without editing a
- * URL. Whether the speaker's own tuning
- * beats equal temperament is not something anyone can settle by argument; it is
- * something you settle by moving a slider and listening twice.
- *
- * **Nothing here is written down twice.** The sliders, their ranges and their
- * explanations come from `GET /api/controls`, which the mapping crate publishes.
- * Adding a knob to `utterance_mapping::params::KNOBS` makes it appear here; changing
- * a range changes the slider. A UI keeping its own copy would eventually offer a
- * value the mapping clamps away, and the person turning it would hear nothing
- * and conclude the knob was broken.
- *
- * Moving anything changes only what the *next* render will be. Nothing here
- * fires a request: a render is seconds of backend work, and a slider that
- * re-rendered as it moved would queue a dozen renders per drag.
+ * The sliders, ranges and explanations come from `GET /api/controls`, so a knob
+ * added in Rust appears here and a slider cannot offer a value the mapping
+ * clamps away. Moving one changes only the *next* render; nothing is fetched on
+ * a drag.
  */
 @Component({
   selector: "app-mapping-controls",
@@ -64,13 +53,8 @@ export class MappingControls {
   readonly chosenMappings = computed(() => [...this.settings().mapping]);
 
   /**
-   * The knobs the mappings being played actually read.
-   *
-   * A knob declares which mappings it reaches and an empty list means all of
-   * them, so this filter needs no list of its own — the same arrangement as the
-   * ranges. Showing one that the playing mapping ignores produces exactly the
-   * failure the whole table exists to prevent: a slider that moves, and changes
-   * nothing, and leaves the person turning it to conclude the thing is broken.
+   * The knobs the playing mappings actually read, from each knob's own list, so
+   * no slider is shown that moves and changes nothing.
    */
   readonly relevant = computed(() => {
     const playing = this.settings().mapping;
@@ -80,24 +64,15 @@ export class MappingControls {
   });
 
   /**
-   * The knobs offered without being asked for, and the rest.
-   *
-   * Ten sliders at equal weight is an instrument panel for someone who already
-   * knows what each one does; to anybody else it reads as ten things they might
-   * be getting wrong. Which handful comes first is a fact about the mapping and
-   * arrives on the knob — a list of important names kept here would be a second
-   * opinion about the knob table, and would drift the first time a knob was
-   * added in Rust.
+   * Primary knobs, then the rest — the split arrives on each knob, so there is
+   * no second list here to drift.
    */
   readonly primary = computed(() => this.relevant().filter((knob) => knob.primary));
   readonly advanced = computed(() => this.relevant().filter((knob) => !knob.primary));
 
   /**
-   * How many advanced knobs have been moved, for the disclosure's own label.
-   *
-   * Without it, closing the panel hides the fact that something inside it is no
-   * longer at its default — and then a render nobody can explain is a render
-   * whose cause is one click away and invisible.
+   * How many advanced knobs have been moved, for the folded panel's label, so a
+   * closed panel does not hide a moved knob.
    */
   readonly advancedMoved = computed(() => {
     const moved = this.settings().knobs;
@@ -119,18 +94,10 @@ export class MappingControls {
   }
 
   /**
-   * Choose the mappings to hear.
-   *
-   * An empty choice is refused rather than sent: the backend has nothing to
-   * render from it, and a toggle group with nothing on is a person mid-thought
-   * rather than a person asking for silence.
-   *
-   * **Two mappings making the same material cannot both sound**, so turning one
-   * on turns its rival off. The render route refuses the pair, and letting
-   * someone assemble a refused combination and press play would teach them that
-   * the page is broken rather than that the combination is meaningless. Which
-   * mappings are rivals comes from `makes` in what the backend published, so a
-   * new mapping needs no change here.
+   * Choose the mappings to hear. An empty choice is ignored: it is a person
+   * mid-thought, not a request for silence. Two mappings making the same
+   * material cannot sound together, so turning one on turns its rival off, going
+   * by what the backend says each makes.
    */
   setMappings(names: Mapping[]): void {
     if (names.length === 0) return;

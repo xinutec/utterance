@@ -1,82 +1,48 @@
-//! Summing sinusoids, and the several things that stop that sounding dead.
+//! Summing sinusoids, and the things that stop that sounding dead.
 //!
-//! A bare sum of steady sinusoids is the sound every naive additive synthesiser
-//! makes: correct in every partial and lifeless in every other respect. Four
-//! things here are what a real tone has and that does not, and each is a
-//! *capability* rather than a choice — the score says how much of each, so
-//! nothing below decides anything musical.
+//! A bare sum of steady sinusoids is correct and lifeless. Four capabilities
+//! fix that, each in the amount the score asks for, so nothing here decides
+//! anything musical:
 //!
-//! - **The spectrum moves.** Each note interpolates across the score's palette
-//!   from its start colour to its end colour. A spectrum that holds still is
-//!   most of what makes additive synthesis sound like an organ.
-//! - **High partials die first.** Every real resonator damps high frequencies
-//!   faster than low, so a tone darkens as it decays.
-//! - **Partials are not exactly locked.** A trace of detune, from the speaker's
-//!   own pitch instability, is the difference between alive and machine-made.
-//! - **There is noise in it.** Breath, bow, wind: no acoustic sound is purely
-//!   periodic, and the absence of noise is heard as sterility. The noise is
-//!   filtered to sit where the tone's own energy sits — unfiltered white noise
-//!   is heard as tape hiss laid over the music rather than as part of it.
+//! - **The spectrum moves** across the score's palette through each note.
+//! - **High partials die first**, so a tone darkens as it decays.
+//! - **Partials are not exactly locked**: the speaker's own detune.
+//! - **There is breath in it**, filtered to sit where the tone's energy sits —
+//!   white noise reads as tape hiss over the music.
 
 use utterance_mapping::score::{Event, Field, NoiseEvent, Score};
 
-/// Rate everything is rendered at.
-///
-/// 44.1 kHz because the output is for listening rather than for analysis, and
-/// this is what every browser and audio player expects without resampling.
+/// Rate everything is rendered at: what every browser and player expects.
 pub const RENDER_RATE: u32 = 44_100;
 
-/// Attack and release of a note, in seconds.
-///
-/// Short, but never zero: a sinusoid switched on mid-cycle is a step
-/// discontinuity, and a step is a click. Long enough to remove that, short
-/// enough that the onset still reads as an onset.
+/// Attack and release of a note, in seconds: never zero, since a sinusoid
+/// switched on mid-cycle clicks.
 const ATTACK_S: f32 = 0.012;
 const RELEASE_S: f32 = 0.09;
 
-/// How much faster the top of the spectrum decays than the bottom.
-///
-/// By the end of a note the highest partial retains this fraction of the level
-/// the fundamental keeps. Damping rises with frequency in every real resonator,
-/// and without it a decaying note keeps its attack brightness the whole way down
-/// — which reads as synthetic long before anyone can say why.
+/// Fraction of the fundamental's level the highest partial keeps by the end of a
+/// note. Without it a decaying note keeps its attack brightness and sounds
+/// synthetic.
 const HIGH_PARTIAL_SURVIVAL: f32 = 0.35;
 
-/// Peak level the finished render is scaled to.
-///
-/// Under full scale on purpose: notes overlap, and a render normalised to
-/// exactly 1.0 leaves no room for the intersample peaks that appear when it is
-/// converted for playback.
+/// Peak level the finished render is scaled to, under full scale to leave room
+/// for intersample peaks.
 const HEADROOM: f32 = 0.89;
 
-/// Samples between recalculations of a note's moving spectrum.
-///
-/// About a millisecond and a half. Interpolating per sample would be exact and
-/// pointless — a spectrum crossing the palette over a whole note moves far more
-/// slowly than this, and the saving is what keeps rendering a long take quick.
+/// Samples between recalculations of a note's moving spectrum (about 1.5 ms):
+/// far faster than any spectrum moves, far cheaper than per sample.
 const SPECTRUM_HOP: usize = 64;
 
-/// Fractional part of the golden ratio, to the precision an `f32` holds.
-///
-/// Used to space partial phases: successive multiples of an irrational number
-/// fill the interval about as evenly as anything can, so no two partials start
-/// near the same phase and none of them line up periodically.
+/// Fractional part of the golden ratio, spacing partial phases so none start
+/// together.
 const GOLDEN_FRACTION: f32 = 0.618_034;
 
 /// Width of the band a note's breath is shaped into, as a fraction of its
-/// centre.
-///
-/// Breath in a voice is noise driven through the same resonances that shape the
-/// tone, so it carries the vowel's colour rather than being white. Wide enough
-/// to still read as air, narrow enough that it belongs to the note instead of
-/// sitting on top of it.
+/// centre: wide enough to read as air, narrow enough to belong to the note.
 const BREATH_BANDWIDTH_RATIO: f32 = 0.9;
 
-/// Render a score to mono samples at [`RENDER_RATE`].
-///
-/// Deterministic, as everything in this project is: no clock, no system
-/// randomness, and the noise below comes from a counter-seeded generator, so the
-/// same score renders to the same bytes on every run.
+/// Render a score to mono samples at [`RENDER_RATE`]. Deterministic: the noise
+/// is counter-seeded, so the same score renders to the same bytes.
 pub fn render(score: &Score) -> Vec<f32> {
     let length = (score.duration_s.max(0.0) * RENDER_RATE as f32).ceil() as usize;
     let mut out = vec![0.0f32; length];
@@ -92,9 +58,8 @@ pub fn render(score: &Score) -> Vec<f32> {
         sum_note(&mut out, event, score, index);
     }
 
-    // Seeded past the notes so a consonant never draws the same noise as the
-    // breath of the note beside it, which would correlate the two and read as
-    // one sound rather than two.
+    // Seeded past the notes, so a consonant never shares noise with a note's
+    // breath and fuses with it.
     for (index, event) in score.noise.iter().enumerate() {
         sum_noise(&mut out, event, score.events.len() + index);
     }
@@ -117,9 +82,8 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
         return;
     }
 
-    // Detune is fixed per partial for the whole note, not wandering: a partial
-    // that drifts is vibrato, and vibrato is a musical decision that belongs
-    // upstream. This is the static mistuning a real resonator has.
+    // Detune fixed per partial for the whole note: drifting would be vibrato, a
+    // musical decision that belongs upstream.
     let mut noise = Noise::seeded(index as u32);
     let detune: Vec<f32> = (0..width)
         .map(|_| {
@@ -128,10 +92,8 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
         })
         .collect();
 
-    // Deterministic per-partial phase. All-zero phases make every partial peak
-    // at once, which concentrates the waveform into a spike: the same energy
-    // arrives as a click rather than as a tone, and it wastes headroom the rest
-    // of the render then has to be scaled down to accommodate.
+    // Spread phases: all-zero phases peak together, turning energy into a click
+    // and wasting headroom.
     let phase: Vec<f32> = (0..width)
         .map(|k| (k * k) as f32 * GOLDEN_FRACTION * std::f32::consts::TAU)
         .collect();
@@ -143,9 +105,7 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
     let mut spectrum = vec![0.0f32; width];
     let mut gain = 0.0f32;
 
-    // Breath is shaped by a resonator centred on where the note's own energy
-    // sits, recomputed as the spectrum moves. White noise here reads as hiss
-    // over the piece rather than as a quality of the tone.
+    // Breath through a resonator centred where the note's energy sits.
     let mut breath_state = (0.0f32, 0.0f32);
     let mut breath_filter = Resonator::silent();
 
@@ -159,8 +119,7 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
             spectrum = score.spectrum_at(colour);
             spectrum.resize(width, 0.0);
             damp(&mut spectrum, progress);
-            // Constant power however many partials survived, so a low note
-            // keeping twenty-four is not louder than a high one keeping six.
+            // Constant power however many partials survive.
             gain = 1.0 / spectrum.iter().sum::<f32>().max(f32::EPSILON);
 
             if breath > 0.0 {
@@ -176,9 +135,7 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
                 continue;
             }
             let hz = event.hz * (k + 1) as f32 * detune[k];
-            // Partials past Nyquist alias down into the audible range as
-            // inharmonic rubbish, which is heard as the tuning being wrong
-            // rather than as the synthesiser being wrong.
+            // Past Nyquist a partial aliases, and sounds like a wrong tuning.
             if hz >= nyquist {
                 break;
             }
@@ -190,20 +147,15 @@ fn sum_note(out: &mut [f32], event: &Event, score: &Score, index: usize) {
     }
 }
 
-/// Partials each field voice is rendered with.
-///
-/// Fewer than a note gets. Five voices at the full twenty-four would be a
-/// hundred and twenty oscillators per sample, and the partials past this
-/// contribute less to the sound than the fifth voice does.
+/// Partials each field voice is rendered with: fewer than a note gets, since
+/// several voices share the load.
 const FIELD_PARTIALS: usize = 12;
 
 /// Render the continuously sounding field.
 ///
-/// **Phase is accumulated, never recomputed from the elapsed time.** A voice
-/// here changes frequency every frame, and `sin(2πft)` with a moving `f` jumps
-/// discontinuously at each change — a click a hundred times a second, which is
-/// itself a tone at the frame rate. Advancing a phase by the current frequency
-/// each sample is the only way a glide sounds like a glide.
+/// Phase is accumulated, never recomputed from elapsed time: with a frequency
+/// that changes every frame, `sin(2πft)` jumps at each change — a click a
+/// hundred times a second.
 fn sum_field(out: &mut [f32], field: &Field, score: &Score) {
     let frames = field.frames();
     let voice_count = field.voice_count();
@@ -240,8 +192,7 @@ fn sum_field(out: &mut [f32], field: &Field, score: &Score) {
         let mut value = 0.0f32;
 
         for (v, phases) in phase.iter_mut().enumerate() {
-            // Interpolated across the frame boundary, so a voice moving between
-            // degrees glides rather than stepping.
+            // Interpolated across the frame boundary, so a voice glides.
             let hz = lerp(field.voices[v][frame], field.voices[v][next], blend);
             let gain = lerp(field.gains[v][frame], field.gains[v][next], blend);
             if gain <= 0.0 || hz <= 0.0 {
@@ -280,12 +231,8 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t
 }
 
-/// Add one consonant to the buffer.
-///
-/// A two-pole resonator driven by white noise. The same arithmetic the vocal
-/// tract does to the glottal source, which is why it is the right shape here:
-/// a fricative *is* noise through a resonance, so reproducing the measured
-/// centre and width reproduces the sound rather than approximating it.
+/// Add one consonant to the buffer: white noise through a two-pole resonator at
+/// the measured centre and width, which is what a fricative is.
 fn sum_noise(out: &mut [f32], event: &NoiseEvent, seed: usize) {
     let start = (event.start_s * RENDER_RATE as f32).max(0.0) as usize;
     if start >= out.len() || event.duration_s <= 0.0 {
@@ -364,12 +311,9 @@ fn spectrum_width(score: &Score) -> usize {
     score.palette.iter().map(Vec::len).max().unwrap_or(0)
 }
 
-/// Damp the spectrum according to how far through the note it is.
-///
-/// Partial *k* keeps a fraction that falls from 1 at the fundamental toward
-/// [`HIGH_PARTIAL_SURVIVAL`] at the top, interpolated by how far the note has
-/// run. At the attack the spectrum is untouched, which is what makes the attack
-/// the brightest moment — as it is in anything struck, plucked or bowed.
+/// Damp the spectrum by how far through the note it is: partial *k* falls from
+/// full at the fundamental toward [`HIGH_PARTIAL_SURVIVAL`] at the top, so the
+/// attack is the brightest moment.
 fn damp(spectrum: &mut [f32], progress: f32) {
     let width = spectrum.len().max(1) as f32;
     for (k, amplitude) in spectrum.iter_mut().enumerate() {
@@ -392,11 +336,8 @@ fn envelope(t: f32, duration_s: f32) -> f32 {
     }
 }
 
-/// Scale the whole render so its loudest moment sits at [`HEADROOM`].
-///
-/// Whole-render rather than per-note, because the dynamics between notes are
-/// carried from the speaker's energy envelope and levelling them would throw
-/// away a measurement.
+/// Scale the whole render so its loudest moment sits at [`HEADROOM`] — the whole
+/// render, since the dynamics between notes are the speaker's.
 fn normalise(out: &mut [f32]) {
     let peak = out.iter().fold(0.0f32, |m, s| m.max(s.abs()));
     if peak <= 0.0 {
@@ -408,12 +349,8 @@ fn normalise(out: &mut [f32]) {
     }
 }
 
-/// A deterministic noise source.
-///
-/// Seeded from an index rather than from a clock, so a render is
-/// reproducible — which the whole project depends on, since it is how "the
-/// mapping changed" is told apart from "the renderer wandered". An xorshift is
-/// ample: this is breath, not cryptography.
+/// A deterministic noise source: an xorshift seeded from an index, so renders
+/// are reproducible.
 struct Noise(u32);
 
 impl Noise {

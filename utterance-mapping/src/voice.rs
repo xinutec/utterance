@@ -1,18 +1,9 @@
-//! Everything about a speaker that a mapping needs, bundled so it cannot be
-//! assembled inconsistently.
+//! Everything about a speaker that a mapping needs, in one type: the scale, the
+//! timbres, the tonic and the vowel space — the world an utterance plays in.
 //!
-//! The mapping-layer counterpart to the speaker profile next door: the speaker
-//! is the world, the utterance is the piece. A voice fixes the scale, the
-//! timbres, the pitch it centres on and the vowel space its articulation is
-//! measured against — none of which should change between two things the same
-//! person said.
-//!
-//! **Why this is a type rather than loose arguments.** A derived scale is only
-//! consonant for tones carrying the spectrum it was derived from; tune to one
-//! spectrum and synthesise another and the roughness minima stop lining up with
-//! the notes. Building both from the same measurement in one place makes that
-//! impossible to get wrong, where loose parameters would make it a matter of
-//! everyone remembering.
+//! One type because a derived scale is only consonant for tones with the
+//! spectrum it came from; building both from one measurement makes a mismatch
+//! impossible.
 
 use utterance_analysis::partials::Partials;
 use utterance_analysis::speaker::{Brightness, VowelSpace};
@@ -20,11 +11,8 @@ use utterance_analysis::speaker::{Brightness, VowelSpace};
 use crate::score::{self, Spectrum};
 use crate::tuning::{self, Tuning};
 
-/// Widest detune the speaker's own instability is allowed to produce, in cents.
-///
-/// A ceiling rather than a target. Jitter measured on a take that was not
-/// actually steady runs to tens of cents, and partials pulled that far apart
-/// stop being one tone and start being a chord nobody wrote.
+/// Widest detune the speaker's own instability may produce, in cents: jitter
+/// from an unsteady take runs to tens of cents, which is a chord, not a tone.
 const MAX_DETUNE_CENTS: f32 = 12.0;
 
 /// A speaker, as far as a mapping is concerned.
@@ -32,36 +20,24 @@ const MAX_DETUNE_CENTS: f32 = 12.0;
 pub struct Voice {
     /// The scale, derived from this speaker's own spectrum.
     pub tuning: Tuning,
-    /// Spectra to move between, ordered dark to bright.
-    ///
-    /// Several rather than one, and this is the difference between a tone that
-    /// evolves and a tone that sits still. A speaker who recorded *ah*, *ee* and
-    /// *oo* has handed over three genuinely different spectra from one throat;
-    /// using one of them and discarding the others throws away most of the
-    /// timbral range they actually have.
+    /// Spectra to move between, ordered dark to bright — one per calibration
+    /// vowel, so the tone can travel the range the throat has.
     pub palette: Vec<Spectrum>,
     /// Spread among partials, from the speaker's own pitch instability.
     pub detune_cents: f32,
     /// The speaker's vowel-space extent, for normalising articulation.
     pub space: VowelSpace,
-    /// The speaker's brightness range, for normalising tone colour.
-    ///
-    /// Optional because it can genuinely be unmeasurable — too few voiced frames
-    /// across every take — and the honest response to that is a colour that
-    /// holds still, not a colour driven by some other stream standing in for it.
+    /// The speaker's brightness range, for normalising tone colour. When it
+    /// cannot be measured, colour holds still rather than borrowing a stream.
     pub brightness: Option<Brightness>,
     /// Where the music centres. Everything else is an interval from here.
     pub tonic_hz: f32,
 }
 
 impl Voice {
-    /// Build from calibration material and a speaker profile.
-    ///
-    /// `tuning_from` is the take the scale is derived from; `palette_from`
-    /// supplies the spectra to move between, and should include it. Returns
-    /// `None` when the tuning spectrum is too thin to derive a scale from — the
-    /// caller has better material or has none, and either beats a scale invented
-    /// from two partials.
+    /// Build from calibration material and a speaker profile. `tuning_from`
+    /// gives the scale; `palette_from` the spectra, and should include it. `None`
+    /// when the tuning spectrum is too thin for a scale.
     pub fn from_calibration(
         tuning_from: &Partials,
         palette_from: &[&Partials],
@@ -81,12 +57,8 @@ impl Voice {
         )
     }
 
-    /// The same, choosing how dense the derived scale is.
-    ///
-    /// Density belongs here rather than downstream because it decides how many
-    /// degrees the scale *has*, and that happens when the scale is derived. A
-    /// mapping handed a finished tuning can move its degrees but cannot conjure
-    /// the ones the derivation already discarded.
+    /// The same, choosing how dense the derived scale is — decided here, since a
+    /// finished tuning cannot regain degrees the derivation discarded.
     #[allow(
         clippy::too_many_arguments,
         reason = "the calibration's knobs, each named; the doc above says why density is one of them"
@@ -122,11 +94,8 @@ impl Voice {
     }
 }
 
-/// A measured harmonic series as a dense amplitude-per-harmonic list.
-///
-/// Gaps are filled with silence rather than interpolated: a harmonic the
-/// measurement never found is one that should not sound, and inventing a level
-/// for it would put energy where the speaker's vocal tract put none.
+/// A measured harmonic series as a dense amplitude-per-harmonic list, with
+/// silence where a harmonic was never found.
 fn spectrum_of(partials: &Partials) -> Option<Spectrum> {
     let highest = partials.partials.iter().map(|p| p.number).max()? as usize;
     let mut spectrum = vec![0.0; highest];
@@ -136,16 +105,9 @@ fn spectrum_of(partials: &Partials) -> Option<Spectrum> {
     Some(spectrum)
 }
 
-/// Cycle-to-cycle pitch instability of a track, in cents.
-///
-/// The median step between consecutive voiced frames — a speaker's jitter, near
-/// enough. Median rather than mean because a step across an unvoiced gap or an
-/// octave error is a different phenomenon entirely, and either would dominate an
-/// average.
-///
-/// Lives in mapping rather than in the analysis crate on purpose: it is
-/// arithmetic over a measurement already published in the voiceprint, not a new
-/// measurement, so deriving it here costs nobody a re-analysis of every take.
+/// Cycle-to-cycle pitch instability of a track, in cents: the median step
+/// between consecutive voiced frames, so octave errors and gaps do not dominate.
+/// Arithmetic over the voiceprint, so it lives here and needs no re-analysis.
 pub fn jitter_cents(hz: &[Option<f32>]) -> f32 {
     let mut steps: Vec<f32> = hz
         .windows(2)

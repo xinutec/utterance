@@ -10,15 +10,9 @@ import { RecordingsStore } from "../../recordings-store";
 import { STEPS, assess } from "./steps";
 
 /**
- * The guided calibration.
- *
- * Walks one step at a time, records one take per step, and says whether what
- * came out is usable — see `steps.ts` for why it is a take per step rather than
- * prompts inside one recording.
- *
- * Nothing here blocks. A step can be skipped, a poor take can be kept, and the
- * order is a suggestion: the person at the microphone knows things the checks do
- * not, like whether a van went past.
+ * The guided calibration: one take per step (see `steps.ts`), each checked for
+ * usability. Nothing blocks — the person at the microphone knows things the
+ * checks do not, like whether a van went past.
  */
 @Component({
   selector: "app-calibration",
@@ -37,12 +31,8 @@ export class Calibration implements OnInit {
 
   readonly index = signal(0);
   /**
-   * The step being shown.
-   *
-   * Falls back to the first step rather than being nullable: `index` is only
-   * moved by the next/back buttons, which are bounded, so an out-of-range value
-   * is a navigation bug — and showing step one is a better answer to that than
-   * a blank page with every binding guarded.
+   * The step being shown, falling back to the first: `index` only moves within
+   * bounds, so this beats guarding every binding.
    */
   readonly step = computed(() => STEPS[this.index()] ?? STEPS[0]);
   readonly isLast = computed(() => this.index() === STEPS.length - 1);
@@ -51,12 +41,8 @@ export class Calibration implements OnInit {
   readonly recorded = computed(() => new Set(this.store.recordings().map((r) => r.label)));
 
   /**
-   * The verdict on the current step's take.
-   *
-   * Derived from whatever take is open rather than remembered from the upload,
-   * so it survives navigating away and back, and so re-recording a step
-   * replaces the verdict without any bookkeeping. Takes are labelled with the
-   * step id, which is what ties the two together.
+   * The verdict on the current step's take, derived from the open take (matched
+   * by label), so it survives navigation and re-recording.
    */
   readonly verdict = computed(() => {
     const detail = this.store.selected();
@@ -83,9 +69,7 @@ export class Calibration implements OnInit {
           ? "microphone access was refused — allow it in the browser's site settings and try again"
           : err instanceof Error
             ? err.message
-            // Nothing left to narrow to. `String(err)` here is where
-            // "[object Object]" comes from, and a sentence is more use than a
-            // shape name the reader cannot act on.
+            // Never `String(err)`, which reads "[object Object]".
             : "the microphone could not be opened",
       );
     }
@@ -97,12 +81,8 @@ export class Calibration implements OnInit {
       this.captureError.set("nothing was captured — is the right input device selected?");
       return;
     }
-    // Labelled with the step id so the audio says what it was for. The whole
-    // take carries the label, which is the only claim about it that is exact.
-    // Declared as calibration: these guided vowels are what the scale,
-    // the timbre, the pitch range and the vowel space are derived from.
-    // Everything else uploaded here is material to render and must not
-    // shape the speaker — see `Role` in the store.
+    // Labelled with the step id, and declared calibration: these takes define
+    // the speaker; everything else uploaded is material.
     this.store.upload(take.wav, this.step().id, "calibration");
   }
 

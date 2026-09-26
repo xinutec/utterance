@@ -1,9 +1,7 @@
 /**
- * Two settings, and which knobs they disagree about.
- *
- * Naming the difference is the feature's central operation rather than a detail
- * of the view: someone who cannot say what changed cannot say what the change
- * did. Comparing the resulting *streams* is `compare-panels.ts` next door.
+ * Two settings, and which knobs they disagree about — someone who cannot say
+ * what changed cannot say what it did. Comparing the streams is
+ * `compare-panels.ts`.
  */
 
 import type { Knob } from "../../models";
@@ -18,14 +16,9 @@ export interface Difference {
 }
 
 /**
- * Everything the two sides disagree about, in the order it is published.
- *
- * **The mapping counts as a setting**, and it is the largest one there is:
- * the field and the lattice are two different pieces of music from one voice,
- * where a knob is a shade of one. Left out, the page would answer "nothing
- * differs" to the most interesting comparison it can make — and since that
- * sentence is the only thing telling a listener what they are listening for,
- * being silent about it is worse than being wrong about a knob.
+ * Everything the two sides disagree about, in published order. The mapping
+ * counts, and is the largest difference there is; leaving it out would say
+ * "nothing differs" about the most interesting comparison.
  */
 export function differences(
   a: MappingSettings,

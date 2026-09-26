@@ -33,20 +33,10 @@ const FORMANT_MIN_HZ = 200;
 const FORMANT_MAX_HZ = 4000;
 
 /**
- * Renders a voiceprint as four stacked time-aligned panels: pitch, formants,
- * level and spectral flux.
- *
- * The formant panel reads differently from the others — dots rather than a
- * line, because the series is full of gaps, and a log axis, because vowel
- * quality is a matter of ratios.
- *
- * Everything shares one x-axis and one frame grid, because reading these
- * together is the point: an onset that lands nowhere near an energy rise, or a
- * pitch reading in a frame with no level, is how you spot the analyser being
- * wrong. Separate charts with independent axes would hide exactly that.
- *
- * Canvas rather than SVG: half a minute of speech is a few thousand frames per
- * series, and that many DOM nodes makes the page unusable.
+ * A voiceprint as four stacked panels on one time axis — pitch, formants, level
+ * and flux — because the analyser is caught out by reading them together: an
+ * onset nowhere near an energy rise, pitch in a frame with no level. Canvas, for
+ * thousands of frames per series.
  */
 @Component({
   selector: "app-voiceprint-chart",
@@ -62,8 +52,7 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
   private stopWatchingScheme?: () => void;
 
   constructor() {
-    // Redraws whenever the input changes; the first draw waits for the view,
-    // since there is no canvas to measure until then.
+    // Redraw on input change; the first draw waits for the canvas to exist.
     effect(() => {
       const vp = this.voiceprint();
       if (this.observer) this.draw(vp);
@@ -91,8 +80,7 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Match the backing store to the device pixel ratio, or every line is
-    // blurred on a retina display.
+    // Backing store at the device pixel ratio, or lines blur.
     const dpr = window.devicePixelRatio || 1;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
@@ -148,12 +136,8 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * Pitch on a log axis, because pitch is perceived in ratios: an octave should
-   * occupy the same height whether it sits at 80 Hz or at 400 Hz. On a linear
-   * axis a low voice would be squashed into the bottom of the panel.
-   *
-   * Drawn as separate strokes per voiced run — connecting across an unvoiced gap
-   * would draw a glide the speaker never made.
+   * Pitch on a log axis — an octave is the same height anywhere — drawn per
+   * voiced run, since joining across a gap draws a glide nobody made.
    */
   private drawPitch(
     ctx: CanvasRenderingContext2D,
@@ -186,15 +170,8 @@ export class VoiceprintChart implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * F1, F2 and F3 as three separate tracks on a shared log axis.
-   *
-   * Log, like the pitch panel and for the same reason: the ear and the vowel
-   * system both work in ratios, so the 200 Hz between F1 and F2 of a close vowel
-   * matters far more than the same 200 Hz up at F3.
-   *
-   * Drawn as dots rather than lines. A formant series is full of gaps — every
-   * unvoiced frame, and every frame where the fit found nothing in range — and
-   * joining across a gap would draw a smooth glide the speaker never made.
+   * F1, F2 and F3 on a shared log axis, as dots: the series are full of gaps,
+   * and lines would draw glides nobody made.
    */
   private drawFormants(
     ctx: CanvasRenderingContext2D,

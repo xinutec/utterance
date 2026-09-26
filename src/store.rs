@@ -1,12 +1,6 @@
-//! Filesystem-backed recording store.
-//!
-//! One directory per recording, holding the original audio, its voiceprint and a
-//! little metadata. Plain files rather than a database because the interesting
-//! artefacts here are documents we want to read, diff and copy into fixtures by
-//! hand — and because a recording plus its voiceprint is self-contained, so a
-//! directory *is* the record.
-//!
-//! Deleting `data/` is a supported way to start over.
+//! Filesystem-backed recording store: one directory per recording, holding the
+//! audio, its voiceprint and a little metadata — documents to read, diff and copy
+//! into fixtures, which a database would hide. Deleting `data/` starts over.
 
 use std::fs;
 use std::io;
@@ -17,14 +11,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use utterance_analysis::voiceprint::{self, Voiceprint};
 
-/// What a recording is *for*.
-///
-/// **Not who owns it — there is one user.** The distinction that matters is
-/// between takes that define the voice and takes that are merely something to
-/// hear, because the store fills up with both: a singer uploads other people's
-/// singing to render, and their own sustained vowels to be modelled from. Pooled
-/// together, the vowel space and the pitch range describe an anatomy belonging
-/// to nobody, and every mapping normalises against that chimera.
+/// What a recording is *for* — not who owns it; there is one user. The store
+/// holds other people's singing to render beside the speaker's own vowels, and
+/// pooled together they would describe an anatomy belonging to nobody.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -32,11 +21,8 @@ use utterance_analysis::voiceprint::{self, Voiceprint};
 pub enum Role {
     /// This take defines the speaker: their scale, timbre, range and vowel space.
     Calibration,
-    /// Something to render. It contributes nothing to who the speaker is.
-    ///
-    /// The default, and deliberately so: a recording that never said what it was
-    /// for must not silently start shaping the sound world. The speaker is
-    /// established on purpose, at upload or through [`Store::put_role`].
+    /// Something to render; it says nothing about who the speaker is. The
+    /// default, so a take shapes the sound world only on purpose.
     #[default]
     Material,
 }
@@ -47,20 +33,14 @@ pub enum Role {
 #[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "camelCase")]
 pub struct RecordingMeta {
-    /// Content-addressed: the first 16 hex digits of the audio's SHA-256.
-    ///
-    /// Uploading the same audio twice therefore lands on the same recording
-    /// rather than accumulating duplicates — useful while iterating, where the
-    /// same take gets re-sent often.
+    /// Content-addressed: the first 16 hex digits of the audio's SHA-256, so the
+    /// same audio uploaded twice is one recording.
     pub id: String,
     /// Human label, as given at upload.
     pub label: String,
-    /// Unix milliseconds when the recording was first stored.
-    ///
-    /// Typed as a TS `number`, not the `bigint` ts-rs infers from `u64`:
-    /// `JSON.parse` produces a number, so `bigint` would be a type the runtime
-    /// never actually delivers. Unix milliseconds stay inside JavaScript's
-    /// safe-integer range until the year 287396.
+    /// Unix milliseconds when the recording was first stored. A TS `number`,
+    /// not `bigint`: `JSON.parse` delivers a number, and these stay safe
+    /// integers for millennia.
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub created_at_ms: u64,
     pub duration_s: f32,
@@ -71,15 +51,10 @@ pub struct RecordingMeta {
     pub onset_count: usize,
     /// Highest absolute sample in the source, 0..1.
     pub peak: f32,
-    /// Whether the take was driven into the rails and should be recorded again.
-    ///
-    /// Carried on the summary, not only inside the voiceprint, so the take list
-    /// can flag a bad recording without opening every voiceprint.
+    /// Whether the take was driven into the rails — on the summary, so the take
+    /// list can flag it.
     pub clipped: bool,
-    /// Whether this take defines the speaker or is only material to render.
-    ///
-    /// Defaulted on read, so metadata written without it stays readable and
-    /// reads as material.
+    /// Whether this take defines the speaker. Defaults to material when absent.
     #[serde(default)]
     pub role: Role,
 }
@@ -115,11 +90,8 @@ impl Store {
         Ok(Self { root })
     }
 
-    /// Store audio and its voiceprint, returning the metadata.
-    ///
-    /// Writing an existing id overwrites it, which is a no-op in practice: the
-    /// id is derived from the audio bytes, so the same id means the same audio,
-    /// and re-analysing it is deterministic.
+    /// Store audio and its voiceprint, returning the metadata. The id comes from
+    /// the audio, so overwriting an id rewrites the same record.
     pub fn put(
         &self,
         audio: &[u8],
@@ -159,14 +131,10 @@ impl Store {
 
     /// Bring a record up to the current analyser, re-analysing if it is stale.
     ///
-    /// The audio is the source of truth and analysis is a pure function of it,
-    /// so a voiceprint is a *cache*, not a record — it can always be rebuilt.
-    /// That is what makes bumping [`voiceprint::SCHEMA_VERSION`] cheap, and this project
-    /// will bump it every time the analyser learns to measure something new.
-    ///
-    /// The alternative — defaulting the missing fields — would answer "was this
-    /// take clipped?" with "no" for every recording made before we could tell.
-    /// A wrong answer is worse than the work of recomputing the right one.
+    /// The audio is the source of truth, so a voiceprint is a cache that can
+    /// always be rebuilt — which is what makes bumping
+    /// [`voiceprint::SCHEMA_VERSION`] cheap. Defaulting missing fields instead
+    /// would answer questions about old takes wrongly.
     pub fn ensure_current(&self, id: &str) -> Result<(), StoreError> {
         let dir = self.checked_dir(id)?;
 
@@ -185,14 +153,9 @@ impl Store {
                 detail: e.to_string(),
             })?;
 
-        // The label and the role are the two things not recoverable from the
-        // audio, so both are kept across the rebuild. Read loosely: the old
-        // metadata may be exactly what failed to parse.
-        //
-        // **The role especially.** Defaulting it here would quietly demote every
-        // calibration take to material on the next analyser change, and the
-        // symptom would be a speaker's whole sound world dissolving for a reason
-        // nothing reports.
+        // Label and role are not in the audio, so they are carried across, read
+        // loosely since the old metadata may be what failed to parse. Defaulting
+        // the role would demote every calibration take on the next bump.
         let label = self.stored_label(id).unwrap_or_else(|| id.to_string());
         let role = self.stored_role(id).unwrap_or_default();
         tracing::info!(
@@ -218,19 +181,9 @@ impl Store {
         Ok(())
     }
 
-    /// Say what an already-stored take is for.
-    ///
-    /// **Why this has to exist.** Settable only at upload, a take could never
-    /// *become* a calibration one: a store whose takes predate roles would have
-    /// no calibration take and refuse to derive a voice, and audio that arrives
-    /// as a *file* rather than through the guided flow could never define the
-    /// speaker. The only remedy would be recording the vowels again — redoing
-    /// good work to satisfy a field nobody can see.
-    ///
-    /// Rewrites the metadata alone. The audio is untouched and the voiceprint is
-    /// a pure function of it, so nothing here can invalidate a measurement —
-    /// which is exactly why this is safe to expose and why it does not need a
-    /// re-analysis behind it.
+    /// Say what an already-stored take is for. A take that came in as a file,
+    /// or before roles existed, has no other way to become a calibration one.
+    /// Only metadata changes, so no measurement can be invalidated.
     pub fn put_role(&self, id: &str, role: Role) -> Result<RecordingMeta, StoreError> {
         let dir = self.checked_dir(id)?;
         let mut meta = self.meta(id)?;
@@ -258,11 +211,8 @@ impl Store {
         serde_json::from_value(self.stored_field(id, "role")?).ok()
     }
 
-    /// Every stored recording, newest first.
-    ///
-    /// A directory that fails to parse is skipped rather than failing the whole
-    /// listing: one bad record should not make the app unusable, and the
-    /// alternative is a UI that shows nothing and explains nothing.
+    /// Every stored recording, newest first. An unreadable directory is skipped,
+    /// so one bad record cannot empty the list.
     pub fn list(&self) -> Result<Vec<RecordingMeta>, StoreError> {
         let entries = match fs::read_dir(&self.root) {
             Ok(e) => e,
@@ -323,11 +273,8 @@ impl Store {
         self.root.join(id)
     }
 
-    /// Resolve a recording directory, rejecting ids that are not ours.
-    ///
-    /// Ids reach this from the URL path. Validating the *shape* rather than
-    /// sanitising the string means `../` and absolute paths are rejected as
-    /// unknown recordings, which is both safer and the honest answer.
+    /// Resolve a recording directory. Ids come from the URL, so the *shape* is
+    /// validated: `../` and absolute paths are simply unknown recordings.
     fn checked_dir(&self, id: &str) -> Result<PathBuf, StoreError> {
         if !is_valid_id(id) {
             return Err(StoreError::NotFound(id.to_string()));
@@ -359,11 +306,9 @@ impl Store {
     }
 }
 
-/// Just enough of a stored voiceprint to know which analyser wrote it.
-///
-/// Every `meta` and `voiceprint` read checks this first, and a listing checks it
-/// for every take, so it must not build the whole document: serde skips the
-/// thousands of per-frame values instead of allocating them.
+/// Just enough of a stored voiceprint to know which analyser wrote it. Every
+/// read checks this first, so serde skips the per-frame values rather than
+/// building them.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Written {
@@ -374,10 +319,8 @@ const AUDIO: &str = "audio.wav";
 const VOICEPRINT: &str = "voiceprint.json";
 const META: &str = "meta.json";
 
-/// Length of the hex id taken from the content hash.
-///
-/// 16 hex digits is 64 bits. At any collection size a person will ever record by
-/// hand, an accidental collision is far less likely than the disk losing the file.
+/// Length of the hex id: 64 bits, so a collision is far less likely than losing
+/// the disk.
 const ID_LEN: usize = 16;
 
 fn content_id(audio: &[u8]) -> String {
@@ -387,8 +330,7 @@ fn content_id(audio: &[u8]) -> String {
         .iter()
         .take(ID_LEN / 2)
         .fold(String::with_capacity(ID_LEN), |mut id, b| {
-            // Infallible: the only error `write!` can report here is the
-            // formatter's, and a String's never fails.
+            // Infallible: writing to a String cannot fail.
             let _ = write!(id, "{b:02x}");
             id
         })
@@ -409,21 +351,14 @@ fn now_ms() -> u64 {
 
 /// Replace `path` in one step, or leave it as it was.
 ///
-/// `fs::write` truncates and THEN writes, so between those two the file is
-/// short. Every JSON reader here goes through `read_json`, which maps a parse
-/// failure to `StoreError::Corrupt` — so a request that arrives mid-write reads
-/// a take as corrupt rather than as its old or new self, and a crash in that
-/// window makes it corrupt for good. The audio is written the same way and is
-/// the largest file of the three, so it holds the window open longest.
+/// `fs::write` truncates and then writes, so a reader mid-write sees a corrupt
+/// take and a crash leaves it corrupt. Write-then-rename gives a reader the whole
+/// old file or the whole new one. The temp is a sibling because `rename` across
+/// filesystems fails, and the recordings live on a volume mount.
 ///
-/// Write-then-rename closes both: a reader sees the whole old file or the whole
-/// new one. The temp is a SIBLING deliberately — `rename` across filesystems is
-/// `EXDEV`, and the recordings live on a PVC mount while `/tmp` is the
-/// container's own filesystem.
-///
-/// ⚠ Atomicity per file, not exclusion between writers. Two processes editing
-/// the SAME take still lose one update; different takes never collide, which is
-/// what makes a rolling deployment safe here.
+/// ⚠ Atomic per file, not exclusive between writers: two processes editing the
+/// same take can lose one update. Different takes never collide, which is what
+/// makes a rolling deployment safe.
 fn write(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
     let io = |path: &Path| {
         let path = path.to_path_buf();
@@ -435,8 +370,7 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
 
     fs::write(&tmp, bytes).map_err(io(&tmp))?;
     fs::rename(&tmp, path).map_err(|source| {
-        // Best effort: the rename failing is the news, and a second error about
-        // the temp would bury it.
+        // Best effort: the rename failure is the news.
         let _ = fs::remove_file(&tmp);
         StoreError::Io {
             path: path.to_path_buf(),

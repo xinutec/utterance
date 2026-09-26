@@ -1,10 +1,5 @@
-//! Speaker profiling over voiceprints built by hand.
-//!
-//! Hand-built rather than analysed, because what is under test here is the
-//! statistics — which percentiles are taken, when a range is withheld, how the
-//! normalisation maps back — and feeding it real audio would make every
-//! assertion depend on the formant tracker as well. `speaker_real.rs` next door
-//! covers the same code against a recording.
+//! Speaker profiling over hand-built voiceprints, so the statistics are tested
+//! apart from the formant tracker; `speaker_real.rs` uses a recording.
 
 use utterance_analysis::partials::Partials;
 use utterance_analysis::speaker::{self, Brightness, PROFILE_VERSION};
@@ -43,11 +38,8 @@ fn voiceprint(f1: Vec<Option<f32>>, f2: Vec<Option<f32>>, hz: Vec<Option<f32>>) 
             onset_frames: Vec::new(),
             onset_times_s: Vec::new(),
         },
-        // The harmonic series is not read by profiling, so it is left empty
-        // rather than faked into plausibility. The centroid *is* read — for the
-        // brightness range — and zero is how a frame says it carried no energy,
-        // so a fixture that never sets it reports no brightness at all. The
-        // tests that care set it themselves.
+        // Partials are not read by profiling. A zero centroid means no energy,
+        // so tests about brightness set their own.
         partials: Partials {
             frames_used: 0,
             f0_hz: None,
@@ -119,8 +111,8 @@ fn reports_the_percentile_edges_not_the_extremes() {
 fn one_wild_frame_does_not_define_the_space() {
     let clean = sweeping_speaker(1001);
     let mut with_outlier = sweeping_speaker(1001);
-    // The failure this guards: per-frame formant assignment misfires on a few
-    // frames per take, and a min/max bound would hand the whole space to them.
+    // Per-frame formant assignment misfires on a few frames; min/max would let
+    // them define the space.
     with_outlier.formants.f2[500] = Some(9_000.0);
 
     let a = speaker::profile(&[&clean]).vowel_space.unwrap();
@@ -139,8 +131,7 @@ fn withholds_a_range_it_cannot_measure() {
     let p = speaker::profile(&[&thin]);
     assert!(p.vowel_space.is_none(), "50 frames is not a vowel space");
     assert!(p.f0.is_none(), "50 frames is not a pitch range");
-    // The counts are still reported, so a caller can tell "too little material"
-    // apart from "no material".
+    // The counts still distinguish "too little" from "none".
     assert_eq!(p.vowel_frames, 50);
     assert_eq!(p.voiced_frames, 50);
 }
@@ -157,8 +148,7 @@ fn withholds_a_vowel_space_when_the_speaker_never_moved() {
         p.vowel_space.is_none(),
         "a zero-span space cannot be normalised into"
     );
-    // Pitch is a different question: a monotone is a real, usable range of zero
-    // width, and nothing divides by it.
+    // A monotone is a real range of zero width; nothing divides by it.
     assert!(p.f0.is_some(), "flat pitch is still a measured pitch");
 }
 
@@ -218,8 +208,7 @@ fn does_not_clamp_a_frame_past_the_speakers_reach() {
     let vp = sweeping_speaker(1001);
     let space = speaker::profile(&[&vp]).vowel_space.unwrap();
 
-    // The bounds are percentiles, so real frames sit outside them. A mapping
-    // needs to see that rather than have it folded to the edge here.
+    // Unclamped: a mapping should see a frame past the speaker's reach.
     let (x, _) = space.normalise(space.f1_high + (space.f1_high - space.f1_low), 1500.0);
     assert!(x > 1.9, "expected an out-of-range position, got {x}");
 }
@@ -245,8 +234,7 @@ fn brightening_speaker(frames: usize) -> Voiceprint {
         vec![Some(1500.0); frames],
         vec![Some(120.0); frames],
     );
-    // Geometric, because the range is read on a log axis and a linear ramp
-    // would put the median somewhere the percentiles disagree with.
+    // Geometric, since the range is read on a log axis.
     vp.texture.centroid_hz = (0..frames)
         .map(|i| 400.0 * 4f32.powf(i as f32 / (frames - 1) as f32))
         .collect();
@@ -291,9 +279,7 @@ fn brightness_places_a_tone_within_that_range() {
 
 #[test]
 fn an_unvoiced_frame_never_widens_the_brightness_range() {
-    // Consonants are several times brighter than any sustained tone. Counted in,
-    // they would stretch the top of the axis to somewhere no note ever reaches
-    // and crowd every vowel into the bottom of a range describing sibilance.
+    // Consonants would stretch the top of the tone range to where no note goes.
     let mut vp = brightening_speaker(1000);
     for i in 0..200 {
         vp.pitch.hz[i] = None;
@@ -310,21 +296,15 @@ fn an_unvoiced_frame_never_widens_the_brightness_range() {
 
 #[test]
 fn no_brightness_is_reported_from_too_few_voiced_frames() {
-    // Same bar as the other ranges: a profile confidently reporting a range
-    // measured over half a second is worse than one reporting nothing, because
-    // a caller can handle an absence and cannot detect a wrong answer.
+    // Too little material reports nothing rather than a wrong range.
     let vp = brightening_speaker(100);
     assert!(speaker::profile(&[&vp]).brightness.is_none());
 }
 
 // ---- one held vowel: where a corner of the space actually is ----------------
 
-/// A held vowel: `hold` frames parked on `(f1, f2)`, with `glide` frames on
-/// either side sweeping in from and back out to a neutral centre.
-///
-/// The glide is the point of the fixture. A corner take is a person opening
-/// their mouth into a shape and closing it again, so the first and last frames
-/// are real measurements of something that is not the vowel being asked for.
+/// A held vowel: `hold` frames on `(f1, f2)`, with `glide` frames sweeping in
+/// from and out to a neutral centre either side, as a real corner take does.
 fn held_vowel(f1: f32, f2: f32, hold: usize, glide: usize) -> Voiceprint {
     let mut a: Vec<Option<f32>> = ramp(500.0, f1, glide);
     let mut b: Vec<Option<f32>> = ramp(1500.0, f2, glide);
@@ -351,11 +331,7 @@ fn a_corner_is_where_the_vowel_was_held() {
 
 #[test]
 fn the_glide_does_not_drag_the_corner_toward_neutral() {
-    // The property the median is for. A mean over this fixture lands well short
-    // of the vowel: 80 glide frames average halfway to the neutral centre, so
-    // they pull F2 down by roughly (2300-1500)/2 * 80/380 ≈ 84 Hz — a tenth of
-    // the distance from ee to the middle of the chart, in the direction of
-    // making every corner look less extreme than the speaker actually is.
+    // What the median is for: the glides drag a mean about 84 Hz toward neutral.
     let vp = held_vowel(280.0, 2300.0, 300, 40);
     let pairs = vp.formants.vowel_space();
     let mean_f2: f32 = pairs.iter().map(|(_, b)| b).sum::<f32>() / pairs.len() as f32;
@@ -374,8 +350,7 @@ fn the_glide_does_not_drag_the_corner_toward_neutral() {
 
 #[test]
 fn the_spread_says_whether_the_vowel_was_held_still() {
-    // Two takes with the same centre. A dot on a chart cannot tell them apart,
-    // which is why the spread is reported beside it.
+    // Same centre, different spread — why the spread is reported.
     let steady = speaker::corner(&held_vowel(280.0, 2300.0, 300, 40)).unwrap();
     let wandering = speaker::corner(&voiceprint(
         ramp(180.0, 380.0, 380),
@@ -400,16 +375,13 @@ fn the_spread_says_whether_the_vowel_was_held_still() {
 
 #[test]
 fn withholds_a_corner_it_cannot_measure() {
-    // Half a second. Same reasoning as the ranges above: an absent corner is a
-    // state the caller can show as "not recorded yet", and a corner measured
-    // over fifty frames is one nobody can tell is wrong.
+    // Half a second is too little to trust.
     assert!(speaker::corner(&held_vowel(280.0, 2300.0, 40, 5)).is_none());
 }
 
 #[test]
 fn a_frame_missing_either_formant_is_not_a_point_on_the_plane() {
-    // The corner is measured over the pairs, so a take whose F2 never resolved
-    // has no corner at all — rather than one placed by F1 alone.
+    // No F2 means no corner, not one placed by F1 alone.
     let mut vp = held_vowel(280.0, 2300.0, 300, 40);
     vp.formants.f2 = vec![None; vp.formants.f2.len()];
     assert!(speaker::corner(&vp).is_none());
@@ -417,11 +389,8 @@ fn a_frame_missing_either_formant_is_not_a_point_on_the_plane() {
 
 #[test]
 fn a_brightness_range_that_runs_backwards_is_refused() {
-    // `place` divides by `high_hz - low_hz` without a guard, which is only sound
-    // because the constructor already refused the cases that make it wrong. An
-    // inverted range would not divide by zero — it would divide by a negative,
-    // and every brightness would come back mirrored: the darkest frame reported
-    // as the brightest, silently and for the whole take.
+    // `place` divides without a guard, relying on the constructor: an inverted
+    // range would mirror every brightness.
     assert!(
         Brightness::new(3000.0, 300.0).is_none(),
         "a range from 3000 Hz down to 300 Hz was accepted"

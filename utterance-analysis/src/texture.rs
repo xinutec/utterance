@@ -1,33 +1,14 @@
 //! The shape of the noise in a voice.
 //!
-//! Nearly three quarters of ordinary speech carries no fundamental: the
-//! consonants, and the silences between phrases. Everything else in this crate
-//! gates on voicing, so all of that has been measured only as a place where
-//! pitch was absent — which throws away the loudest, sharpest and most
-//! individual material a speaker produces. Nobody's *s* sounds like anyone
-//! else's.
+//! Nearly three quarters of speech carries no fundamental, and every other
+//! measurement gates on voicing — yet nobody's *s* sounds like anyone else's.
+//! This characterises the noise rather than classifying phones, in three numbers
+//! per frame, voiced or not:
 //!
-//! **This characterises noise rather than classifying phones.** Knowing a frame
-//! is an /s/ is a linguistic label; knowing its energy sits around 7 kHz in a
-//! wide band is a measurement, and it is the one a synthesiser can actually act
-//! on. Three numbers per frame carry it:
-//!
-//! - **centroid** — where the energy sits. The standard correlate of
-//!   brightness, and what separates a hissed *s* from a hushed *sh* from a
-//!   breathy *f*.
-//! - **flatness** — how noise-like the spectrum is, from 0 for a pure tone to 1
-//!   for white noise. What separates a fricative from a vowel, and a sustained
-//!   hiss from a plosive burst.
-//! - **tilt** — how fast the spectrum falls away with frequency, in dB per
-//!   octave. The correlate of vocal effort: a pressed or shouted voice has a
-//!   shallow tilt because the glottis closes abruptly and throws energy high, a
-//!   breathy or relaxed one falls off steeply. Centroid says *where* the energy
-//!   sits; tilt says *how it is distributed*, and a voice can move either
-//!   without moving the other.
-//!
-//! All three are computed for every frame, voiced or not. They are defined
-//! everywhere, and deciding where they are *interesting* is the mapping layer's
-//! business rather than this one's.
+//! - **centroid** — where the energy sits: *s* against *sh* against *f*.
+//! - **flatness** — how noise-like, 0 for a tone to 1 for white noise.
+//! - **tilt** — how fast the spectrum falls, in dB per octave: shallow for a
+//!   pressed voice, steep for a breathy one, independent of the centroid.
 
 use rustfft::num_complex::Complex32;
 use serde::{Deserialize, Serialize};
@@ -35,47 +16,22 @@ use serde::{Deserialize, Serialize};
 use crate::frame::SPECTRAL_WINDOW;
 use crate::resample::ANALYSIS_RATE;
 
-/// Lowest frequency the measures look at.
-///
-/// Measured above this rather than across everything, and the reason is
-/// empirical: on real speech the unvoiced frames came back with a median
-/// centroid of 153 Hz and a flatness of 0.001 — reading as *tonal* — because a
-/// room's rumble, a microphone's proximity boost and the tail of the previous
-/// vowel all pile up at the bottom of the spectrum and dominate the average. A
-/// fricative's energy lives from about 2 kHz up, so a measure swamped by the
-/// bottom octave describes the room instead of the consonant.
-///
-/// Set below the lowest fricative energy and above where rumble lives. It makes
-/// these measurements *about* the band consonants occupy, which is the point of
-/// having them.
+/// Lowest frequency the measures look at. Below it, room rumble, proximity boost
+/// and vowel tails dominate — measured across everything, unvoiced speech read
+/// as tonal with a 153 Hz centroid. Fricative energy lives from about 2 kHz up.
 pub const NOISE_BAND_LOW_HZ: f32 = 300.0;
 
-/// Highest frequency the tilt is fitted up to.
-///
-/// **Not Nyquist, and this is the whole correctness of the measurement.**
-/// Everything is resampled to 16 kHz, and a band-limited resampler's
-/// anti-aliasing filter falls off a cliff approaching 8 kHz. Fitting a slope
-/// through that would measure the filter — steeply, consistently, and on every
-/// frame of every recording — and report it as a property of the speaker. Fitted
-/// to 5 kHz instead, which is clear of the transition band and still spans four
-/// octaves of the band a voice actually radiates into.
-///
-/// The same reasoning as [`NOISE_BAND_LOW_HZ`] at the other end: a measure whose
-/// average is dominated by something that is not the voice.
+/// Highest frequency the tilt is fitted up to — **not Nyquist**: the resampler's
+/// anti-alias filter falls off a cliff near 8 kHz, and a fit through it would
+/// report the filter as a property of every speaker. 5 kHz is clear of it and
+/// still spans four octaves.
 pub const TILT_HIGH_HZ: f32 = 5000.0;
 
-/// Floor added to every bin before the flatness ratio.
-///
-/// A geometric mean collapses to zero if any single bin is zero, which in a
-/// digital silence is all of them — so without this, flatness reports "perfectly
-/// tonal" for a frame containing nothing at all. Small enough to be far below
-/// any real signal.
+/// Floor added to every bin before the flatness ratio, so digital silence is not
+/// "perfectly tonal" (a geometric mean of zeros).
 const BIN_FLOOR: f32 = 1e-10;
 
-/// Per-frame description of the noise in a recording.
-///
-/// Every series is measured above [`NOISE_BAND_LOW_HZ`], so it describes the
-/// band consonants occupy rather than the whole spectrum.
+/// Per-frame description of the noise, measured above [`NOISE_BAND_LOW_HZ`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
@@ -83,15 +39,11 @@ const BIN_FLOOR: f32 = 1e-10;
 pub struct Texture {
     /// Spectral centroid per frame, in Hz — where the energy sits.
     pub centroid_hz: Vec<f32>,
-    /// Spectral flatness per frame, 0..1 — how noise-like it is.
-    ///
-    /// A vowel sits near zero: its energy is concentrated in harmonics. A
-    /// fricative sits high: its energy is spread across everything.
+    /// Spectral flatness per frame, 0..1: near zero for a vowel, high for a
+    /// fricative.
     pub flatness: Vec<f32>,
-    /// Spectral tilt per frame, in dB per octave. Negative falls away.
-    ///
-    /// Fitted between [`NOISE_BAND_LOW_HZ`] and [`TILT_HIGH_HZ`], so it describes
-    /// the voice rather than the room below it or the resampler above it.
+    /// Spectral tilt per frame, in dB per octave (negative falls away), fitted
+    /// between [`NOISE_BAND_LOW_HZ`] and [`TILT_HIGH_HZ`].
     pub tilt_db_per_octave: Vec<f32>,
 }
 
@@ -112,9 +64,7 @@ pub fn track(spectra: &[Vec<Complex32>]) -> Texture {
     let lowest = ((NOISE_BAND_LOW_HZ / bin_hz).ceil() as usize).min(bins - 1);
     let highest = ((TILT_HIGH_HZ / bin_hz).floor() as usize).min(bins - 1);
 
-    // The abscissa of the tilt fit never changes from frame to frame, so the
-    // octave positions and their spread are computed once. What varies is only
-    // the power in each bin.
+    // The fit's abscissa is the same every frame, so it is computed once.
     let octaves: Vec<f32> = (lowest..=highest)
         .map(|k| (k as f32 * bin_hz / NOISE_BAND_LOW_HZ).log2())
         .collect();
@@ -126,9 +76,7 @@ pub fn track(spectra: &[Vec<Complex32>]) -> Texture {
     let mut tilt_db_per_octave = vec![0.0f32; n];
 
     for (i, spectrum) in spectra.iter().enumerate() {
-        // Power rather than magnitude: flatness is defined on the power
-        // spectrum, and using magnitudes would report every frame flatter than
-        // it is.
+        // Power, not magnitude: flatness is defined on the power spectrum.
         let power: Vec<f32> = spectrum[lowest..bins]
             .iter()
             .map(|c| c.norm_sqr() + BIN_FLOOR)
@@ -146,9 +94,7 @@ pub fn track(spectra: &[Vec<Complex32>]) -> Texture {
                 / total
         };
 
-        // Geometric over arithmetic mean, taken in the log domain: the direct
-        // product of a few hundred bins underflows to zero long before it means
-        // anything.
+        // Geometric mean in the log domain; the direct product underflows.
         let log_mean = power.iter().map(|p| p.ln()).sum::<f32>() / power.len() as f32;
         let arithmetic_mean = total / power.len() as f32;
         flatness[i] = if arithmetic_mean <= 0.0 {
@@ -157,10 +103,8 @@ pub fn track(spectra: &[Vec<Complex32>]) -> Texture {
             (log_mean.exp() / arithmetic_mean).clamp(0.0, 1.0)
         };
 
-        // Least squares in dB against octaves, which is what "dB per octave"
-        // means and is also the domain the ear works in: a fit against linear
-        // frequency would let the top octave, holding half the bins, decide the
-        // answer on its own.
+        // Least squares in dB against octaves: against linear frequency the top
+        // octave, half the bins, would decide the answer.
         if octave_spread > 0.0 {
             let decibels: Vec<f32> = power[..=highest - lowest]
                 .iter()

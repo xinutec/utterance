@@ -1,17 +1,7 @@
 /**
- * The two capture seams, which are the only part of the trace this app owns.
- *
- * The queue, the flush cadence, the transport and the label rules belong to
- * `@xinutec/ui-harness/telemetry` and are tested there. What is left here is a
- * dozen lines of wiring, and every one of them fails silently: a trace is
- * best-effort by contract, so a seam that stopped firing would show up as an
- * activity log that quietly went thin rather than as anything breaking.
- *
- * `TelemetryCore` is spied at the prototype rather than injected, because the
- * adapter constructs its own — deliberately, so nothing in the app can reach the
- * queue. That makes the prototype the only seam a test has, and it is the right
- * one: it asserts what this class *asks the core to do*, which is the whole of
- * its behaviour.
+ * The two capture seams, the only part of the trace this app owns — and each
+ * would fail silently, as an activity log going quietly thin. `TelemetryCore`
+ * is spied at the prototype, since the adapter builds its own.
  */
 
 import { TestBed } from "@angular/core/testing";

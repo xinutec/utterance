@@ -1,51 +1,27 @@
-//! The voice as a set of per-frame streams, before anything musical is decided.
-//!
-//! Every continuously-sounding mapping reads the same eight things — f0, vowel
-//! frontness, vowel openness, F3, spectral flux, energy, brightness,
-//! aperiodicity — and every one of them needs the same two treatments: gaps
-//! carried across rather than filled with a middle value, and smoothing at the
-//! timescale that stream belongs to.
-//!
-//! **Why a module rather than a copy in each mapping.** The rules for reading a
-//! voice are not aesthetic. That an unvoiced frame is a frame with no
-//! measurement rather than a frame at zero hertz is true whatever the mapping
-//! does with it, and a second mapping that got it wrong would not be a different
-//! aesthetic — it would be a bug that sounds like one. Sharing them means a
-//! mapping chooses what to *do* with a stream and never how to read it.
+//! The voice as per-frame streams, before anything musical is decided: gaps
+//! carried across, smoothing at each stream's timescale. Shared, because how to
+//! read a voice is not aesthetic — an unvoiced frame has no measurement, not a
+//! measurement of zero — so a mapping only chooses what to do with a stream.
 
 use utterance_analysis::voiceprint::Voiceprint;
 
 use crate::voice::Voice;
 
-/// Frames the pitch drift is averaged over.
-///
-/// Two seconds. Long enough to cross several syllables, so what survives is the
-/// phrase-level declination rather than the pitch of any particular word. This
-/// is the slow timescale the note mapping had no way to express.
+/// Frames the pitch drift is averaged over: two seconds, so what survives is
+/// phrase-level declination rather than any word's pitch.
 pub const DRIFT_FRAMES: usize = 200;
 
-/// Frames the articulation streams are averaged over.
-///
-/// A fifth of a second — about one syllable. Short enough that the harmony
-/// follows the articulation, long enough that a single misfit formant frame
-/// cannot jolt the whole field.
+/// Frames the articulation streams are averaged over: about a syllable, so the
+/// harmony follows articulation but one misfit formant frame cannot jolt it.
 pub const ROOT_FRAMES: usize = 20;
 
-/// Frames loudness is averaged over.
-///
-/// 80 ms. Fast enough to keep the speaker's dynamics, slow enough that the field
-/// does not flutter at the syllable rate.
+/// Frames loudness is averaged over: 80 ms keeps the dynamics without
+/// fluttering at the syllable rate.
 pub const LEVEL_FRAMES: usize = 8;
 
-/// Vowel position per frame, carried across frames with no estimate.
-///
-/// Returns openness and frontness, each 0..1 in the speaker's own space.
-///
-/// A held vowel is still that vowel while a consonant interrupts it, so a gap in
-/// the formant track is missing information rather than a jump to the middle of
-/// the space. Carrying the last known position forward keeps the field moving
-/// the way the mouth moved; interpolating to a default would make every
-/// consonant a lurch toward the centre.
+/// Vowel position per frame as (openness, frontness), 0..1 in the speaker's
+/// space. A gap carries the last position forward: a consonant does not move the
+/// vowel to the middle of the chart.
 pub fn vowel(vp: &Voiceprint, voice: &Voice) -> (Vec<f32>, Vec<f32>) {
     let mut open = vec![0.5f32; vp.frame.count];
     let mut front = vec![0.5f32; vp.frame.count];
@@ -63,12 +39,8 @@ pub fn vowel(vp: &Voiceprint, voice: &Voice) -> (Vec<f32>, Vec<f32>) {
     (open, front)
 }
 
-/// Mouth shape per frame, from the third formant, carried across gaps.
-///
-/// Held at the middle of the speaker's range where F3 was never measured well
-/// enough to have one. Unlike the colour, the middle here is not a stand-in for
-/// a measurement: it is the position at which this stream does nothing, so an
-/// unmeasured F3 leaves the chord exactly as the other streams built it.
+/// Mouth shape per frame, from F3, carried across gaps. Where F3 has no range the
+/// stream sits at its middle, where it changes nothing.
 pub fn depth(vp: &Voiceprint, voice: &Voice) -> Vec<f32> {
     let mut last = 0.5f32;
     (0..vp.frame.count)
@@ -83,16 +55,9 @@ pub fn depth(vp: &Voiceprint, voice: &Voice) -> Vec<f32> {
         .collect()
 }
 
-/// Tone colour per frame, from the measured spectral centroid.
-///
-/// Voiced frames only, carried across the gaps for the same reason the vowel
-/// track is: a consonant is far brighter than any tone a throat sustains, and
-/// letting one through would flick the whole field white at every *s*. The
-/// consonants are already sounded as themselves, by the noise layer.
-///
-/// Without a measured brightness range the colour holds still. That is an
-/// absence of information rather than a fallback: the alternative — driving it
-/// from some other stream — is exactly the thing this function exists to undo.
+/// Tone colour per frame, from the spectral centroid of voiced frames only,
+/// carried across gaps — a consonant would flash the field white. Without a
+/// brightness range it holds still rather than borrowing another stream.
 pub fn brightness(vp: &Voiceprint, voice: &Voice) -> Vec<f32> {
     let Some(range) = voice.brightness else {
         return vec![0.5; vp.frame.count];
@@ -110,11 +75,8 @@ pub fn brightness(vp: &Voiceprint, voice: &Voice) -> Vec<f32> {
         .collect()
 }
 
-/// Pitch per frame with unvoiced gaps carried across.
-///
-/// Same reasoning as the vowel track: an unvoiced frame is a frame with no
-/// measurement, not a frame at zero hertz, and zero would drag the drift down
-/// at every consonant.
+/// Pitch per frame with unvoiced gaps carried across, so consonants do not drag
+/// the drift to zero.
 pub fn filled(hz: &[Option<f32>]) -> Vec<f32> {
     let first = hz.iter().flatten().copied().next().unwrap_or(1.0);
     let mut last = first;
@@ -133,11 +95,8 @@ pub fn loudest_db(vp: &Voiceprint) -> f32 {
     vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max)
 }
 
-/// A level in dBFS as a linear amplitude relative to `loudest_db`.
-///
-/// Relative to the take's own peak, so a quietly recorded take produces the same
-/// dynamics as a loud one — the shape of the envelope is the measurement, not
-/// the level it was recorded at.
+/// A level in dBFS as a linear amplitude relative to `loudest_db` — relative, so
+/// a quiet recording has the same dynamics as a loud one.
 pub fn relative_amplitude(db: f32, loudest_db: f32) -> f32 {
     10f32.powf((db - loudest_db) / 20.0)
 }
@@ -157,11 +116,8 @@ pub fn breath_at(vp: &Voiceprint, i: usize) -> f32 {
     (aperiodicity / 0.6).clamp(0.0, 1.0) * 0.3
 }
 
-/// Centred moving average over `window` frames.
-///
-/// Centred rather than trailing so the field moves *with* the voice rather than
-/// lagging it by half the window, which at the drift timescale would be a second
-/// of delay and audible as the music answering rather than accompanying.
+/// Centred moving average over `window` frames: trailing would make the music
+/// answer the voice rather than accompany it.
 pub fn smooth(values: &[f32], window: usize) -> Vec<f32> {
     if values.is_empty() || window <= 1 {
         return values.to_vec();

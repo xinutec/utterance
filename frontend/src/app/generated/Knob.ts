@@ -5,21 +5,12 @@ import type { Mapping } from "./Mapping";
 /**
  * One knob, described well enough that a UI can offer it without being told.
  *
- * **Why the range lives here and not in the UI.** A slider's minimum, maximum, step and
- * starting position are all facts about the mapping, not the browser. Written twice
- * they drift, and the failure shows up as a slider offering a value the mapping quietly
- * clamps away — the person moves it and hears nothing change. Declared once,
- * `Params::default`, `Params::sane` and the UI controls cannot disagree, and a knob
- * added to this table appears in the UI with no UI edit.
- *
- * **This is the wire type as well.** The API forwards it unchanged, unlike a `Score`,
- * which it projects on the way out. A copy required to be identical is not a boundary,
- * it is a second place to forget.
+ * The range lives here, not in the UI, so a slider can never offer a value the
+ * mapping clamps away. It is also the wire type: the API forwards it unchanged.
  */
 export type Knob = { 
 /**
- * Which knob this is. Its `name` is the query parameter and the
- * `Params` field alike.
+ * Which knob: its name is both the query parameter and the `Params` field.
  */
 name: KnobName, 
 /**
@@ -35,32 +26,16 @@ step: number, default: number,
  */
 about: string, 
 /**
- * Mappings this knob reaches. Empty means every one of them.
- *
- * **Why a knob has to say.** A knob belonging to one mapping but shown while
- * another is playing is the same failure the table exists to prevent — a slider
- * that moves and changes nothing — and only the knob can be trusted to know which.
- * `tests/api.rs` renders every knob against every mapping it claims and fails if
- * the audio is unchanged, so a claim made here is checked.
- *
- * [`Mapping`] rather than a name, so a knob cannot claim one that does not exist.
+ * Mappings this knob reaches; empty means all. A slider shown beside a
+ * mapping that ignores it moves and changes nothing, so the knob says, and
+ * `tests/api.rs` checks the claim.
  */
 mappings: Array<Mapping>, 
 /**
  * Whether to offer this one before anybody asks for it.
  *
- * **The rule: primary knobs decide what kind of piece this is, advanced ones adjust
- * a piece you already have.** Ten sliders at equal weight is an instrument panel for
- * someone who already knows what each does; to anyone else it is ten things they
- * might be getting wrong. So the UI shows the primary ones and hides the rest.
- *
- * Declared here for the same reason the range is: a list of important names kept in
- * the frontend is a second opinion that drifts the first time somebody adds a knob
- * in Rust, and *that* failure shows up as a new control nobody can find.
- *
- * ⚠ **Not a ranking by audible authority.** `bind` is primary because it is the
- * axis the whole project argues about, however little it moves the field; `spacing`
- * earns its place on authority alone, with no thesis behind it. Either argument
- * suffices.
+ * Primary knobs decide what kind of piece this is; the rest adjust a piece
+ * you have. Not a ranking by audible authority: `bind` is primary because
+ * the project argues about it, `spacing` for how much it changes.
  */
 primary: boolean, };

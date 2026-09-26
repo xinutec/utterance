@@ -1,7 +1,4 @@
-//! The knobs, checked for doing what they claim.
-//!
-//! What matters is that turning each knob changes the thing it names and
-//! nothing else. A knob that silently does nothing is worse than no knob.
+//! The knobs, checked for changing what they name and nothing else.
 
 use utterance_mapping::dissonance::Component;
 use utterance_mapping::params::{KnobName, Params, bind_toward_equal};
@@ -33,8 +30,7 @@ fn full_bind_leaves_the_speakers_scale_alone() {
 
 #[test]
 fn no_bind_lands_every_degree_on_a_tempered_note() {
-    // The other end of the axis: this is what conventional tuning does to a
-    // spectrum that did not ask for it.
+    // What conventional tuning does to a spectrum that did not ask for it.
     let t = bind_toward_equal(&tuning::from_spectrum(&spectrum()).unwrap(), 0.0);
     for d in &t.degrees {
         let off = d.cents - (d.cents / 100.0).round() * 100.0;
@@ -48,8 +44,7 @@ fn no_bind_lands_every_degree_on_a_tempered_note() {
 
 #[test]
 fn half_bind_sits_between_the_two() {
-    // Interpolated in cents, because that is where the perceptual midpoint is:
-    // halfway between a just third at 386 and a tempered one at 400 is 393.
+    // Interpolated in cents: halfway from 386 to 400 is 393.
     let t = tuning::from_spectrum(&spectrum()).unwrap();
     let just = ratio_to_cents(5.0 / 4.0);
     assert!(miss(&t, just) < 6.0, "no major third to bind");
@@ -63,8 +58,7 @@ fn half_bind_sits_between_the_two() {
 
 #[test]
 fn binding_never_leaves_two_degrees_on_the_same_note() {
-    // Neighbours can snap to the same tempered pitch. Keeping both would double
-    // a voice in the field and change the balance for a reason nothing reports.
+    // Degrees that snap to one note would double a voice.
     for bind in [0.0f32, 0.1, 0.3] {
         let t = bind_toward_equal(&tuning::from_spectrum(&spectrum()).unwrap(), bind);
         for pair in t.degrees.windows(2) {
@@ -92,8 +86,7 @@ fn density_decides_how_many_notes_the_scale_keeps() {
 
 #[test]
 fn defaults_reproduce_the_unparameterised_mapping() {
-    // Taking no knobs must change nothing, or every earlier render stops being
-    // comparable with every later one.
+    // Taking no knobs must change nothing, so renders stay comparable.
     let d = Params::default();
     assert_eq!(d.bind, 1.0);
     assert_eq!(d.density, tuning::MIN_DEPTH);
@@ -107,8 +100,7 @@ fn defaults_reproduce_the_unparameterised_mapping() {
 
 #[test]
 fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
-    // Someone exploring is not a bug, and the useful answer is the nearest thing
-    // that makes a sound.
+    // Out of range is someone exploring: answer with the nearest sound.
     let wild = Params {
         bind: 4.0,
         density: -1.0,
@@ -137,12 +129,7 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
     assert!(wild.consonants >= 0.0);
 }
 
-/// Invariants of the knob table itself.
-///
-/// It is published to the UI, which builds a slider per row from the range and
-/// the starting value — so a row that contradicts itself becomes a control that
-/// cannot be used, and one that says nothing becomes a control nobody can
-/// interpret.
+/// Invariants of the knob table, which the UI builds a slider per row from.
 mod table {
     use utterance_mapping::params::{
         ARTICULATION, BIND, CONSONANTS, DENSITY, DRIFT, HOLD, KNOBS, KnobName, KnobQuery, Params,
@@ -177,15 +164,14 @@ mod table {
 
     #[test]
     fn the_defaults_are_already_sane() {
-        // If clamping moved a default, the table and the ranges disagree — and
-        // every render taking no parameters would quietly be a different render
-        // from the one the table describes.
+        // A clamped default would make the parameterless render differ from the
+        // table.
         assert_eq!(Params::default().sane(), Params::default());
     }
 
     #[test]
     fn no_two_knobs_share_a_name() {
-        // They are query parameters; two of a name means one is unreachable.
+        // Query parameters: a duplicate name is unreachable.
         for (i, a) in KNOBS.iter().enumerate() {
             for b in &KNOBS[i + 1..] {
                 assert_ne!(a.name, b.name);
@@ -195,12 +181,8 @@ mod table {
 
     #[test]
     fn every_knob_sets_the_field_its_name_promises() {
-        // Spelled out rather than derived, and that is the whole value: this is
-        // a second, independent statement of the same mapping, so a typo in
-        // `Params::with` — `reach` writing to `drift`, say — fails here instead
-        // of being reported later as a knob that does nothing. Each case also
-        // asserts that *nothing else* moved, which is the half a spot check of
-        // one field would miss.
+        // Spelled out, as a second statement of which field each knob sets, and
+        // asserting nothing else moved.
         let d = Params::default();
         assert_eq!(d.with(BIND.name, 0.0), Params { bind: 0.0, ..d });
         assert_eq!(d.with(DENSITY.name, 0.4), Params { density: 0.4, ..d });
@@ -229,10 +211,8 @@ mod table {
 
     #[test]
     fn every_published_knob_is_reachable_by_name() {
-        // The arms are generated from the same list as the table, so what is
-        // left to check is that each knob's field actually *moves*. Swept to the
-        // end furthest from the default, because `bind` starts life *at* its
-        // maximum and "move it to max" would be no move at all.
+        // Each knob's field must actually move — to the end furthest from the
+        // default, since `bind` starts at its maximum.
         for knob in KNOBS {
             let far = if (knob.max - knob.default) >= (knob.default - knob.min) {
                 knob.max
@@ -250,22 +230,15 @@ mod table {
 
     #[test]
     fn setting_a_knob_clamps_rather_than_escaping_its_range() {
-        // A caller sweeping the table has no reason to know each range, and a
-        // value past the end must land at the end rather than somewhere the
-        // mapping would clamp away later and differently.
+        // Past the end lands at the end.
         for knob in KNOBS {
             let over = Params::default().with(knob.name, knob.max + 1000.0);
             assert_eq!(over, over.sane(), "{}", knob.name);
         }
     }
 
-    /// [`KnobName::name`] and the serde attribute are one spelling.
-    ///
-    /// `name` comes from `stringify!` on the `Params` field and serde lowercases
-    /// the variant; the two agreeing is what lets a query parameter, a struct
-    /// field and a wire value all be the same word. `from_name` goes through the
-    /// derive, so a variant whose ident stopped matching its field stops parsing
-    /// here.
+    /// [`KnobName::name`] and the serde attribute are one spelling, so a query
+    /// parameter, a field and a wire value are the same word.
     #[test]
     fn name_round_trips_through_serde() {
         for knob in KNOBS {
@@ -280,11 +253,7 @@ mod table {
         assert_eq!(KnobName::from_name("bnid"), None);
     }
 
-    /// A query naming no knob leaves every one of them at its default.
-    ///
-    /// The generated `KnobQuery` is what the route deserialises. Taking none of
-    /// its knobs must change nothing, which is the promise the module header
-    /// makes about the defaults.
+    /// A query naming no knob leaves every knob at its default.
     #[test]
     fn an_empty_query_is_the_defaults() {
         assert_eq!(KnobQuery::default().params(), Params::default());
@@ -293,15 +262,10 @@ mod table {
 
 #[test]
 fn a_count_knob_rounds_to_the_nearest_rather_than_down() {
-    // These knobs count things — voices, scale degrees — and the UI hands them
-    // over as the `f32` a slider carries. Truncating means a slider stopped a
-    // hair under an integer silently means the integer below: the difference
-    // between a five-voice chord and a four-voice one, from a control the user
-    // has visibly put on 5.
+    // A slider stopped just under 5 means 5 voices, not 4.
     assert_eq!(Params::default().with(KnobName::VOICES, 4.7).voices, 5);
     assert_eq!(Params::default().with(KnobName::VOICES, 4.4).voices, 4);
     assert_eq!(Params::default().with(KnobName::VOICES, 5.0).voices, 5);
-    // The other count knob, so the property belongs to the conversion and not to
-    // one field that happens to be spelled right.
+    // The other count knob, so the property is the conversion's.
     assert_eq!(Params::default().with(KnobName::SPACING, 2.7).spacing, 3);
 }

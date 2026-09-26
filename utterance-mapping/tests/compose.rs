@@ -1,10 +1,5 @@
-//! Composition, checked against the rules it says it follows.
-//!
-//! None of these assert that the result is musical — nothing can. They assert
-//! that the mapping does what its own documentation claims: a note per onset, a
-//! degree chosen by frontness, a register chosen by openness, dynamics carried
-//! from the energy envelope. If a rule here is changed on purpose, the matching
-//! test should change with it rather than be deleted.
+//! Composition, checked against the rules its module documents — not whether it
+//! is musical. A rule changed on purpose should change its test, not delete it.
 
 use utterance_analysis::partials::{Partial, Partials};
 use utterance_analysis::speaker::VowelSpace;
@@ -44,8 +39,7 @@ fn brighter() -> Partials {
             .map(|k| Partial {
                 number: k,
                 ratio: k as f32,
-                // Rising toward the top rather than falling: a genuinely
-                // different colour from `calibration`, not a louder copy.
+                // Rising toward the top: a different colour, not a louder copy.
                 amplitude: 0.2 + 0.05 * k as f32,
                 presence: 1.0,
             })
@@ -60,10 +54,8 @@ fn voice() -> Voice {
         .expect("a rich spectrum gives a voice")
 }
 
-/// A take with onsets at the given frames, each carrying the vowel beside it.
-///
-/// `vowels` gives `(f1, f2)` per onset; every frame from that onset onward holds
-/// it until the next, which is what a sustained vowel actually looks like.
+/// A take with onsets at the given frames, each holding its `(f1, f2)` vowel
+/// until the next.
 fn take(onsets: &[usize], vowels: &[(f32, f32)], frames: usize, loud: bool) -> Voiceprint {
     let mut f1 = vec![None; frames];
     let mut f2 = vec![None; frames];
@@ -109,8 +101,7 @@ fn take(onsets: &[usize], vowels: &[(f32, f32)], frames: usize, loud: bool) -> V
             f0_hz: None,
             partials: Vec::new(),
         },
-        // Tonal and dark by default, so a take says nothing about consonants
-        // unless a test deliberately puts some in.
+        // Tonal and dark by default, so no consonants unless a test adds them.
         texture: Texture {
             centroid_hz: vec![500.0; frames],
             flatness: vec![0.01; frames],
@@ -163,8 +154,7 @@ fn an_opener_vowel_drops_a_register() {
 
 #[test]
 fn drops_onsets_that_fired_in_the_quiet_parts_of_a_take() {
-    // Onset detection fires in the gaps between phrases too, and a note there is
-    // an artefact of the detector rather than something the speaker did.
+    // Onsets fire in near-silence too; those are the detector's, not the speaker's.
     let mut vp = take(&[0, 50], &[MIDDLE, MIDDLE], 100, true);
     for slot in vp.rms_db.iter_mut().skip(50) {
         *slot = -60.0;
@@ -180,10 +170,7 @@ fn drops_onsets_that_fired_in_the_quiet_parts_of_a_take() {
 
 #[test]
 fn judges_loudness_against_the_take_rather_than_full_scale() {
-    // Deliberate: the shape of the envelope is the measurement, not the level it
-    // happened to be recorded at. A whole take recorded quietly is a quiet
-    // performance of the same music, not a silent one — so it still sounds, and
-    // it sounds identical to a loud recording of the same gestures.
+    // A quietly recorded take sounds identical to a loud one of the same gestures.
     let loud = take(&[0, 50], &[BACK, FRONT], 100, true);
     let quiet = take(&[0, 50], &[BACK, FRONT], 100, false);
     let v = voice();
@@ -193,8 +180,7 @@ fn judges_loudness_against_the_take_rather_than_full_scale() {
 
 #[test]
 fn drops_onsets_with_no_vowel_to_read() {
-    // An onset in a stretch with no formant estimate — an unvoiced consonant, or
-    // noise — has no position in the vowel space and so no degree.
+    // No formant estimate, no position, no degree.
     let mut vp = take(&[0, 50], &[MIDDLE, MIDDLE], 100, true);
     for slot in vp.formants.f1.iter_mut().skip(50) {
         *slot = None;
@@ -211,8 +197,7 @@ fn holds_a_note_until_the_next_onset() {
 
 #[test]
 fn never_sustains_across_a_long_silence() {
-    // A gap between onsets can be several seconds. Sustaining across one turns a
-    // rest into a drone.
+    // Sustaining across a long gap would turn a rest into a drone.
     let vp = take(&[0, 900], &[MIDDLE, MIDDLE], 1000, true);
     let score = compose(&vp, &voice());
     assert!(
@@ -239,8 +224,7 @@ fn carries_the_dynamics_of_the_take() {
 
 #[test]
 fn carries_the_speakers_own_palette_into_the_score() {
-    // The score is what reaches the synthesiser, and a tuning derived from one
-    // spectrum is only consonant for tones that have it.
+    // A tuning is only consonant for tones with its spectrum.
     let vp = take(&[0], &[MIDDLE], 100, true);
     let v = voice();
     let score = compose(&vp, &v);
@@ -255,8 +239,7 @@ fn carries_the_speakers_own_palette_into_the_score() {
 
 #[test]
 fn orders_the_palette_dark_to_bright() {
-    // `colour` only means anything if the axis is ordered, and brightness is the
-    // one a listener can follow.
+    // Ordered by brightness, so `colour` means something.
     let v = voice();
     let centroids: Vec<f32> = v.palette.iter().map(|s| centroid(s)).collect();
     assert!(
@@ -267,8 +250,7 @@ fn orders_the_palette_dark_to_bright() {
 
 #[test]
 fn a_vowel_that_moves_gives_a_note_whose_colour_moves() {
-    // The reason colour is two numbers. A syllable whose mouth travels should
-    // produce a tone that travels with it.
+    // A syllable whose mouth travels makes a tone that travels.
     let mut vp = take(&[0], &[BACK], 100, true);
     for i in 40..100 {
         vp.formants.f1[i] = Some(FRONT.0);
@@ -310,9 +292,7 @@ fn a_less_periodic_voice_gives_a_breathier_note() {
 
 #[test]
 fn puts_every_note_inside_the_speakers_range() {
-    // Whatever the vowels do, the result stays within the tonic and the register
-    // span above it — an articulation past the speaker's usual reach must not
-    // send a note somewhere unplayable.
+    // Past the speaker's usual reach still lands inside the register.
     let wild = take(
         &[0, 20, 40, 60],
         &[
@@ -355,8 +335,7 @@ fn make_noisy(vp: &mut Voiceprint, from: usize, to: usize, centroid_hz: f32, fla
 
 #[test]
 fn a_consonant_becomes_a_noise_event() {
-    // Nearly three quarters of ordinary speech carries no fundamental, and this
-    // is where it is heard.
+    // Most of speech has no fundamental; this is where it is heard.
     let mut vp = take(&[0], &[MIDDLE], 100, true);
     make_noisy(&mut vp, 40, 60, 7000.0, 0.8);
 
@@ -370,8 +349,7 @@ fn a_consonant_becomes_a_noise_event() {
 
 #[test]
 fn a_flatter_consonant_gets_a_wider_band() {
-    // Flatness is what separates air from a whistle, and it is the speaker's
-    // own measurement that decides which.
+    // Flatness decides whistle or air.
     let mut airy = take(&[0], &[MIDDLE], 100, true);
     make_noisy(&mut airy, 40, 60, 5000.0, 0.95);
     let mut focused = take(&[0], &[MIDDLE], 100, true);
@@ -385,16 +363,14 @@ fn a_flatter_consonant_gets_a_wider_band() {
 
 #[test]
 fn a_vowel_never_becomes_a_consonant() {
-    // Voiced frames are tonal and must stay out of the noise stream entirely,
-    // or the pitched material would be doubled as hiss.
+    // Voiced frames stay out of the noise stream, or they sound twice.
     let vp = take(&[0, 50], &[BACK, FRONT], 100, true);
     assert!(compose(&vp, &voice()).noise.is_empty());
 }
 
 #[test]
 fn a_single_stray_frame_is_not_a_consonant() {
-    // One noise-like frame appears at the edge of almost every voiced stretch.
-    // Sounding them would pepper the render with clicks nobody made.
+    // Stray single frames at the edges of voicing would sound as clicks.
     let mut vp = take(&[0], &[MIDDLE], 100, true);
     make_noisy(&mut vp, 50, 51, 6000.0, 0.9);
     assert!(compose(&vp, &voice()).noise.is_empty());
@@ -402,8 +378,7 @@ fn a_single_stray_frame_is_not_a_consonant() {
 
 #[test]
 fn a_silent_gap_is_not_a_consonant() {
-    // Room tone between phrases measures as flat as a fricative does — there is
-    // no energy in it, so there is no shape to it either.
+    // Silence is as flat as a fricative.
     let mut vp = take(&[0], &[MIDDLE], 200, true);
     make_noisy(&mut vp, 60, 160, 4000.0, 0.9);
     for slot in vp.rms_db.iter_mut().take(160).skip(60) {
@@ -417,9 +392,7 @@ fn a_silent_gap_is_not_a_consonant() {
 
 #[test]
 fn consonants_keep_the_speakers_own_timing() {
-    // The fastest structural layer in speech, and the one the note stream
-    // cannot carry: several consonants a second, where notes arrive at one or
-    // two.
+    // Several consonants a second, where notes come at one or two.
     let mut vp = take(&[0], &[MIDDLE], 300, true);
     for k in 0..5 {
         make_noisy(&mut vp, 40 + k * 40, 40 + k * 40 + 10, 6000.0, 0.8);

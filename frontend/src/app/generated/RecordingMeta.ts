@@ -6,11 +6,8 @@ import type { Role } from "./Role";
  */
 export type RecordingMeta = { 
 /**
- * Content-addressed: the first 16 hex digits of the audio's SHA-256.
- *
- * Uploading the same audio twice therefore lands on the same recording
- * rather than accumulating duplicates — useful while iterating, where the
- * same take gets re-sent often.
+ * Content-addressed: the first 16 hex digits of the audio's SHA-256, so the
+ * same audio uploaded twice is one recording.
  */
 id: string, 
 /**
@@ -18,12 +15,9 @@ id: string,
  */
 label: string, 
 /**
- * Unix milliseconds when the recording was first stored.
- *
- * Typed as a TS `number`, not the `bigint` ts-rs infers from `u64`:
- * `JSON.parse` produces a number, so `bigint` would be a type the runtime
- * never actually delivers. Unix milliseconds stay inside JavaScript's
- * safe-integer range until the year 287396.
+ * Unix milliseconds when the recording was first stored. A TS `number`,
+ * not `bigint`: `JSON.parse` delivers a number, and these stay safe
+ * integers for millennia.
  */
 createdAtMs: number, durationS: number, sampleRateHz: number, 
 /**
@@ -36,16 +30,11 @@ voicedFraction: number, onsetCount: number,
  */
 peak: number, 
 /**
- * Whether the take was driven into the rails and should be recorded again.
- *
- * Carried on the summary, not only inside the voiceprint, so the take list
- * can flag a bad recording without opening every voiceprint.
+ * Whether the take was driven into the rails — on the summary, so the take
+ * list can flag it.
  */
 clipped: boolean, 
 /**
- * Whether this take defines the speaker or is only material to render.
- *
- * Defaulted on read, so metadata written without it stays readable and
- * reads as material.
+ * Whether this take defines the speaker. Defaults to material when absent.
  */
 role: Role, };

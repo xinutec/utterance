@@ -44,19 +44,10 @@ pub enum Invocation {
     Print(String),
 }
 
-/// Read the command line.
-///
-/// Installed as a package and run by name, `utterance --help` is the only way
-/// anyone finds out that it is configured by environment variables at all.
-/// Ignoring arguments instead starts a server, which looks like a hang.
-///
-/// An unrecognised argument is an error rather than something to ignore: a typo,
-/// or a flag this program does not have, should say so rather than do something
-/// else confidently.
-///
-/// **Every argument is read, not just the first.** A loop that matches and
-/// returns inspects one and silently drops the rest: `utterance --version
-/// --sereve` would print a version and never mention the typo.
+/// Read the command line. Installed and run by name, `utterance --help` is how
+/// anyone learns it is configured by environment; an unknown argument is an
+/// error, and every argument is checked, so `--version --sereve` reports the
+/// typo.
 pub fn invocation<I: IntoIterator<Item = String>>(args: I) -> Result<Invocation, String> {
     let args: Vec<String> = args.into_iter().collect();
     let is = |arg: &String, short: &str, long: &str| arg == short || arg == long;

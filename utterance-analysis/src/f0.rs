@@ -1,12 +1,7 @@
-//! Fundamental-frequency tracking by the YIN algorithm.
+//! Fundamental-frequency tracking by YIN (de Cheveigné & Kawahara, 2002).
 //!
-//! Prosody, not melody. What comes out is the shape of a speaking voice — glides,
-//! declination, the rise at the end of a question — sampled on the frame grid.
-//! Mapping layers should read it as a gesture; quantising it straight to a scale
-//! is the obvious move and the wrong one.
-//!
-//! De Cheveigné & Kawahara (2002), "YIN, a fundamental frequency estimator for
-//! speech and music", JASA 111(4).
+//! Prosody, not melody: glides and declination, to be read as gesture —
+//! quantising it straight to a scale is the obvious move and the wrong one.
 
 use crate::frame::{self, PITCH_WINDOW};
 use crate::resample::ANALYSIS_RATE;
@@ -18,25 +13,18 @@ pub const F0_MIN_HZ: f32 = 70.0;
 /// Highest tracked f0, above a typical soprano speaking range.
 pub const F0_MAX_HZ: f32 = 500.0;
 
-/// YIN's absolute threshold on the normalised difference. A frame whose best
-/// candidate does not get under this is not periodic enough to call voiced.
-///
-/// 0.15 rather than the paper's 0.10: speech recorded on a room microphone is
-/// noisier than the paper's material, and at 0.10 the tail of every vowel drops
-/// out — which reads as a gap in the contour rather than the decay it is.
+/// YIN's threshold on the normalised difference for calling a frame voiced.
+/// 0.15 rather than the paper's 0.10: on a room microphone 0.10 drops every
+/// vowel's tail out of the contour.
 const THRESHOLD: f32 = 0.15;
 
 /// One frame's pitch estimate.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct F0Frame {
-    /// Estimated fundamental, or `None` where the frame is not voiced.
-    ///
-    /// `None`, never a sentinel 0.0: an unvoiced frame has no fundamental, and a
-    /// downstream mean over zeros would be quietly wrong.
+    /// Estimated fundamental, or `None` where unvoiced — never a sentinel 0.
     pub hz: Option<f32>,
-    /// YIN's normalised difference at the chosen lag, in roughly 0..1. Low is
-    /// strongly periodic. Kept even for unvoiced frames — it is the continuous
-    /// measurement, and `hz` is just it thresholded.
+    /// YIN's normalised difference at the chosen lag, roughly 0..1, low when
+    /// periodic — kept for every frame; `hz` is it thresholded.
     pub aperiodicity: f32,
 }
 
@@ -63,10 +51,8 @@ fn estimate(window: &[f32], tau_min: usize, tau_max: usize) -> F0Frame {
     let diff = difference(window, tau_max);
     let norm = cumulative_mean_normalised(&diff);
 
-    // Step 4 of the paper: take the FIRST lag that dips below the threshold, not
-    // the global minimum. The global minimum is often an octave down — a signal
-    // periodic at T is also periodic at 2T, and it usually scores marginally
-    // better. Preferring the earliest qualifying dip is what stops octave errors.
+    // Step 4 of the paper: the FIRST lag under the threshold, not the global
+    // minimum, which is often an octave down.
     let mut best = None;
     for tau in tau_min..tau_max {
         if norm[tau] < THRESHOLD {
@@ -80,9 +66,7 @@ fn estimate(window: &[f32], tau_min: usize, tau_max: usize) -> F0Frame {
         }
     }
 
-    // Nothing crossed the threshold: report the best candidate anyway, flagged
-    // unvoiced. The lag is still the most likely period if a caller wants it,
-    // and the aperiodicity says how much to trust it.
+    // Nothing crossed the threshold: report the best lag anyway, unvoiced.
     let voiced = best.is_some();
     let tau = best.unwrap_or_else(|| {
         (tau_min..tau_max)
@@ -95,8 +79,7 @@ fn estimate(window: &[f32], tau_min: usize, tau_max: usize) -> F0Frame {
     let hz = (ANALYSIS_RATE as f32) / refined;
 
     F0Frame {
-        // A refined lag can land just outside the tracked band; that is a
-        // rejected estimate, not a clamped one.
+        // A refined lag just outside the band is rejected, not clamped.
         hz: (voiced && (F0_MIN_HZ..=F0_MAX_HZ).contains(&hz)).then_some(hz),
         aperiodicity,
     }
@@ -104,20 +87,15 @@ fn estimate(window: &[f32], tau_min: usize, tau_max: usize) -> F0Frame {
 
 /// YIN step 1: the squared-difference function d(tau).
 fn difference(x: &[f32], tau_max: usize) -> Vec<f32> {
-    // O(W * tau_max) — about 180k operations per frame at our window and range,
-    // which is not the bottleneck. It can become an FFT-based autocorrelation if
-    // it ever is.
+    // O(W·tau_max), about 180k operations per frame.
     let n = x.len() - tau_max;
     (0..tau_max)
         .map(|tau| (0..n).map(|j| (x[j] - x[j + tau]).powi(2)).sum())
         .collect()
 }
 
-/// YIN step 2: the cumulative mean normalised difference d'(tau).
-///
-/// This is the step that makes the threshold absolute. Raw d(tau) is smallest at
-/// tau = 0 and scales with signal level, so no fixed cutoff works; dividing by
-/// the running mean removes both problems.
+/// YIN step 2: the cumulative mean normalised difference d'(tau), which makes
+/// the threshold independent of lag and level.
 fn cumulative_mean_normalised(diff: &[f32]) -> Vec<f32> {
     let mut out = vec![1.0f32; diff.len()];
     let mut running = 0.0f32;
@@ -132,11 +110,8 @@ fn cumulative_mean_normalised(diff: &[f32]) -> Vec<f32> {
     out
 }
 
-/// Fit a parabola through the minimum and its neighbours for sub-sample lag.
-///
-/// Without this the estimate is quantised to whole samples: at 16 kHz a lag of
-/// 40 vs 41 samples is 400 vs 390 Hz, a 43-cent step. The contour would move in
-/// visible stairs.
+/// Fit a parabola through the minimum for a sub-sample lag — whole samples step
+/// by 43 cents at 400 Hz.
 fn parabolic_refine(norm: &[f32], tau: usize) -> f32 {
     if tau == 0 || tau + 1 >= norm.len() {
         return tau as f32;

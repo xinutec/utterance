@@ -1,40 +1,16 @@
 //! CI runs the gate's list, or says why it does not.
 //!
-//! `.github/workflows/build.yml` reproduces a subset of `gate.dhall` by hand,
-//! and the way that breaks is the gate gaining a row the workflow does not: the
-//! check then runs on whichever machine fires the pre-commit hook and nowhere
-//! else, or a later step finds nothing where an earlier one should have built
-//! it.
+//! `.github/workflows/build.yml` restates part of `gate.dhall` by hand, and it
+//! breaks when the gate gains a row the workflow lacks. The link is the step
+//! name: a step named exactly after a row *is* that row; other steps are CI's
+//! own. Names, not commands, since three rows legitimately run differently on a
+//! runner (no nix, no dhall, no dev-lint token).
 //!
-//! This does not *generate* the workflow: three rows are implemented
-//! differently here on purpose — the runner has no nix, no dhall and no token
-//! for the private dev-lint repo — and a generator would have to carry those
-//! exceptions as data anyway, so the same list would still have to be right. It
-//! asserts the two agree, which is the part that kept going wrong.
-//!
-//! **The link between them is the step name.** A workflow step whose `name` is
-//! exactly a gate row's name *is* that row; every other step is something CI
-//! does for its own reasons — checkout, a toolchain, a browser — and is ignored.
-//! Names rather than commands, because three rows legitimately run something
-//! else here, so a check comparing argv would fire on all three every run, and a
-//! check that is wrong every run gets switched off within a week.
-//!
-//! This is a `cargo test` rather than a gate row of its own, so it runs in both
-//! places at once: in the gate, and in the CI it is checking.
-//!
-//! **`DL-GHA-GATE-PARITY` asserts the coverage half fleet-wide, and this stays
-//! anyway.** That rule runs from dev-lint, which is one of the two rows a
-//! runner cannot run — so on GitHub it is not there, and a `--no-verify` push or
-//! a checkout without the hook would reach CI with nothing having checked the
-//! list. Same argument `fe-verify` is built on. What is genuinely only here is
-//! the pair the rule leaves to a repository on purpose: that no row is claimed
-//! twice, and that the covered rows run in table order.
-//!
-//! The waived rows are NOT listed here. They are the
-//! `# dev-lint: allow-gate-row-not-in-ci-<row>` markers in the workflow, read
-//! back below — one list, in the file whose prose already explains the split,
-//! checked from both directions rather than copied into a second place that can
-//! drift.
+//! A `cargo test`, so it runs both in the gate and in the CI it checks.
+//! `DL-GHA-GATE-PARITY` checks coverage fleet-wide, but not on a runner; this
+//! also checks that no row is claimed twice and that rows run in table order.
+//! The waived rows are read from the workflow's own
+//! `# dev-lint: allow-gate-row-not-in-ci-<row>` markers, not listed here.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -69,11 +45,7 @@ fn gate_rows() -> Vec<String> {
         .collect()
 }
 
-/// A mapping key, or `None` if this node is not a mapping or has no such key.
-///
-/// Not `node["key"]`: saphyr's `Index` panics on a key that is not there, and
-/// most of what is asked for below is optional by design — a step with no
-/// `name`, a job with no `steps`.
+/// A mapping key, or `None` if absent — saphyr's `Index` panics on a missing key.
 fn field<'y, 'src>(node: &'y Yaml<'src>, key: &str) -> Option<&'y Yaml<'src>> {
     node.as_mapping()?
         .iter()
@@ -81,10 +53,7 @@ fn field<'y, 'src>(node: &'y Yaml<'src>, key: &str) -> Option<&'y Yaml<'src>> {
         .map(|(_, v)| v)
 }
 
-/// Each job's named steps, both lists in file order.
-///
-/// Unnamed steps are dropped rather than counted: a step with no `name` makes no
-/// claim about which row it is.
+/// Each job's named steps, in file order; unnamed steps claim no row.
 fn workflow_jobs() -> Vec<(String, Vec<String>)> {
     let src = repo(".github/workflows/build.yml");
     let docs = Yaml::load_from_str(&src).expect("parse build.yml");
@@ -129,8 +98,7 @@ fn claims() -> Vec<(String, String)> {
         .collect()
 }
 
-/// A row name as its waiver-token tail — the same lossy mapping
-/// `DL-GHA-GATE-PARITY` writes into the token it tells you to add.
+/// A row name as its waiver-token tail, the mapping `DL-GHA-GATE-PARITY` uses.
 fn slug(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     for c in name.chars() {
@@ -177,12 +145,8 @@ fn every_gate_row_runs_in_ci_or_says_why_not() {
 
 #[test]
 fn no_waiver_outlives_its_row() {
-    // This is the half nothing else does. `DL-WAIVER-INEFFECTIVE` is the fleet's
-    // answer to a marker that suppresses nothing, but the audit only condemns a
-    // marker whose rule declared it ran, and the YAML engines do not declare —
-    // so these waivers come back "unaudited" rather than judged. This is the
-    // only thing that notices, and would stay worth keeping even once that
-    // changes, since dev-lint does not run on a runner at all.
+    // A waiver for a row the gate no longer has would go unnoticed otherwise:
+    // dev-lint does not audit these markers, and does not run on a runner.
     let rows = gate_rows();
     let claimed: Vec<String> = claims().into_iter().map(|(row, _)| row).collect();
 
@@ -193,9 +157,7 @@ fn no_waiver_outlives_its_row() {
             "`{WAIVER}{slug_written}` excuses a row the gate no longer has.\n\
              It was renamed or dropped; drop the excuse with it."
         );
-        // The other direction: a row excused as unrunnable that CI turns out to
-        // run. Whoever got it working on a runner left behind a reason saying it
-        // cannot be done, and the next person reads that instead of the workflow.
+        // A row excused as unrunnable that CI runs: the excuse misleads.
         let row = row.expect("checked just above");
         assert!(
             !claimed.contains(row),
@@ -224,12 +186,8 @@ fn a_row_is_claimed_once() {
 
 #[test]
 fn ci_runs_the_covered_rows_in_gate_order() {
-    // The gate's own schema calls row order presentation rather than dependency,
-    // and for failure reporting it is — every row runs whatever came before.
-    // That stops being true the moment one row writes an artifact another reads.
-    // `frontend build` writes `dist/` and `frontend ui-check` serves it; inverting
-    // those two leaves the check nothing to serve, and in a workflow nothing
-    // else would notice.
+    // Order matters once one row reads another's artifact: `frontend build`
+    // writes the `dist/` that `frontend ui-check` serves.
     let rows = gate_rows();
     for (job, names) in workflow_jobs() {
         let order: Vec<usize> = names

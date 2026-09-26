@@ -1,19 +1,9 @@
-//! Onset detection against real recorded audio.
+//! Onset detection against a real recorded glide, which synthetic tones cannot
+//! stand in for: phonation jitters.
 //!
-//! Synthetic signals establish that the detector is *correct* — an onset where a
-//! burst starts, none in silence. They cannot establish that it is *usable*: a
-//! generated tone is perfectly steady, and real phonation is not. This file is
-//! the other half.
-//!
-//! **These tests deliberately assert bounds, not exact counts.** The fixture is
-//! a continuously glided vowel, which contains no discrete events at all while
-//! still producing large spectral change wherever the articulators move quickly
-//! — so "how many onsets should this have" has no correct answer. See the module
-//! docs in `src/onset.rs`.
-//!
-//! What the fixture *can* pin is how badly the detector over-fires on sustained
-//! material, and that is what is asserted here. Tuning the threshold for
-//! accuracy needs labelled speech, which is a different fixture.
+//! **Bounds, not counts**: a continuous glide has no right number of onsets (see
+//! `src/onset.rs`), so this pins how badly the detector over-fires on sustained
+//! material. Accuracy needs labelled speech.
 
 use utterance_analysis::analyse_wav;
 

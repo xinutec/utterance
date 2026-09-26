@@ -1,108 +1,68 @@
 //! Event detection by spectral flux.
 //!
-//! These are *events*, not beats: a syllable onset, a plosive release, the start of a
-//! vowel. Grouping them into a metrical structure needs the stress hierarchy this does
-//! not compute, and is a mapping-layer job.
+//! Events, not beats: grouping them into meter needs the stress hierarchy, a
+//! mapping-layer job. Flux rather than energy rise, because a vowel-to-vowel
+//! transition at constant level is an onset a listener hears.
 //!
-//! Flux rather than raw energy rise, because a vowel-to-vowel transition at constant
-//! level is an onset a listener hears and an energy tracker misses — the spectrum changes
-//! even though the loudness does not.
-//!
-//! # What flux cannot tell apart
-//!
-//! Flux measures *the spectrum changed* and reads it as *a sound started*. In speech the
-//! two coincide, which is why the measure works at all; they come apart whenever one
-//! continuous sound changes shape. The clean demonstration is a glided vowel: *ee → ah →
-//! oo* on one breath contains no events whatsoever, yet produces large flux wherever the
-//! articulators move quickly. In purely spectral terms there is no difference.
-//!
-//! ⚠ **So onset thresholds must be judged on speech, not on sustained material.** A held
-//! or glided vowel can bound how badly the detector over-fires — `tests/onset_real.rs`
-//! uses one for exactly that — but cannot say what the right count is, because the
-//! question has no answer there. Resolving it needs a cue flux does not carry: the stress
-//! hierarchy (`docs/roadmap.md`).
+//! ⚠ **Flux measures *the spectrum changed*, not *a sound started*.** In speech
+//! they mostly coincide; a glided *ee → ah → oo* has no events and plenty of
+//! flux. So thresholds must be judged on speech: sustained material can bound
+//! over-firing (`tests/onset_real.rs`) but has no right count. The real fix is
+//! the stress hierarchy.
 
 use rustfft::num_complex::Complex32;
 
-/// Minimum gap between reported onsets, in frames (50 ms).
-///
-/// Below the fastest syllable rate anyone speaks at, so this only merges the
-/// multiple flux peaks a single articulation produces — a plosive burst followed
-/// by its vowel onset is one event, not two.
+/// Minimum gap between reported onsets, in frames (50 ms) — below any syllable
+/// rate, so it only merges the peaks one articulation makes, like a plosive
+/// burst and its vowel.
 const MIN_SEPARATION: usize = 5;
 
-/// Total span of the local window the adaptive threshold is measured over, in
-/// frames (~250 ms, straddling the candidate). Long enough to characterise a
-/// stretch of speech, short enough to follow it as it changes. The guard band
-/// below removes the middle of it.
+/// Span of the local window the adaptive threshold is measured over, in frames
+/// (~250 ms, straddling the candidate, minus the guard band below).
 const HISTORY_FRAMES: usize = 25;
 
-/// Frames either side of a candidate excluded from its own threshold statistics.
-///
-/// Wide enough to cover a flux peak and the skirt around it, so an event never
-/// contributes to the estimate of what "quiet round here" means.
+/// Frames either side of a candidate excluded from its own threshold, so an
+/// event never raises the bar it is judged against.
 const GUARD_FRAMES: usize = 5;
 
-/// Frames either side that a candidate must dominate to count as a peak (50 ms).
-///
-/// Below the shortest gap between two separately articulated events, so a real
-/// pair is never merged, but far wider than the wobble of a steady sound.
+/// Frames either side that a candidate must dominate to count as a peak (50 ms):
+/// shorter than the gap between separate events, wider than a steady sound's
+/// wobble.
 const PEAK_WINDOW: usize = 5;
 
-/// Level drop, in dB between adjacent frames, at which flux is fully suppressed.
+/// Level drop, in dB, at which flux is fully suppressed.
 ///
-/// A sound *stopping* also produces positive spectral flux: truncating a
-/// steady tone widens its mainlobe, so neighbouring bins gain magnitude even as
-/// the tone loses it, and half-wave rectification counts that as an increase.
-/// Without this, every burst reports two events — one where it starts and one
-/// where it stops.
-///
-/// The gate is graded rather than binary so that a vowel-to-vowel transition at
-/// a constant level, which is a real onset with no level rise at all, still
-/// passes at full weight.
+/// A sound *stopping* also produces positive flux (truncation widens the
+/// mainlobe), so without this every burst reports two events. Graded, so a
+/// vowel-to-vowel transition at constant level still passes at full weight.
 const OFFSET_SUPPRESSION_DB: f32 = 3.0;
 
-/// Frames examined on each side of a candidate when deciding whether the level
-/// is rising or falling through it (100 ms each way).
-///
-/// Long enough to span a natural vocal release. A voice stops over a couple of
-/// hundred milliseconds, so across a shorter span the level barely moves and the
-/// gate reads the whole decay as "steady", leaving phantom events at the tail.
+/// Frames examined each side of a candidate to decide whether the level rises or
+/// falls through it (100 ms): a voice's release takes a couple of hundred
+/// milliseconds, and a shorter span reads the decay as steady.
 const GATE_SPAN: usize = 10;
 
 /// How many local median-absolute-deviations above the local median a peak must
-/// sit. Raise to report fewer, more confident onsets.
+/// sit — the main sensitivity knob (see [`threshold`]).
 ///
-/// The dominant sensitivity knob. See [`threshold`] for why the units are MADs.
-///
-/// **This value, [`THRESHOLD_FLOOR`] and [`SILENCE_MARGIN_DB`] were fitted
-/// against a single sustained-vowel fixture, and are unvalidated on speech.**
-/// That fixture can only bound over-firing — it contains no discrete events to
-/// count, for the reason given at the top of this module. Judging these numbers
-/// properly needs a recording with syllables labelled by ear, which does not
-/// exist yet; until it does, treat them as a starting point rather than a result.
+/// **This, [`THRESHOLD_FLOOR`] and [`SILENCE_MARGIN_DB`] were fitted on one
+/// sustained-vowel fixture and are unvalidated on speech**: a starting point, not
+/// a result.
 const THRESHOLD_MADS: f32 = 6.0;
 
 /// How far above the noise floor a frame must sit before its flux counts fully,
 /// in dB. Below the floor it is ignored; it ramps in across this range.
 const SILENCE_MARGIN_DB: f32 = 15.0;
 
-/// Floor on the threshold, as a fraction of the take's peak flux.
-///
-/// Where the flux is genuinely flat — digital silence, or a perfectly steady
-/// synthetic tone — the MAD collapses to nearly zero and any wobble at all would
-/// clear a purely relative threshold. This keeps a floor under it.
+/// Floor on the threshold, as a fraction of the take's peak flux: where flux is
+/// flat the MAD collapses and any wobble would clear a purely relative bar.
 const THRESHOLD_FLOOR: f32 = 0.06;
 
-/// Half-wave-rectified spectral flux per frame, normalised to 0..1.
+/// Half-wave-rectified spectral flux per frame, normalised to 0..1, from the
+/// frames' spectra and levels.
 ///
-/// Kept in the voiceprint alongside the picked onsets: the continuous curve is
-/// the measurement, and the onset list is one thresholding of it. A mapping that
-/// wants different sensitivity should re-pick from the curve rather than ask the
-/// analyser to re-run.
-///
-/// Reads the frames' spectra ([`crate::frame::spectra`]) and levels
-/// ([`crate::energy::track`]), which the caller has already computed.
+/// Kept in the voiceprint beside the onsets: the curve is the measurement, the
+/// onsets one thresholding of it, and a mapping can re-pick from it.
 pub fn flux(spectra: &[Vec<Complex32>], level_db: &[f32]) -> Vec<f32> {
     if spectra.is_empty() {
         return Vec::new();
@@ -113,8 +73,7 @@ pub fn flux(spectra: &[Vec<Complex32>], level_db: &[f32]) -> Vec<f32> {
         .iter()
         .enumerate()
         .map(|(i, spectrum)| {
-            // Half-wave rectified: only increases in a bin signal an onset. A
-            // decrease is a sound ending, which is a different event.
+            // Only increases count: a decrease is a sound ending.
             let mut sum = 0.0f32;
             for (bin, p) in spectrum.iter().zip(prev.iter_mut()) {
                 let mag = bin.norm();
@@ -125,25 +84,18 @@ pub fn flux(spectra: &[Vec<Complex32>], level_db: &[f32]) -> Vec<f32> {
         })
         .collect();
 
-    // Frame 0 has no predecessor, so its flux is the whole spectrum appearing at
-    // once. That is an artefact of where the recording starts, not an onset.
+    // Frame 0 has no predecessor: its "flux" is where the recording starts.
     out[0] = 0.0;
     normalise(out)
 }
 
-/// Weight in 0..1 that suppresses flux in frames near the noise floor.
+/// Weight in 0..1 that suppresses flux near the noise floor.
 ///
-/// Flux is *relative*, normalised by the take's own maximum, so room tone shuffling
-/// between bins scores like a real attack — and the local threshold is most permissive in
-/// exactly those quiet stretches. But there is no such thing as an onset in silence.
-///
-/// Judged against the take's own noise floor rather than an absolute dBFS number, because
-/// a quiet recording is not a recording of nothing.
-///
-/// ⚠ Measured over a short window *starting* at the candidate, not the candidate frame
-/// alone: the beginning of a sound is the moment its level is still crossing up from the
-/// floor, so testing that one frame would attenuate every real onset. What matters is
-/// whether sound is present just after.
+/// Flux is relative, so room tone shuffling between bins scores like an attack,
+/// and the local threshold is most permissive exactly there. Judged against the
+/// take's own floor. ⚠ Over a short window *starting* at the candidate: an onset
+/// is the moment the level is still climbing, so the frame alone would
+/// attenuate every real one.
 fn silence_gate(level_db: &[f32], floor: f32, i: usize) -> f32 {
     let hi = (i + GATE_SPAN).min(level_db.len());
     let present = level_db[i..hi]
@@ -153,38 +105,27 @@ fn silence_gate(level_db: &[f32], floor: f32, i: usize) -> f32 {
     ((present - floor) / SILENCE_MARGIN_DB).clamp(0.0, 1.0)
 }
 
-/// Estimated noise floor: the 10th percentile of the take's frame levels.
-///
-/// A percentile rather than the minimum, which would latch onto a single
-/// anomalously quiet frame and put the floor below anything real.
+/// Estimated noise floor: the 10th percentile of the take's frame levels, not
+/// the minimum, which one anomalous frame would decide.
 fn noise_floor(level_db: &[f32]) -> f32 {
     let mut sorted: Vec<f32> = level_db.to_vec();
     sorted.sort_by(f32::total_cmp);
     sorted[sorted.len() / 10]
 }
 
-/// Weight in 0..1 that suppresses flux caused by a sound stopping.
-///
-/// Compares the mean level over the frames *after* the candidate against the
-/// frames *before* it: an onset leaves more sound behind than it found, an
-/// offset leaves less. 1.0 when the level is flat or rising, tapering to 0.0
-/// once the drop reaches [`OFFSET_SUPPRESSION_DB`].
-///
-/// Straddling the candidate rather than differencing adjacent frames, because
-/// the energy and spectral windows are both 32 ms: a truncation smears its level
-/// drop across three frames while the flux spike from it is sharp, so an
-/// adjacent-frame test still reads flat at the exact frame that spikes.
+/// Weight in 0..1 that suppresses flux caused by a sound stopping: 1 when the
+/// mean level after the candidate is at least the mean before, tapering to 0 at
+/// [`OFFSET_SUPPRESSION_DB`] of drop. Straddling rather than adjacent frames,
+/// because the 32 ms windows smear a truncation's drop over three frames while
+/// its flux spike is sharp.
 fn offset_gate(level_db: &[f32], i: usize) -> f32 {
     let before = mean_level(level_db, i.saturating_sub(GATE_SPAN), i);
-    // Means on both sides. Taking the loudest frame after the candidate instead
-    // looks appealing — it would protect a phrase-final syllable — but it reads
-    // the decaying tail of the very sound being suppressed and lets every offset
-    // back through.
+    // Means, not the loudest frame after: that reads the decaying tail of the
+    // very sound being suppressed.
     let after = mean_level(level_db, i + 1, i + 1 + GATE_SPAN);
     match (before, after) {
         (Some(b), Some(a)) if a < b => (1.0 + (a - b) / OFFSET_SUPPRESSION_DB).clamp(0.0, 1.0),
-        // Nothing to compare against at the very edges of the recording, and a
-        // rising or flat level is exactly what an onset looks like.
+        // Nothing to compare at the edges; flat or rising is what an onset is.
         _ => 1.0,
     }
 }
@@ -198,8 +139,7 @@ fn mean_level(level_db: &[f32], lo: usize, hi: usize) -> Option<f32> {
     Some(level_db[lo..hi].iter().sum::<f32>() / (hi - lo) as f32)
 }
 
-/// Scale to 0..1 by the maximum. Flux is unitless, and every threshold below is
-/// expressed relative to the signal's own range.
+/// Scale to 0..1 by the maximum; every threshold here is relative.
 fn normalise(mut x: Vec<f32>) -> Vec<f32> {
     let max = x.iter().copied().fold(0.0f32, f32::max);
     if max > 0.0 {
@@ -210,10 +150,8 @@ fn normalise(mut x: Vec<f32>) -> Vec<f32> {
     x
 }
 
-/// Pick onset frames from a flux curve.
-///
-/// A peak qualifies when it is a local maximum, clears the local threshold, and
-/// is at least `MIN_SEPARATION` frames from the last one accepted.
+/// Pick onset frames from a flux curve: local maxima that clear the local
+/// threshold, at least `MIN_SEPARATION` apart.
 pub fn pick(flux: &[f32]) -> Vec<usize> {
     let mut picked: Vec<usize> = Vec::new();
     for i in 1..flux.len().saturating_sub(1) {
@@ -224,8 +162,7 @@ pub fn pick(flux: &[f32]) -> Vec<usize> {
             continue;
         }
         match picked.last() {
-            // Within the refractory window: keep whichever peak is stronger,
-            // rather than always the earlier one.
+            // Within the refractory window, keep the stronger peak.
             Some(&last) if i - last < MIN_SEPARATION => {
                 if flux[i] > flux[last] {
                     let n = picked.len();
@@ -238,60 +175,33 @@ pub fn pick(flux: &[f32]) -> Vec<usize> {
     picked
 }
 
-/// Whether `i` is the largest flux value within [`PEAK_WINDOW`] frames either side.
-///
-/// The condition that does most of the work. Exceeding the two immediate
-/// neighbours is not enough: every small wobble on a noisy curve does that, and
-/// sustained phonation is full of them — cycle-to-cycle jitter — so the detector
-/// would generate a candidate every few frames and leave the threshold to sort
-/// them out, which no threshold can do reliably. An onset is a spike that stands
-/// out from its surroundings.
+/// Whether `i` is the largest flux value within [`PEAK_WINDOW`] frames either
+/// side. Beating the two neighbours is not enough: sustained phonation's jitter
+/// does that every few frames, and no threshold can sort those out.
 fn is_local_maximum(flux: &[f32], i: usize) -> bool {
     let lo = i.saturating_sub(PEAK_WINDOW);
     let hi = (i + PEAK_WINDOW + 1).min(flux.len());
-    // Strictly greater going back, so a flat run reports its first frame rather
-    // than every frame in it.
+    // Strictly greater going back, so a flat run reports its first frame.
     flux[lo..i].iter().all(|&v| v < flux[i]) && flux[i + 1..hi].iter().all(|&v| v <= flux[i])
 }
 
-/// The value a peak at `i` must exceed to count as an onset.
+/// The value a peak at `i` must exceed: `median + k · MAD`, floored.
 ///
-/// `median + k · MAD`, floored. Adapting to the local *level* alone is not
-/// enough. A sustained vowel sits at a low flux
-/// level but is constantly jittery (cycle-to-cycle pitch and amplitude
-/// variation, slow drift in the vowel), so a fixed offset above the local median
-/// is cleared by noise dozens of times over a few seconds. Measured on a real
-/// seven-second sustained vowel, a fixed offset reported 22 onsets where there
-/// is exactly one event.
-///
-/// Scaling by the median absolute deviation asks the right question instead: not
-/// "is this peak bigger than usual round here", but "is it bigger than the
-/// variation round here". A jittery stretch demands a proportionally larger peak.
+/// Scaled by the spread, not only offset from the level: a sustained vowel is
+/// low but jittery, and a fixed offset reported 22 onsets in seven seconds of
+/// one held vowel. A jittery stretch demands a proportionally larger peak.
 fn threshold(flux: &[f32], i: usize) -> f32 {
     let (median, mad) = local_spread(flux, i);
     median + (THRESHOLD_MADS * mad).max(THRESHOLD_FLOOR)
 }
 
-/// Median and median-absolute-deviation of the flux curve around `i`, excluding
-/// a guard band either side of the candidate itself.
+/// Median and median-absolute-deviation of the flux around `i`.
 ///
-/// MAD rather than standard deviation because one outlier in the window moves a
-/// standard deviation a long way, and the threshold would rise to meet whatever
-/// it was supposed to detect. The guard band is the other half of that problem —
-/// see the body for why the window is arranged this way.
+/// MAD, because one outlier moves a standard deviation a long way. The window
+/// is centred, since a backward one collapses after a pause, and excludes a
+/// guard band, since the candidate's own peak would inflate its bar — the usual
+/// constant-false-alarm-rate arrangement.
 fn local_spread(flux: &[f32], i: usize) -> (f32, f32) {
-    // Centred, with a guard band excluded around the candidate — the standard
-    // constant-false-alarm-rate arrangement. Two separate problems force it:
-    //
-    // A purely backward window collapses after any quiet stretch (median and MAD
-    // both reach zero, the threshold drops to its floor, and the first wobble
-    // after a pause is admitted), so the window has to straddle the candidate.
-    // But a plain centred window then includes the candidate's own peak and the
-    // skirt around it, inflating the statistics exactly where a real event is —
-    // which cost the attack of the sustained-vowel fixture entirely.
-    //
-    // Excluding a guard band solves both: the statistics describe the
-    // surroundings on each side without the event contaminating them.
     let half = HISTORY_FRAMES / 2;
     let lo = i.saturating_sub(half);
     let hi = (i + half + 1).min(flux.len());

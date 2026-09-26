@@ -1,45 +1,26 @@
 //! A scale read out of a measured spectrum.
 //!
-//! Sweep one interval upward from unison to the octave, ask at every point how
-//! rough the spectrum sounds against a copy of itself at that distance, and take
-//! the places where the answer is locally lowest. For a harmonic spectrum those
-//! places land close to the simple frequency ratios — which is a result rather
-//! than an assumption, and the reason this is worth doing at all: the same
-//! procedure applied to a bell or a gamelan metallophone produces a scale that
-//! has nothing to do with just intonation, because those spectra are not
-//! harmonic.
+//! Sweep an interval from unison to the octave, ask how rough the spectrum is
+//! against a copy of itself at each distance, and take the local minima. For a
+//! harmonic spectrum they land near simple ratios — a result, since a bell's
+//! spectrum gives a scale unrelated to just intonation. For voices the minima are
+//! all near 3:2 and 4:3; what differs is which are deep.
 //!
-//! A voice *is* harmonic, so the interesting variation is not in where the
-//! minima roughly are — they will be near 3:2 and 4:3 for everyone — but in
-//! which ones are deep and which barely dent the curve, because that follows
-//! from which partials the speaker's vocal tract makes loud.
-//!
-//! **The choices made here, all of them arguable:**
-//! - the octave is the repeat interval, so the sweep stops at 2:1
-//! - a minimum counts as a note when it is deep enough, by [`MIN_DEPTH`]
-//! - unison and octave are degrees by fiat rather than by measurement
-//!
-//! A different mapping would answer these differently and would not be wrong.
+//! Arguable choices: the octave repeats, a minimum is a note when deeper than
+//! [`MIN_DEPTH`], and unison and octave are degrees by fiat.
 
 use serde::{Deserialize, Serialize};
 use utterance_analysis::partials::Partials;
 
 use crate::dissonance::{self, Component};
 
-/// Steps per octave the curve is sampled at — one per cent.
-///
-/// A cent is roughly the finest pitch difference a trained listener can hear, so
-/// sampling finer would locate minima to a precision no one could act on.
+/// Steps per octave the curve is sampled at — one per cent, about the finest
+/// pitch difference anyone hears.
 pub const RESOLUTION: usize = 1200;
 
-/// How deep a dip must be to count as a note, as a fraction of the curve's own
-/// range.
-///
-/// Every wobble in a dissonance curve is a local minimum, and most are the
-/// arithmetic of two partials sliding past each other rather than anywhere a
-/// listener would rest. This is the most arguable number in the crate: raise it
-/// and you get a pentatonic-ish handful of very stable intervals, lower it and
-/// you get a dense microtonal set.
+/// How deep a dip must be to count as a note, as a fraction of the curve's
+/// range. Most minima are two partials sliding past each other; this is the most
+/// arguable number in the crate.
 pub const MIN_DEPTH: f32 = 0.02;
 
 /// One note of a derived scale.
@@ -52,10 +33,8 @@ pub struct Degree {
     pub ratio: f32,
     /// Roughness at this minimum, on the curve's normalised 0..1 scale.
     pub dissonance: f32,
-    /// How far the curve climbs either side before turning back down.
-    ///
-    /// The measure of how firmly a note is a note. A degree with a depth of 0.5
-    /// is somewhere a listener could rest; one at 0.02 is a technicality.
+    /// How far the curve climbs either side before turning back down: how firmly
+    /// this is somewhere a listener could rest.
     pub depth: f32,
 }
 
@@ -69,11 +48,8 @@ pub struct Tuning {
     pub curve: Vec<f32>,
 }
 
-/// Derive a scale from a measured harmonic series.
-///
-/// Returns `None` when there is not enough spectrum to say anything: a single
-/// partial has nothing to collide with, so its curve is flat and every point on
-/// it is equally consonant, which is true and useless.
+/// Derive a scale from a measured harmonic series, or `None` with fewer than two
+/// partials — nothing to collide, a flat curve.
 pub fn from_partials(partials: &Partials) -> Option<Tuning> {
     from_partials_with(partials, MIN_DEPTH)
 }
@@ -92,12 +68,8 @@ pub fn from_partials_with(partials: &Partials, min_depth: f32) -> Option<Tuning>
     from_spectrum_with(&spectrum, min_depth)
 }
 
-/// Derive a scale from any spectrum, harmonic or not.
-///
-/// Separate from [`from_partials`] because the interesting test of this code is
-/// a spectrum that is *not* a voice — a stretched or inharmonic one, where the
-/// answer must come out somewhere other than just intonation or the procedure is
-/// only rediscovering its own assumptions.
+/// Derive a scale from any spectrum — for testing against spectra that are not a
+/// voice, where the answer must differ from just intonation.
 pub fn from_spectrum(spectrum: &[Component]) -> Option<Tuning> {
     from_spectrum_with(spectrum, MIN_DEPTH)
 }
@@ -125,12 +97,8 @@ pub fn from_spectrum_with(spectrum: &[Component], min_depth: f32) -> Option<Tuni
     Some(Tuning { degrees, curve })
 }
 
-/// Unison and octave, which are degrees by decision rather than by measurement.
-///
-/// Both really are minima for a harmonic spectrum, so including them changes
-/// nothing there. For an inharmonic one the octave may genuinely be rough, and
-/// this asserts it as a degree anyway — a choice, made so that every scale
-/// repeats at the octave and can be handled uniformly downstream.
+/// Unison and octave, which are degrees by decision: for an inharmonic spectrum
+/// the octave may be rough, and is kept so every scale repeats at it.
 fn endpoint(curve: &[f32], index: usize) -> Degree {
     Degree {
         cents: index as f32,
@@ -144,8 +112,7 @@ fn endpoint(curve: &[f32], index: usize) -> Degree {
 fn interior_minima(curve: &[f32], min_depth: f32) -> Vec<Degree> {
     let mut found = Vec::new();
     for i in 1..curve.len() - 1 {
-        // Strict on one side and weak on the other, so a flat-bottomed valley
-        // reports its last sample once rather than every sample in it.
+        // Strict one side, weak the other: a flat valley reports once.
         if !(curve[i] < curve[i - 1] && curve[i] <= curve[i + 1]) {
             continue;
         }
@@ -162,12 +129,8 @@ fn interior_minima(curve: &[f32], min_depth: f32) -> Vec<Degree> {
     found
 }
 
-/// How far the curve rises either side of a minimum before turning back down.
-///
-/// The smaller of the two climbs, which is what makes this a measure of how
-/// isolated the dip is rather than of how far the curve happens to travel on one
-/// side. A dip halfway down a long slope has a large climb one way and almost
-/// none the other, and is not a place anything rests.
+/// How far the curve rises either side of a minimum — the smaller climb, so a
+/// dip halfway down a slope does not count as isolated.
 fn prominence(curve: &[f32], index: usize) -> f32 {
     let mut left = 0.0f32;
     for i in (0..index).rev() {

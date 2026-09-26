@@ -43,12 +43,8 @@ export class Studio implements OnInit {
   readonly recorder = inject(Recorder);
 
   /**
-   * True while no take says who the speaker is.
-   *
-   * Read from the take list rather than from a failed request, so the page can
-   * offer the next move *before* somebody presses render and is refused. The
-   * backend remains the authority — it refuses the render either way — but a
-   * prompt that only appears after a failure is a prompt most people never see.
+   * True while no take says who the speaker is — read from the take list, so
+   * the page offers the next move before a render is refused.
    */
   readonly needsCalibration = computed(
     () => !this.store.recordings().some((take) => take.role === "calibration"),
@@ -58,14 +54,12 @@ export class Studio implements OnInit {
   readonly captureError = signal<string | null>(null);
 
   /**
-   * Quality warning about the open take, read from what the analyser measured
-   * rather than judged here — so an uploaded file is checked exactly as a
-   * browser recording is.
+   * Quality warning about the open take, from the analyser's own measurement, so
+   * an uploaded file is checked like a recording.
    */
   readonly warning = computed(() => {
     const detail = this.store.selected();
-    // The backend owns the threshold for "clipped"; this reads its verdict and
-    // only formats the number, so the two cannot disagree.
+    // The backend decides "clipped"; this only formats the number.
     if (!detail?.meta.clipped) return null;
     const percent = detail.voiceprint.source.clippedFraction * 100;
     return (
@@ -88,16 +82,13 @@ export class Studio implements OnInit {
     try {
       await this.recorder.start();
     } catch (err: unknown) {
-      // Overwhelmingly this is a denied permission prompt, which is a thing the
-      // person can fix — so name it rather than reporting a raw DOMException.
+      // Usually a denied permission prompt, which the person can fix.
       this.captureError.set(
         err instanceof DOMException && err.name === "NotAllowedError"
           ? "microphone access was refused — allow it in the browser's site settings and try again"
           : err instanceof Error
             ? err.message
-            // Nothing left to narrow to. `String(err)` here is where
-            // "[object Object]" comes from, and a sentence is more use than a
-            // shape name the reader cannot act on.
+            // Never `String(err)`, which reads "[object Object]".
             : "the microphone could not be opened",
       );
     }
@@ -131,12 +122,8 @@ export class Studio implements OnInit {
   }
 
   /**
-   * Turn a take into the voice, or stop it being one.
-   *
-   * On the row rather than behind the calibration flow, because the takes that
-   * need this are already recorded: a take stored before roles existed reads
-   * back as material, and audio that arrives as a file never passed through the
-   * guided steps at all.
+   * Turn a take into the voice, or stop it being one — on the row, for takes
+   * that never went through the guided steps.
    */
   toggleRole(meta: RecordingMeta, event: MouseEvent): void {
     event.stopPropagation();
