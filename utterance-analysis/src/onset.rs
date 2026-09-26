@@ -12,6 +12,8 @@
 
 use rustfft::num_complex::Complex32;
 
+use crate::stats::median;
+
 /// Minimum gap between reported onsets, in frames (50 ms) — below any syllable
 /// rate, so it only merges the peaks one articulation makes, like a plosive
 /// burst and its vowel.
@@ -208,18 +210,14 @@ fn local_spread(flux: &[f32], i: usize) -> (f32, f32) {
     let guard_lo = i.saturating_sub(GUARD_FRAMES);
     let guard_hi = (i + GUARD_FRAMES + 1).min(flux.len());
 
-    let mut w: Vec<f32> = flux[lo..guard_lo]
+    let w: Vec<f32> = flux[lo..guard_lo]
         .iter()
         .chain(&flux[guard_hi..hi])
         .copied()
         .collect();
-    if w.is_empty() {
+    let Some(centre) = median(&w) else {
         return (0.0, 0.0);
-    }
-    w.sort_by(f32::total_cmp);
-    let median = w[w.len() / 2];
-
-    let mut deviations: Vec<f32> = w.iter().map(|v| (v - median).abs()).collect();
-    deviations.sort_by(f32::total_cmp);
-    (median, deviations[deviations.len() / 2])
+    };
+    let deviations: Vec<f32> = w.iter().map(|v| (v - centre).abs()).collect();
+    (centre, median(&deviations).unwrap_or(0.0))
 }

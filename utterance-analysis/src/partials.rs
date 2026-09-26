@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::frame;
 use crate::resample::ANALYSIS_RATE;
+use crate::stats::median;
 
 /// Highest harmonic looked for: near 3 kHz for a low voice, past where partials
 /// matter to beating.
@@ -214,14 +215,4 @@ fn interpolate(magnitude: &[f32], peak: usize, bin_hz: f32) -> (f32, f32) {
     };
     let amplitude = b - 0.25 * (a - c) * offset;
     ((peak as f32 + offset) * bin_hz, amplitude)
-}
-
-/// Median of an unsorted slice, or `None` when there is nothing to take.
-fn median(values: &[f32]) -> Option<f32> {
-    if values.is_empty() {
-        return None;
-    }
-    let mut sorted = values.to_vec();
-    sorted.sort_by(f32::total_cmp);
-    Some(sorted[sorted.len() / 2])
 }

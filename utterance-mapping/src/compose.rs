@@ -14,6 +14,7 @@
 //! Colour follows the speaker's formant movement, but on derived pitches at
 //! derived times: the mouth shapes the tone, it does not utter it.
 
+use utterance_analysis::stats::median;
 use utterance_analysis::voiceprint::Voiceprint;
 
 use crate::params::Params;
@@ -158,17 +159,13 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
 /// as aperiodic, and unvoiced frames are consonants the noise stream already
 /// sounds.
 fn breath_at(vp: &Voiceprint, from: usize, to: usize) -> f32 {
-    let mut voiced: Vec<f32> = (from..to.min(vp.pitch.hz.len()))
+    let voiced: Vec<f32> = (from..to.min(vp.pitch.hz.len()))
         .filter(|&i| vp.pitch.hz[i].is_some())
         .map(|i| vp.pitch.aperiodicity[i])
         .collect();
-
-    if voiced.is_empty() {
-        return 0.0;
-    }
-    voiced.sort_by(f32::total_cmp);
-    let median = voiced[voiced.len() / 2];
-    (median / FULL_BREATH_APERIODICITY).clamp(0.0, 1.0) * MAX_BREATH
+    median(&voiced).map_or(0.0, |m| {
+        (m / FULL_BREATH_APERIODICITY).clamp(0.0, 1.0) * MAX_BREATH
+    })
 }
 
 /// Which degree a normalised position picks. Clamping happens here, where a

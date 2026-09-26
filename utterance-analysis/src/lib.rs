@@ -29,6 +29,7 @@ pub mod onset;
 pub mod partials;
 pub mod resample;
 pub mod speaker;
+pub mod stats;
 pub mod texture;
 pub mod voiceprint;
 pub mod wav;

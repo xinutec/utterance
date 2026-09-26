@@ -7,6 +7,7 @@
 
 use utterance_analysis::partials::Partials;
 use utterance_analysis::speaker::{Brightness, VowelSpace};
+use utterance_analysis::stats::median;
 
 use crate::score::{self, Spectrum};
 use crate::tuning::{self, Tuning};
@@ -109,17 +110,12 @@ fn spectrum_of(partials: &Partials) -> Option<Spectrum> {
 /// between consecutive voiced frames, so octave errors and gaps do not dominate.
 /// Arithmetic over the voiceprint, so it lives here and needs no re-analysis.
 pub fn jitter_cents(hz: &[Option<f32>]) -> f32 {
-    let mut steps: Vec<f32> = hz
+    let steps: Vec<f32> = hz
         .windows(2)
         .filter_map(|w| match (w[0], w[1]) {
             (Some(a), Some(b)) if a > 0.0 && b > 0.0 => Some((1200.0 * (b / a).log2()).abs()),
             _ => None,
         })
         .collect();
-
-    if steps.is_empty() {
-        return 0.0;
-    }
-    steps.sort_by(f32::total_cmp);
-    steps[steps.len() / 2]
+    median(&steps).unwrap_or(0.0)
 }
