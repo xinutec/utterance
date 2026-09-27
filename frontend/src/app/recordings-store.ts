@@ -32,9 +32,6 @@ export class RecordingsStore {
     this.api.list().subscribe({
       next: (list) => {
         this.stored.set(list);
-        // Open the newest take: usually the one just recorded.
-        const [newest] = this.recordings();
-        if (!this.selected() && newest) this.select(newest);
       },
       error: (err: unknown) => {
         this.fail(err);
@@ -57,9 +54,11 @@ export class RecordingsStore {
     });
   }
 
-  select(meta: RecordingMeta): void {
+  /** Load a take's voiceprint, for its screen and for the calibration check. */
+  open(id: string): void {
     this.busy.set(true);
-    this.api.get(meta.id).subscribe({
+    this.error.set(null);
+    this.api.get(id).subscribe({
       next: (detail) => {
         this.selected.set(detail);
         this.busy.set(false);
@@ -70,13 +69,15 @@ export class RecordingsStore {
     });
   }
 
-  upload(wav: Blob, label: string, role: Role = "material"): void {
+  /** Store a take and open it; `stored` hears its id, to navigate there. */
+  upload(wav: Blob, label: string, role: Role = "material", stored?: (id: string) => void): void {
     this.busy.set(true);
     this.error.set(null);
     this.api.upload(wav, label, role).subscribe({
       next: (detail) => {
         this.selected.set(detail);
         this.busy.set(false);
+        stored?.(detail.meta.id);
         this.refresh();
       },
       error: (err: unknown) => {
@@ -95,7 +96,7 @@ export class RecordingsStore {
     this.api.setRole(meta.id, role).subscribe({
       next: () => {
         this.busy.set(false);
-        if (this.selected()?.meta.id === meta.id) this.select({ ...meta, role });
+        if (this.selected()?.meta.id === meta.id) this.open(meta.id);
         this.refresh();
       },
       error: (err: unknown) => {

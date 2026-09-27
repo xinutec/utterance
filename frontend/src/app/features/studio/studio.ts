@@ -6,15 +6,12 @@ import { MatIconModule } from "@angular/material/icon";
 import { MatProgressBarModule } from "@angular/material/progress-bar";
 import { MatTooltipModule } from "@angular/material/tooltip";
 
-import { RouterLink } from "@angular/router";
+import { Router, RouterLink } from "@angular/router";
 
 import { Recorder } from "../../audio/recorder";
 import { Help } from "../../help";
 import type { RecordingMeta } from "../../models";
 import { RecordingsStore } from "../../recordings-store";
-import { DerivedMusic } from "./derived-music";
-import { VoiceprintChart } from "./voiceprint-chart";
-import { VowelSpace } from "./vowel-space";
 
 /** Target take length, in seconds. Not enforced — just what the UI suggests. */
 const TARGET_SECONDS = 30;
@@ -33,14 +30,17 @@ const TARGET_SECONDS = 30;
     MatIconModule,
     MatProgressBarModule,
     MatTooltipModule,
-    DerivedMusic,
-    VoiceprintChart,
-    VowelSpace,
   ],
 })
 export class Studio implements OnInit {
   readonly store = inject(RecordingsStore);
   readonly recorder = inject(Recorder);
+  private readonly router = inject(Router);
+
+  /** Open a take just stored: it is what the person came to see. */
+  private readonly goTo = (id: string): void => {
+    void this.router.navigate(["/take", id]);
+  };
 
   /**
    * True while no take says who the speaker is — read from the take list, so
@@ -52,22 +52,6 @@ export class Studio implements OnInit {
 
   /** Capture problems, which are this component's own — not the store's. */
   readonly captureError = signal<string | null>(null);
-
-  /**
-   * Quality warning about the open take, from the analyser's own measurement, so
-   * an uploaded file is checked like a recording.
-   */
-  readonly warning = computed(() => {
-    const detail = this.store.selected();
-    // The backend decides "clipped"; this only formats the number.
-    if (!detail?.meta.clipped) return null;
-    const percent = detail.voiceprint.source.clippedFraction * 100;
-    return (
-      `this take is clipped — ${percent.toFixed(1)}% of it is pinned at full scale. ` +
-      `Clipping is distortion, and it corrupts the harmonic amplitudes the tuning is derived from. ` +
-      `Worth recording again with the input a few dB lower.`
-    );
-  });
 
   readonly targetSeconds = TARGET_SECONDS;
   readonly captureSupported = Recorder.supported;
@@ -100,7 +84,7 @@ export class Studio implements OnInit {
       this.captureError.set("nothing was captured — is the right input device selected?");
       return;
     }
-    this.store.upload(take.wav, `take ${new Date().toLocaleTimeString()}`);
+    this.store.upload(take.wav, `take ${new Date().toLocaleTimeString()}`, "material", this.goTo);
   }
 
   async cancelRecording(): Promise<void> {
@@ -111,22 +95,16 @@ export class Studio implements OnInit {
     const input = event.target;
     if (!(input instanceof HTMLInputElement)) return;
     const file = input.files?.[0];
-    if (file) this.store.upload(file, file.name);
+    if (file) this.store.upload(file, file.name, "material", this.goTo);
     // Clear it, so choosing the same file twice in a row still fires a change.
     input.value = "";
-  }
-
-  remove(meta: RecordingMeta, event: MouseEvent): void {
-    event.stopPropagation();
-    this.store.remove(meta);
   }
 
   /**
    * Turn a take into the voice, or stop it being one — on the row, for takes
    * that never went through the guided steps.
    */
-  toggleRole(meta: RecordingMeta, event: MouseEvent): void {
-    event.stopPropagation();
+  toggleRole(meta: RecordingMeta): void {
     this.store.setRole(meta, meta.role === "calibration" ? "material" : "calibration");
   }
 }

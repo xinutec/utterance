@@ -29,7 +29,7 @@ import type {
  * longer sends.
  */
 
-/** One stored take, enough for the list and the detail pane to populate. */
+/** One stored take, enough for the list and its screen to populate. */
 const META: RecordingMeta = {
   id: "0123456789abcdef",
   label: "brother — take 1",
@@ -42,6 +42,9 @@ const META: RecordingMeta = {
   clipped: false,
   role: "calibration",
 };
+
+/** That take's own screen. */
+const TAKE = `/take/${META.id}`;
 
 /** A voiceprint with enough frames that the chart draws real curves. */
 function voiceprint(): Voiceprint {
@@ -242,10 +245,41 @@ test("the suite really runs at phone geometry", async ({ page }) => {
   await expectViewportIsPhone(page);
 });
 
-test("studio — take list and voiceprint lay out cleanly @ phone", async ({ page }, testInfo) => {
+test("studio — the take list lays out cleanly @ phone", async ({ page }, testInfo) => {
   await mockApi(page);
   await page.goto("/");
   await page.getByText("brother — take 1").first().waitFor();
+
+  await expectNoTextOverlaps(page, testInfo);
+  await expectNoHorizontalOverflow(page, testInfo);
+  await expectNoStarvedText(page, testInfo);
+  await expectNoOccludedControls(page, testInfo);
+});
+
+test("take — a take opens on its own screen, and up returns to the list @ phone", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("link", { name: /brother — take 1/ }).click();
+  await expect(page).toHaveURL(new RegExp(`${TAKE}$`));
+  await expect(page.locator("ui-scaffold h1")).toHaveText("brother — take 1");
+  await expectUpInTheBar(page);
+
+  await page.getByRole("button", { name: "takes" }).click();
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("take — opened by link, it shows the speaker's own corners", async ({ page }) => {
+  // The list screen loads them; a take reached by URL never passes through it.
+  await mockApi(page);
+  await page.goto(TAKE);
+  await page.locator("app-vowel-space canvas").waitFor();
+  await expect(page.getByText("brother — take 1").first()).toBeVisible();
+  await expect(page.getByText("Typical adult positions")).toHaveCount(0);
+});
+
+test("take — its voiceprint and controls lay out cleanly @ phone", async ({ page }, testInfo) => {
+  await mockApi(page);
+  await page.goto(TAKE);
   // Wait for both canvases, so the page is fully painted.
   await page.locator("app-voiceprint-chart canvas").waitFor();
   await page.locator("app-vowel-space canvas").waitFor();
@@ -300,7 +334,7 @@ test("calibration — the longest step still fits @ phone", async ({ page }, tes
 test("studio — the derived scale lays out cleanly @ phone", async ({ page }, testInfo) => {
   // The densest row in the app: four numeric columns and a bar per degree.
   await mockApi(page);
-  await page.goto("/");
+  await page.goto(TAKE);
   await page.getByRole("button", { name: "Render as music" }).click();
   await page.getByText("The scale this voice implies").waitFor();
 
@@ -321,7 +355,7 @@ test("studio — a scale that carries no lattice says so @ phone", async ({ page
   // also the prose likeliest to overflow a phone.
   await mockApi(page);
   await page.route("**/api/voice*", (r) => r.fulfill({ json: { ...VOICE, refusal: REFUSAL } }));
-  await page.goto("/");
+  await page.goto(TAKE);
   await page.getByRole("button", { name: "Render as music" }).click();
   await page.getByRole("alert").filter({ hasText: "Lattice cannot be played" }).waitFor();
 
@@ -405,7 +439,7 @@ for (const scheme of ["light", "dark"] as const) {
   test(`canvases stay legible in ${scheme} mode`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await mockApi(page);
-    await page.goto("/");
+    await page.goto(TAKE);
     await page.locator("app-voiceprint-chart canvas").waitFor();
     await page.locator("app-vowel-space canvas").waitFor();
 
@@ -490,7 +524,7 @@ test("studio — the knobs that decide the piece come first, the rest fold away"
   page,
 }) => {
   await mockApi(page);
-  await page.goto("/");
+  await page.goto(TAKE);
   await page.getByRole("button", { name: "Render" }).first().waitFor();
 
   const knobs = page.locator("app-mapping-controls .knob");
@@ -510,7 +544,7 @@ test("studio — the knobs that decide the piece come first, the rest fold away"
 test("studio — a folded-away knob still says it was moved", async ({ page }) => {
   // Closed, the panel must still say something inside has moved.
   await mockApi(page);
-  await page.goto("/");
+  await page.goto(TAKE);
   const panel = page.getByRole("button", { name: /More controls/ });
   await expect(panel).toContainText("more");
 
@@ -588,6 +622,25 @@ test("studio — a delete left alone reaches the server when the bar closes", as
   expect((await deleted).url()).toContain("/api/recordings/0123456789abcdef");
 });
 
+test("studio — an uploaded take opens on its own screen", async ({ page }) => {
+  await mockApi(page);
+  const stored: RecordingDetail = {
+    meta: { ...META, id: "fedcba9876543210", label: "silence.wav" },
+    voiceprint: voiceprint(),
+  };
+  await page.route("**/api/recordings?*", (r) =>
+    r.request().method() === "POST" ? r.fulfill({ json: stored }) : r.fallback(),
+  );
+  await page.route("**/api/recordings/fedcba9876543210", (r) => r.fulfill({ json: stored }));
+  await page.goto("/");
+  await page.getByText("brother — take 1").first().waitFor();
+
+  await page.locator('input[type="file"]').setInputFiles("e2e/silence.wav");
+
+  await expect(page).toHaveURL(/\/take\/fedcba9876543210$/);
+  await expect(page.locator("ui-scaffold h1")).toHaveText("silence.wav");
+});
+
 test("studio — with no voice yet, the page offers the way to make one", async ({ page }) => {
   // The next move is offered before anything is refused.
   await mockApi(page);
@@ -605,7 +658,7 @@ test("studio — once there is a voice, it stops asking", async ({ page }) => {
   // ...and only while it is true.
   await mockApi(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Render as music" }).waitFor();
+  await page.getByText("brother — take 1").first().waitFor();
 
   await expect(
     page.getByRole("link", { name: "Record the calibration vowels" }),

@@ -1,6 +1,6 @@
 /**
- * The store's policy — which take opens by itself, which failures cover the
- * screen, what a delete invalidates — none of it visible in a type.
+ * The store's policy — what an upload opens, which failures cover the screen,
+ * what a delete invalidates — none of it visible in a type.
  */
 
 import { TestBed } from "@angular/core/testing";
@@ -100,29 +100,29 @@ beforeEach(() => {
   TestBed.resetTestingModule();
 });
 
-describe("opening a take by itself", () => {
-  it("opens the newest one, because that is the one just recorded", () => {
-    const stub = api();
-    const store = storeWith(stub);
-    store.refresh();
-    expect(store.selected()?.meta.id).toBe("a");
-  });
-
-  it("leaves a take alone once one is open", () => {
-    // Or every refresh would jump the page back to the top of the list.
-    const stub = api();
-    const store = storeWith(stub);
-    store.select(meta("b"));
-    stub.get.mockClear();
-    store.refresh();
-    expect(store.selected()?.meta.id).toBe("b");
-    expect(stub.get).not.toHaveBeenCalled();
-  });
-
-  it("opens nothing when there is nothing", () => {
-    const store = storeWith(api({ list: vi.fn(() => of([])) }));
+describe("opening a take", () => {
+  // A take has its own screen now, so the list opens nothing by itself.
+  it("opens nothing on a refresh", () => {
+    const store = storeWith(api());
     store.refresh();
     expect(store.selected()).toBeNull();
+  });
+
+  it("opens the take it is asked for, by id", () => {
+    const stub = api();
+    const store = storeWith(stub);
+    store.open("b");
+    expect(stub.get).toHaveBeenCalledWith("b");
+    expect(store.selected()?.meta.id).toBe("b");
+  });
+
+  it("says which take an upload stored, so the page can open it", () => {
+    const store = storeWith(api());
+    let stored: string | undefined;
+    store.upload(new Blob(), "take", "material", (id) => {
+      stored = id;
+    });
+    expect(stored).toBe("new");
   });
 });
 
@@ -149,7 +149,7 @@ describe("what a failure is allowed to cover the screen with", () => {
   it("stops waiting when a request fails", () => {
     // A store left busy is a spinner over an error, with every button disabled.
     const store = storeWith(api({ get: vi.fn(() => refusal("rejected", "too short")) }));
-    store.select(meta("a"));
+    store.open("a");
     expect(store.busy()).toBe(false);
     expect(store.error()).toBe("too short");
   });
@@ -164,14 +164,14 @@ describe("what a failure is allowed to cover the screen with", () => {
 describe("deleting", () => {
   it("closes the take that was deleted", () => {
     const store = storeWith(api());
-    store.select(meta("a"));
+    store.open("a");
     store.remove(meta("a"));
     expect(store.selected()).toBeNull();
   });
 
   it("leaves a different take open", () => {
     const store = storeWith(api());
-    store.select(meta("b"));
+    store.open("b");
     store.remove(meta("a"));
     expect(store.selected()?.meta.id).toBe("b");
   });
@@ -233,16 +233,6 @@ describe("deleting", () => {
     expect(store.recordings().map((r) => r.id)).toEqual(["a", "b"]);
     expect(store.error()).toContain("storage_io");
   });
-
-  it("does not reopen a hidden take as the newest", () => {
-    // A refresh inside the undo window still lists it, and would open it.
-    const store = storeWith(api());
-    store.refresh();
-    store.remove(meta("a"));
-    store.selected.set(null);
-    store.refresh();
-    expect(store.selected()?.meta.id).toBe("b");
-  });
 });
 
 describe("changing what a take is for", () => {
@@ -250,7 +240,7 @@ describe("changing what a take is for", () => {
     // The role changes the scale, vowel space and tonic, so the list reloads.
     const stub = api();
     const store = storeWith(stub);
-    store.select(meta("a"));
+    store.open("a");
     stub.get.mockClear();
     store.setRole(meta("a"), "calibration");
     expect(stub.get).toHaveBeenCalledWith("a");

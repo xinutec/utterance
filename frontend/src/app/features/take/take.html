@@ -1,0 +1,31 @@
+<div class="take-page">
+  @if (detail(); as detail) {
+    <mat-card>
+      <mat-card-header>
+        <mat-card-subtitle>
+          {{ detail.voiceprint.source.sampleRateHz | number: "1.0-0" }} Hz source ·
+          analysed at {{ detail.voiceprint.frame.analysisRateHz | number: "1.0-0" }} Hz ·
+          {{ detail.voiceprint.frame.count | number }} frames
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        @if (warning(); as message) {
+          <p class="warning">{{ message }}</p>
+        }
+        <app-voiceprint-chart [voiceprint]="detail.voiceprint"></app-voiceprint-chart>
+        <h3 class="section">Vowel space</h3>
+        <app-vowel-space [voiceprint]="detail.voiceprint" [corners]="store.corners()"></app-vowel-space>
+
+        <h3 class="section">The recording</h3>
+        <audio class="player" controls [src]="store.audioUrl(detail.meta.id)"></audio>
+
+        <h3 class="section">As music</h3>
+        <app-derived-music [recordingId]="detail.meta.id"></app-derived-music>
+      </mat-card-content>
+    </mat-card>
+  } @else if (store.error(); as message) {
+    <p class="error" role="alert">{{ message }}</p>
+  } @else {
+    <mat-progress-bar mode="indeterminate" aria-label="Opening the take"></mat-progress-bar>
+  }
+</div>

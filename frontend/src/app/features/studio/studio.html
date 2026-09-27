@@ -54,9 +54,6 @@
       @if (captureError(); as message) {
         <p class="error" role="alert">{{ message }}</p>
       }
-      @if (warning(); as message) {
-        <p class="warning">{{ message }}</p>
-      }
     </mat-card-content>
   </mat-card>
 
@@ -82,102 +79,68 @@
     </mat-card>
   }
 
-  <div class="columns">
-    <mat-card>
-      <mat-card-header><mat-card-title>Takes</mat-card-title></mat-card-header>
-      <mat-card-content>
-        @if (store.recordings().length === 0) {
-          <p class="note">Nothing recorded yet.</p>
-        } @else {
-          <!--
-            A plain list of sibling buttons rather than mat-action-list: the row
-            needs both a select action and a delete action, and nesting the
-            delete button inside a clickable list-item button would be invalid
-            HTML that no screen reader can present sensibly.
-          -->
-          <ul class="take-list">
-            @for (take of store.recordings(); track take.id) {
-              <li class="take" [class.chosen]="store.selected()?.meta?.id === take.id">
-                <button class="pick" type="button" (click)="store.select(take)">
-                  <span class="label">{{ take.label }}</span>
-                  <span class="stats">
-                    {{ take.durationS | number: "1.1-1" }}s ·
-                    {{ take.voicedFraction * 100 | number: "1.0-0" }}% voiced ·
-                    {{ take.onsetCount }} onsets
-                    @if (take.clipped) {
-                      <span class="badge">clipped</span>
-                    }
-                    @if (take.role === "calibration") {
-                      <span class="badge voice">voice</span>
-                    }
-                  </span>
-                </button>
-                <!--
-                  Which way this button goes is the take's current role, so one
-                  control both states the fact and changes it. A take that
-                  defines the voice says so on its row, because the alternative
-                  is a store where nothing visible explains why the music sounds
-                  the way it does.
-                -->
-                <button
-                  matIconButton
-                  type="button"
-                  [disabled]="store.busy()"
-                  [attr.aria-label]="
-                    (take.role === 'calibration' ? 'Stop using ' : 'Use ') + take.label + ' as the voice'
-                  "
-                  [matTooltip]="
-                    take.role === 'calibration' ? 'Stop using this as the voice' : 'Use this as the voice'
-                  "
-                  (click)="toggleRole(take, $event)"
-                >
-                  <mat-icon>{{ take.role === "calibration" ? "record_voice_over" : "voice_over_off" }}</mat-icon>
-                </button>
-                <button
-                  matIconButton
-                  type="button"
-                  [attr.aria-label]="'Delete ' + take.label"
-                  matTooltip="Delete"
-                  (click)="remove(take, $event)"
-                >
-                  <mat-icon>delete</mat-icon>
-                </button>
-              </li>
-            }
-          </ul>
-        }
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card class="detail">
-      @if (store.selected(); as detail) {
-        <mat-card-header>
-          <mat-card-title>{{ detail.meta.label }}</mat-card-title>
-          <mat-card-subtitle>
-            {{ detail.voiceprint.source.sampleRateHz | number: "1.0-0" }} Hz source ·
-            analysed at {{ detail.voiceprint.frame.analysisRateHz | number: "1.0-0" }} Hz ·
-            {{ detail.voiceprint.frame.count | number }} frames
-          </mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <app-voiceprint-chart [voiceprint]="detail.voiceprint"></app-voiceprint-chart>
-          <h3 class="section">Vowel space</h3>
-          <app-vowel-space
-            [voiceprint]="detail.voiceprint"
-            [corners]="store.corners()"
-          ></app-vowel-space>
-
-          <h3 class="section">The recording</h3>
-          <audio class="player" controls [src]="store.audioUrl(detail.meta.id)"></audio>
-
-          <h3 class="section">As music</h3>
-          <app-derived-music [recordingId]="detail.meta.id"></app-derived-music>
-        </mat-card-content>
+  <mat-card>
+    <mat-card-header><mat-card-title>Takes</mat-card-title></mat-card-header>
+    <mat-card-content>
+      @if (store.recordings().length === 0) {
+        <p class="note">Nothing recorded yet.</p>
       } @else {
-        <mat-card-content>
-          <p class="note">Record or select a take to see its voiceprint.</p>
-        </mat-card-content>
+        <!--
+          A plain list rather than mat-action-list: each row opens its take and
+          also carries two buttons of its own, and a button inside a list-item
+          link is invalid HTML that no screen reader can present sensibly.
+        -->
+        <ul class="take-list">
+          @for (take of store.recordings(); track take.id) {
+            <li class="take">
+              <a class="pick" [routerLink]="['/take', take.id]">
+                <span class="label">{{ take.label }}</span>
+                <span class="stats">
+                  {{ take.durationS | number: "1.1-1" }}s ·
+                  {{ take.voicedFraction * 100 | number: "1.0-0" }}% voiced ·
+                  {{ take.onsetCount }} onsets
+                  @if (take.clipped) {
+                    <span class="badge">clipped</span>
+                  }
+                  @if (take.role === "calibration") {
+                    <span class="badge voice">voice</span>
+                  }
+                </span>
+              </a>
+              <!--
+                Which way this button goes is the take's current role, so one
+                control both states the fact and changes it. A take that defines
+                the voice says so on its row, because the alternative is a store
+                where nothing visible explains why the music sounds the way it
+                does.
+              -->
+              <button
+                matIconButton
+                type="button"
+                [disabled]="store.busy()"
+                [attr.aria-label]="
+                  (take.role === 'calibration' ? 'Stop using ' : 'Use ') + take.label + ' as the voice'
+                "
+                [matTooltip]="
+                  take.role === 'calibration' ? 'Stop using this as the voice' : 'Use this as the voice'
+                "
+                (click)="toggleRole(take)"
+              >
+                <mat-icon>{{ take.role === "calibration" ? "record_voice_over" : "voice_over_off" }}</mat-icon>
+              </button>
+              <button
+                matIconButton
+                type="button"
+                [attr.aria-label]="'Delete ' + take.label"
+                matTooltip="Delete"
+                (click)="store.remove(take)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </li>
+          }
+        </ul>
       }
-    </mat-card>
-  </div>
+    </mat-card-content>
+  </mat-card>
 </div>

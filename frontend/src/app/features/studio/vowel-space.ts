@@ -199,13 +199,11 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
     ctx.font = "11px system-ui, sans-serif";
     ctx.globalAlpha = 0.65;
     for (const mark of LANDMARKS) {
-      ctx.fillText(mark.label, x(mark.f2) + 4, y(mark.f1));
+      label(ctx, mark.label, x(mark.f2), y(mark.f1), x(F2_RANGE.min));
       ctx.beginPath();
       ctx.arc(x(mark.f2), y(mark.f1), 2, 0, Math.PI * 2);
       ctx.fill();
     }
-    // Said once: generic and personal corners look the same on the picture.
-    ctx.fillText("typical adult positions — record the guided vowels for yours", x(F2_RANGE.max) + 4, y(F1_RANGE.max) - 4);
     ctx.globalAlpha = 1;
   }
 
@@ -247,8 +245,18 @@ export class VowelSpace implements AfterViewInit, OnDestroy {
       ctx.beginPath();
       ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillText(CORNER_LABELS[corner.corner], cx + 6, cy - 5);
+      label(ctx, CORNER_LABELS[corner.corner], cx, cy - 5, x(F2_RANGE.min));
     }
     ctx.globalAlpha = 1;
   }
+}
+
+/**
+ * A point's label, to its right unless that would pass `right`, the plot's
+ * edge: canvas text past the edge is cut off, and no layout check can see it.
+ */
+function label(ctx: CanvasRenderingContext2D, text: string, px: number, py: number, right: number): void {
+  const width = ctx.measureText(text).width;
+  const after = px + 6;
+  ctx.fillText(text, after + width <= right ? after : px - 6 - width, py);
 }
