@@ -108,3 +108,9 @@ mat-slider {
   color: var(--mat-sys-error);
   margin: 0;
 }
+
+// Material gives the description twice the title's share of the header, which
+// wraps the title at phone width; the title is what names the panel.
+.more mat-panel-title {
+  flex: none;
+}

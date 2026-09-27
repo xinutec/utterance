@@ -9,3 +9,9 @@
   // Clicking seeks both players, so say so before anyone tries.
   cursor: crosshair;
 }
+
+// A slider, so a keyboard reaches it; the ring says where the keys will go.
+.chart:focus-visible {
+  outline: 2px solid var(--mat-sys-primary);
+  outline-offset: 2px;
+}

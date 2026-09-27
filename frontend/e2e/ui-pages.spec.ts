@@ -452,6 +452,27 @@ test("compare — a click on the chart moves both players there", async ({ page 
   await expect(page.locator("app-ab-player .clock")).toHaveText("1.2s");
 });
 
+test("compare — the chart seeks from the keyboard too", async ({ page }) => {
+  // A click is the only other way to move both players.
+  await mockApi(page);
+  await page.goto("/compare");
+  await page.getByRole("button", { name: "Render both" }).click();
+  await expect(page.getByRole("button", { name: "Play both" })).toBeEnabled();
+  const chart = page.getByRole("slider", { name: /Two renders compared/ });
+  const clock = page.locator("app-ab-player .clock");
+
+  await chart.focus();
+  await page.keyboard.press("End");
+  await expect(clock).toHaveText("2.4s");
+  await expect(chart).toHaveAttribute("aria-valuetext", "2.4 seconds");
+
+  await page.keyboard.press("PageDown");
+  await expect(clock).toHaveText("2.2s");
+
+  await page.keyboard.press("Home");
+  await expect(clock).toHaveText("0.0s");
+});
+
 test("compare — hearing B mutes A and leaves B audible", async ({ page }) => {
   await mockApi(page);
   await page.goto("/compare");
@@ -616,6 +637,22 @@ test("studio — the knobs that decide the piece come first, the rest fold away"
   // be absent, not present and sized zero, which the harness reports as
   // occluded.
   await expect(knobs).toHaveCount(7);
+});
+
+test("studio — the folded controls' title stays on one line @ phone", async ({ page }) => {
+  // Material gives the description twice the title's share of the header.
+  await mockApi(page);
+  await page.goto(TAKE);
+  const title = page.locator("app-mapping-controls mat-panel-title");
+  await title.waitFor();
+
+  const lines = await title.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+  });
+
+  expect(lines, "the title wrapped").toBe(1);
 });
 
 test("studio — a folded-away knob still says it was moved", async ({ page }) => {

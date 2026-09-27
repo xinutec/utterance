@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, type ElementRef, input, output, viewChild } from "@angular/core";
+import { DecimalPipe } from "@angular/common";
+import { ChangeDetectionStrategy, Component, type ElementRef, computed, input, output, viewChild } from "@angular/core";
 
 import type { ScoreView } from "../../models";
 import { type Surface, paintCanvas } from "../../shared/canvas";
@@ -25,6 +26,7 @@ const SILENT_ALPHA = 0.4;
 @Component({
   selector: "app-compare-chart",
   templateUrl: "./compare-chart.html",
+  imports: [DecimalPipe],
   styleUrl: "./compare-chart.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -38,6 +40,9 @@ export class CompareChart {
 
   /** A click on the chart, in seconds. Both players seek here. */
   readonly seek = output<number>();
+
+  /** The longer render's length, in seconds: the chart's time axis. */
+  protected readonly duration = computed(() => Math.max(this.a().durationS, this.b().durationS, 0.001));
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
 
@@ -53,9 +58,29 @@ export class CompareChart {
     this.seek.emit(((event.clientX - box.left) / box.width) * this.duration());
   }
 
-  private duration(): number {
-    return Math.max(this.a().durationS, this.b().durationS, 0.001);
+  /**
+   * Arrows step a fiftieth of the piece, Page keys a tenth, Home and End go to
+   * the ends — the slider pattern's keys.
+   */
+  onKey(event: KeyboardEvent): void {
+    const length = this.duration();
+    const [small, large] = [length / 50, length / 10];
+    const steps: Partial<Record<string, number>> = {
+      ArrowRight: small,
+      ArrowUp: small,
+      ArrowLeft: -small,
+      ArrowDown: -small,
+      PageUp: large,
+      PageDown: -large,
+    };
+    const step = steps[event.key];
+    const to =
+      event.key === "Home" ? 0 : event.key === "End" ? length : step === undefined ? undefined : this.playhead() + step;
+    if (to === undefined) return;
+    event.preventDefault();
+    this.seek.emit(Math.min(length, Math.max(0, to)));
   }
+
 
   private draw({ ctx, width, height, theme }: Surface): void {
     const [a, b, playhead, audible] = [this.a(), this.b(), this.playhead(), this.audible()];

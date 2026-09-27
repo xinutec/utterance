@@ -1,6 +1,14 @@
+<!-- A slider over time as well as a picture: a click or a key moves both players. -->
 <canvas
   #canvas
   class="chart"
-  (click)="onClick($event)"
+  tabindex="0"
+  role="slider"
   aria-label="Two renders compared: level, colour, root, spread and breath over time, with the moments they differ marked"
+  aria-valuemin="0"
+  [attr.aria-valuemax]="duration()"
+  [attr.aria-valuenow]="playhead()"
+  [attr.aria-valuetext]="(playhead() | number: '1.1-1') + ' seconds'"
+  (click)="onClick($event)"
+  (keydown)="onKey($event)"
 ></canvas>
