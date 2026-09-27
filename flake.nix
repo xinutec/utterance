@@ -30,11 +30,11 @@
           ./Cargo.lock
           ./src
           ./tests
-          # `tests/ci_parity.rs` reads both, and `doCheck` below runs it. The
-          # test asserts CI runs the gate's list, so the gate's list and the CI
-          # that claims to run it are inputs to this build like any source file.
+          # `tests/ci_parity.rs` reads these, and `doCheck` below runs it: CI
+          # must run the gate's list, and compile with the image's Rust.
           ./gate.json
           ./.github
+          ./Dockerfile
           ./utterance-analysis
           ./utterance-mapping
           ./utterance-realisation

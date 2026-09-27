@@ -205,3 +205,39 @@ fn ci_runs_the_covered_rows_in_gate_order() {
         );
     }
 }
+
+#[test]
+fn ci_compiles_with_the_image_s_pinned_compiler() {
+    // CI's container mirrors the toolchain that builds the shipped binary, and a
+    // floating `rust:1-*` moves both with no commit here — main went red for 15
+    // days on untouched code. A Rust bump is a commit, with its lint fixes.
+    let src = repo(".github/workflows/build.yml");
+    let docs = Yaml::load_from_str(&src).expect("parse build.yml");
+    let container = docs
+        .first()
+        .and_then(|doc| field(doc, "jobs"))
+        .and_then(|jobs| field(jobs, "verify"))
+        .and_then(|job| field(job, "container"))
+        .and_then(Yaml::as_str)
+        .expect("build.yml's `verify` job names no container");
+    let image = repo("Dockerfile")
+        .lines()
+        .find_map(|l| l.strip_prefix("FROM rust:"))
+        .and_then(|rest| rest.split_whitespace().next())
+        .map(|tag| format!("rust:{tag}"))
+        .expect("the Dockerfile builds from no rust image");
+
+    assert_eq!(
+        container, image,
+        "CI compiles with a different Rust than the image"
+    );
+    let minor = image
+        .trim_start_matches("rust:")
+        .split('-')
+        .next()
+        .unwrap_or_default();
+    assert!(
+        minor.split('.').count() == 2,
+        "`{image}` floats with upstream; pin a minor, e.g. rust:1.98-bookworm"
+    );
+}

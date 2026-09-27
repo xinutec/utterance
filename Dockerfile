@@ -23,7 +23,7 @@ COPY frontend/ .
 RUN pnpm exec ng build --configuration production
 
 # --- backend: build the Rust binary, deps in their own cached layer ---
-FROM rust:1-bookworm AS backend
+FROM rust:1.98-bookworm AS backend
 WORKDIR /app
 # Every workspace member's manifest, not just the root's. Cargo cannot *load* a
 # workspace unless all of them exist, so a missing one fails the build in a

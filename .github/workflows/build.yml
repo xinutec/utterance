@@ -34,7 +34,7 @@ name: build
 #   row would check.
 #
 # dev-lint: allow-gate-row-not-in-ci-the-package-builds-what-this-repo-publishes
-#   `nix build .#default` needs nix, and this job runs in a rust:1-bookworm
+#   `nix build .#default` needs nix, and this job runs in the image's rust
 #   container with no nix in it. ⚠ **CI is not a substitute for that row**, and
 #   the difference is the point of having it: the `tests` step above runs cargo
 #   against the checkout, while the row builds the derivation — committed
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    container: rust:1-bookworm
+    container: rust:1.98-bookworm
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
