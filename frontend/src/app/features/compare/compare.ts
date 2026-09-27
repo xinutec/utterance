@@ -20,6 +20,7 @@ import { MatProgressBarModule } from "@angular/material/progress-bar";
 import { MatSelectModule } from "@angular/material/select";
 
 import { ActivatedRoute, Router } from "@angular/router";
+import { scaffoldTitle } from "@xinutec/ui-scaffold";
 
 import { ControlsStore } from "../../controls-store";
 import type { ScoreView } from "../../models";
@@ -133,6 +134,7 @@ export class Compare implements OnInit {
   });
 
   constructor() {
+    scaffoldTitle(() => "Compare");
     this.readUrl();
     this.watchSettings();
     this.writeUrl();

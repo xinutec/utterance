@@ -1,38 +1,3 @@
-.bar {
-  gap: 0.75rem;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-
-.title {
-  font-weight: 500;
-}
-
-.subtitle {
-  font: var(--mat-sys-label-medium);
-  color: var(--mat-sys-on-surface-variant);
-  // The tagline is decoration; on a phone the app name is what has to survive.
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.menu {
-  // Leading, and never squeezed. The tagline is what gives up width when the
-  // bar is tight, which is why it is the thing that ellipsises.
-  flex: none;
-}
-
-.nav {
-  // Pushed to the trailing edge and never squeezed: reaching another page
-  // outranks the tagline for space.
-  display: flex;
-  gap: 0.25rem;
-  margin-left: auto;
-  flex: none;
-}
-
 .wall {
   // The whole viewport, because this replaces the app rather than covering it.
   // Centred and padded so a phone in portrait shows the card without scrolling,
@@ -64,11 +29,4 @@
   form {
     margin: 0;
   }
-}
-
-// Which page you are on, taken from the same attribute a screen reader reads
-// rather than a class kept in step by hand.
-[mat-menu-item][aria-current="page"] {
-  background: var(--mat-sys-secondary-container);
-  color: var(--mat-sys-on-secondary-container);
 }

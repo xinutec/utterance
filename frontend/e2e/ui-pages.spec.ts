@@ -6,6 +6,8 @@ import {
   expectNoStarvedText,
   expectNoOccludedControls,
   expectViewportIsPhone,
+  expectRecoversFromMissingBundle,
+  expectUpInTheBar,
 } from "@xinutec/ui-harness";
 
 /**
@@ -476,7 +478,7 @@ test("studio — a folded-away knob still says it was moved", async ({ page }) =
 
 
 
-test("the menu reaches every page @ phone", async ({ page }) => {
+test("the menu reaches every screen, and up returns to the studio @ phone", async ({ page }) => {
   // A menu link that looks right and goes nowhere is invisible to layout
   // checks, so it is clicked.
   await mockApi(page);
@@ -485,46 +487,24 @@ test("the menu reaches every page @ phone", async ({ page }) => {
   for (const [name, path] of [
     ["Calibrate", "/calibrate"],
     ["Compare", "/compare"],
-    ["Studio", "/"],
   ] as const) {
-    await page.getByRole("button", { name: "Open the menu" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("menuitem", { name }).click();
-    await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}(\\?|$)`));
+    await expect(page).toHaveURL(new RegExp(`${path}(\\?|$)`));
+    // Named first: the check reads the bar once, and the bar redraws after the URL.
+    await expect(page.locator("ui-scaffold h1")).toHaveText(name);
+    await expectUpInTheBar(page);
+
+    await page.getByRole("button", { name: "studio" }).click();
+    await expect(page).toHaveURL(/\/$/);
   }
 });
 
-test("the menu says which page you are on", async ({ page }) => {
-  // aria-current rather than a class, so highlight and screen reader agree.
+test("a bundle a deploy removed reloads into the app, not a blank screen", async ({ page }) => {
+  // The worker can serve an index naming a removed `main-*.js`, and the app's own
+  // update handling is inside it; the recovery is inline in `src/index.html`.
   await mockApi(page);
-  await page.goto("/compare");
-  await page.getByRole("button", { name: "Open the menu" }).click();
-
-  await expect(page.getByRole("menuitem", { name: "Compare" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-  await expect(page.getByRole("menuitem", { name: "Studio" })).not.toHaveAttribute(
-    "aria-current",
-    "page",
-  );
-});
-
-test("the pages are inline when there is room for them", async ({ page }) => {
-  // Widened on purpose: a suite at one width cannot tell responsive from
-  // permanently collapsed.
-  await mockApi(page);
-  await page.setViewportSize({ width: 1200, height: 800 });
-  await page.goto("/");
-
-  await expect(page.getByRole("button", { name: "Open the menu" })).toHaveCount(0);
-  for (const name of ["Calibrate", "Studio", "Compare"]) {
-    await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
-  }
-  // Marked the same way as in the menu, by the same method.
-  await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  await expectRecoversFromMissingBundle(page, "/", "app-studio");
 });
 
 test("studio — with no voice yet, the page offers the way to make one", async ({ page }) => {

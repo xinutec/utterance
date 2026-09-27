@@ -25,56 +25,18 @@
     </mat-card>
   </div>
 } @else {
-  <mat-toolbar class="bar">
-    <!--
-      One list, rendered two ways. On a phone the destinations do not fit beside
-      the title, so they go behind a button at the *start* of the bar — where
-      Material puts a navigation icon and where recall already puts the same
-      button. On a wider screen they are worth their space and sit inline.
-
-      The button appears only at handset width because there is nothing else for
-      it to hold; recall keeps one at every width for an overflow set that
-      utterance does not have.
-    -->
-    @if (handset()) {
-      <button
-        matIconButton
-        class="menu"
-        type="button"
-        aria-label="Open the menu"
-        [matMenuTriggerFor]="menu"
-      >
-        <mat-icon>menu</mat-icon>
-      </button>
-      <mat-menu #menu="matMenu">
-        @for (page of pages; track page.path) {
-          <a
-            mat-menu-item
-            [routerLink]="page.path"
-            [attr.aria-current]="isCurrent(page) ? 'page' : null"
-          >
-            {{ page.label }}
-          </a>
-        }
-      </mat-menu>
-    }
-    <span class="title">utterance</span>
-    <span class="subtitle">the voice as law-giver</span>
-    @if (!handset()) {
-      <nav class="nav">
-        @for (page of pages; track page.path) {
-          <a
-            matButton
-            [routerLink]="page.path"
-            [attr.aria-current]="isCurrent(page) ? 'page' : null"
-          >
-            {{ page.label }}
-          </a>
-        }
-      </nav>
-    }
-
-  </mat-toolbar>
+  <!-- The studio is the app; calibrating and comparing are drilled in from its menu. -->
+  <ui-scaffold title="utterance" [menu]="pages" />
+  <mat-menu #pages="matMenu">
+    <a mat-menu-item routerLink="/calibrate">
+      <mat-icon>mic</mat-icon>
+      <span>Calibrate</span>
+    </a>
+    <a mat-menu-item routerLink="/compare">
+      <mat-icon>compare_arrows</mat-icon>
+      <span>Compare</span>
+    </a>
+  </mat-menu>
 
   <main>
     <router-outlet></router-outlet>

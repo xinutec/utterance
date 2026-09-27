@@ -4,6 +4,7 @@ import { MatButtonModule } from "@angular/material/button";
 import { MatCardModule } from "@angular/material/card";
 import { MatIconModule } from "@angular/material/icon";
 import { MatProgressBarModule } from "@angular/material/progress-bar";
+import { scaffoldTitle } from "@xinutec/ui-scaffold";
 
 import { Recorder } from "../../audio/recorder";
 import { RecordingsStore } from "../../recordings-store";
@@ -49,6 +50,10 @@ export class Calibration implements OnInit {
     if (detail?.meta.label !== this.step().id) return null;
     return assess(this.step(), detail);
   });
+
+  constructor() {
+    scaffoldTitle(() => "Calibrate");
+  }
 
   ngOnInit(): void {
     this.store.refresh();
