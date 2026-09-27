@@ -491,9 +491,8 @@ test("the menu reaches every screen, and up returns to the studio @ phone", asyn
     await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("menuitem", { name }).click();
     await expect(page).toHaveURL(new RegExp(`${path}(\\?|$)`));
-    // Named first: the check reads the bar once, and the bar redraws after the URL.
-    await expect(page.locator("ui-scaffold h1")).toHaveText(name);
     await expectUpInTheBar(page);
+    await expect(page.locator("ui-scaffold h1")).toHaveText(name);
 
     await page.getByRole("button", { name: "studio" }).click();
     await expect(page).toHaveURL(/\/$/);
