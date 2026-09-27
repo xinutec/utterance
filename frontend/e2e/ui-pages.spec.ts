@@ -10,13 +10,27 @@ import {
   expectUpInTheBar,
 } from "@xinutec/ui-harness";
 
+import type {
+  Controls,
+  RecordingDetail,
+  RecordingMeta,
+  ScoreView,
+  SpeakerCorners,
+  Voiceprint,
+  VoiceSummary,
+} from "../src/app/models";
+
 /**
  * Layout checks against the built bundle with the API mocked: collisions and
  * overflow read fine in source and only show in a real browser at phone width.
+ *
+ * The mocks are typed against the wire types, so an API change that leaves
+ * them behind fails the e2e typecheck instead of testing a shape the backend no
+ * longer sends.
  */
 
 /** One stored take, enough for the list and the detail pane to populate. */
-const META = {
+const META: RecordingMeta = {
   id: "0123456789abcdef",
   label: "brother — take 1",
   createdAtMs: 1_700_000_000_000,
@@ -30,11 +44,11 @@ const META = {
 };
 
 /** A voiceprint with enough frames that the chart draws real curves. */
-function voiceprint(): unknown {
+function voiceprint(): Voiceprint {
   const count = 400;
   const frames = Array.from({ length: count }, (_, i) => i);
   return {
-    schemaVersion: 4,
+    schemaVersion: 8,
     source: { sampleRateHz: 48_000, channels: 1, durationS: 28.4, peak: 0.71, clippedFraction: 0 },
     frame: { analysisRateHz: 16_000, hopS: 0.01, count },
     pitch: {
@@ -57,6 +71,7 @@ function voiceprint(): unknown {
       // Tonal in the bursts, noisy between: the shape a consonant makes.
       centroidHz: frames.map((i) => (i % 50 < 30 ? 700 : 5200)),
       flatness: frames.map((i) => (i % 50 < 30 ? 0.02 : 0.8)),
+      tiltDbPerOctave: frames.map((i) => (i % 50 < 30 ? -12 : -3)),
     },
     partials: {
       framesUsed: 240,
@@ -72,7 +87,7 @@ function voiceprint(): unknown {
 }
 
 /** A speaker's derived scale, roughly what a real harmonic voice produces. */
-const VOICE = {
+const VOICE: VoiceSummary = {
   tonicHz: 119.7,
   degrees: [
     { cents: 0, ratio: 1, depth: 0 },
@@ -107,7 +122,7 @@ const REFUSAL =
  * matters: the controls hide knobs the playing mapping ignores, so without it
  * no sliders render and every assertion passes over an empty page.
  */
-const CONTROLS = {
+const CONTROLS: Controls = {
   knobs: [
     { name: "bind", label: "Bind to the voice", min: 0, max: 1, step: 0.05, default: 1, mappings: [], about: "At 1 the notes are exactly where this voice's spectrum puts them. At 0 they snap to the twelve everyone else uses.", primary: true },
     { name: "density", label: "Scale density", min: 0.0005, max: 0.5, step: 0.002, default: 0.02, mappings: [], about: "How firm a note has to be to count. Low gives a crowded microtonal set, high gives a handful of very stable intervals.", primary: true },
@@ -128,7 +143,7 @@ const CONTROLS = {
  * A score, as the compare page charts it: long enough to fill the canvas, with
  * enough degrees to wrap the scale caption on a phone.
  */
-function score(offset: number) {
+function score(offset: number): ScoreView {
   const points = 600;
   const at = (i: number) => i / points;
   return {
@@ -148,14 +163,44 @@ function score(offset: number) {
   };
 }
 
+/** The speaker's vowel corners, near the textbook positions for ee, ah and oo. */
+const CORNERS: SpeakerCorners = {
+  corners: [
+    { step: "vowel-ee", corner: "closeFront", f1Hz: 290, f2Hz: 2200, f1SpreadHz: 20, f2SpreadHz: 60, frames: 380 },
+    { step: "vowel-ah", corner: "open", f1Hz: 700, f2Hz: 1150, f1SpreadHz: 25, f2SpreadHz: 50, frames: 400 },
+    { step: "vowel-oo", corner: "closeBack", f1Hz: 320, f2Hz: 850, f1SpreadHz: 18, f2SpreadHz: 40, frames: 360 },
+  ],
+};
+
+/**
+ * GETs no route answered. A catch-all that answered them quietly is how the
+ * vowel space went undrawn: its corners came back as `[]`.
+ */
+let unmocked: string[] = [];
+
+test.beforeEach(() => {
+  unmocked = [];
+});
+
+test.afterEach(() => {
+  expect(unmocked, "the page asked for something the suite does not mock").toEqual([]);
+});
+
 /** Catch-all first, then the specific routes. */
 async function mockApi(page: Page): Promise<void> {
-  await page.route("**/api/**", (r) =>
-    r.request().method() === "GET" ? r.fulfill({ json: [] }) : r.fulfill({ status: 204, body: "" }),
-  );
+  await page.route("**/api/**", (r) => {
+    if (r.request().method() !== "GET") return r.fulfill({ status: 204, body: "" });
+    unmocked.push(new URL(r.request().url()).pathname);
+    return r.fulfill({ status: 404, body: "" });
+  });
   await page.route("**/api/recordings", (r) => r.fulfill({ json: [META] }));
-  await page.route("**/api/recordings/0123456789abcdef", (r) =>
-    r.fulfill({ json: { meta: META, voiceprint: voiceprint() } }),
+  const detail: RecordingDetail = { meta: META, voiceprint: voiceprint() };
+  await page.route("**/api/recordings/0123456789abcdef", (r) => r.fulfill({ json: detail }));
+  await page.route("**/api/speaker/corners", (r) => r.fulfill({ json: CORNERS }));
+  // The recording and its renders, as a quarter second of silence: loaded, so a
+  // page that plays is tested playing rather than in its error state.
+  await page.route(/\/api\/recordings\/[^/]+\/(audio|render)/, (r) =>
+    r.fulfill({ contentType: "audio/wav", path: "e2e/silence.wav" }),
   );
   // Trailing wildcard: the summary carries settings in its query, and a glob
   // without one would silently fall through to the catch-all.
@@ -321,6 +366,10 @@ test("compare — two renders side by side lay out cleanly @ phone", async ({ pa
   await page.goto("/compare");
   await page.getByRole("button", { name: "Render both" }).click();
   await page.locator("app-compare-chart canvas").waitFor();
+  // Loaded, so the page measured is the one that plays: the indeterminate bar's
+  // animation slides off the left edge by design.
+  await expect(page.getByRole("button", { name: "Play both" })).toBeEnabled();
+  await expect(page.locator("app-compare mat-progress-bar")).toHaveCount(0);
   await page.evaluate(() => {
     window.scrollTo(0, 0);
   });
