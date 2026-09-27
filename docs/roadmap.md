@@ -331,9 +331,11 @@ daily work.
   pitch.
 
 - **The bundle budget describes this app, not a public one.** The
-  initial-bundle warning is 800 kB rather than `ng new`'s 500: this is served to
-  two people, not to strangers on a mobile connection. The error ceiling is
-  untouched.
+  initial-bundle warning is 900 kB rather than `ng new`'s 500: this is served to
+  two people, not to strangers on a mobile connection. About four fifths of it is
+  Angular, Material and the CDK, for components the app uses. The fleet's route
+  rule forbids lazy loading, so every screen ships in the first load. The error
+  ceiling is untouched.
 
 ## Open questions
 
