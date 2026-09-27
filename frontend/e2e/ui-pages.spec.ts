@@ -506,6 +506,39 @@ test("a bundle a deploy removed reloads into the app, not a blank screen", async
   await expectRecoversFromMissingBundle(page, "/", "app-studio");
 });
 
+test("studio — deleting a take offers Undo, and Undo sends no delete @ phone", async ({ page }) => {
+  // The audio is the one thing that cannot be re-derived.
+  await mockApi(page);
+  const deletes: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "DELETE") deletes.push(r.url());
+  });
+  await page.goto("/");
+  const take = page.locator(".take", { hasText: "brother — take 1" });
+  await take.waitFor();
+
+  await page.getByRole("button", { name: "Delete brother — take 1" }).click();
+  await expect(take).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+
+  await expect(take).toHaveCount(1);
+  expect(deletes).toEqual([]);
+});
+
+test("studio — a delete left alone reaches the server when the bar closes", async ({ page }) => {
+  await page.clock.install();
+  await mockApi(page);
+  await page.goto("/");
+  await page.locator(".take", { hasText: "brother — take 1" }).waitFor();
+
+  const deleted = page.waitForRequest((r) => r.method() === "DELETE");
+  await page.getByRole("button", { name: "Delete brother — take 1" }).click();
+  await page.getByRole("button", { name: "Undo" }).waitFor();
+  await page.clock.runFor(7_000);
+
+  expect((await deleted).url()).toContain("/api/recordings/0123456789abcdef");
+});
+
 test("studio — with no voice yet, the page offers the way to make one", async ({ page }) => {
   // The next move is offered before anything is refused.
   await mockApi(page);

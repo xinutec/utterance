@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RecordingDetail, RecordingMeta, Role, SpeakerCorner, SpeakerCorners } from "./models";
 import { ApiError, RecordingsApi } from "./recordings-api";
 import { RecordingsStore } from "./recordings-store";
+import { Feedback } from "./shared/feedback";
 
 function meta(id: string, role: Role = "material"): RecordingMeta {
   return {
@@ -65,8 +66,24 @@ function api(overrides: Partial<ApiStub> = {}): ApiStub {
   return { ...defaults(), ...overrides };
 }
 
-function storeWith(stub: ApiStub): RecordingsStore {
-  TestBed.configureTestingModule({ providers: [{ provide: RecordingsApi, useValue: stub }] });
+/** The undo bar, held open: the test decides whether it is tapped or times out. */
+function undoBar() {
+  const offered: { message: string; onUndo: () => void; onCommit: () => void }[] = [];
+  const feedback = {
+    undo: vi.fn((message: string, onUndo: () => void, onCommit: () => void) => {
+      offered.push({ message, onUndo, onCommit });
+    }),
+  };
+  return { feedback, offered };
+}
+
+function storeWith(stub: ApiStub, bar = undoBar()): RecordingsStore {
+  TestBed.configureTestingModule({
+    providers: [
+      { provide: RecordingsApi, useValue: stub },
+      { provide: Feedback, useValue: bar.feedback },
+    ],
+  });
   return TestBed.inject(RecordingsStore);
 }
 
@@ -146,11 +163,8 @@ describe("what a failure is allowed to cover the screen with", () => {
 
 describe("deleting", () => {
   it("closes the take that was deleted", () => {
-    const stub = api();
-    const store = storeWith(stub);
+    const store = storeWith(api());
     store.select(meta("a"));
-    // The list is empty afterwards, so the assertion is about the delete.
-    stub.list.mockImplementation(() => of([]));
     store.remove(meta("a"));
     expect(store.selected()).toBeNull();
   });
@@ -159,6 +173,74 @@ describe("deleting", () => {
     const store = storeWith(api());
     store.select(meta("b"));
     store.remove(meta("a"));
+    expect(store.selected()?.meta.id).toBe("b");
+  });
+
+  // The audio is the one thing that cannot be re-derived, and the bin sits
+  // beside the voice toggle.
+  it("hides the take at once but deletes nothing while Undo is offered", () => {
+    const stub = api();
+    const bar = undoBar();
+    const store = storeWith(stub, bar);
+    store.refresh();
+    store.remove(meta("a"));
+    expect(store.recordings().map((r) => r.id)).toEqual(["b"]);
+    expect(stub.delete).not.toHaveBeenCalled();
+    expect(bar.offered[0]?.message).toBe("Deleted a");
+  });
+
+  it("brings the take back on Undo, and never deletes it", () => {
+    const stub = api();
+    const bar = undoBar();
+    const store = storeWith(stub, bar);
+    store.refresh();
+    store.remove(meta("a"));
+    bar.offered[0]?.onUndo();
+    expect(store.recordings().map((r) => r.id)).toEqual(["a", "b"]);
+    expect(stub.delete).not.toHaveBeenCalled();
+  });
+
+  it("deletes on the server once the bar closes without Undo", () => {
+    const stub = api();
+    const bar = undoBar();
+    const store = storeWith(stub, bar);
+    store.refresh();
+    store.remove(meta("a"));
+    stub.list.mockImplementation(() => of([meta("b")]));
+    bar.offered[0]?.onCommit();
+    expect(stub.delete).toHaveBeenCalledWith("a");
+    expect(store.recordings().map((r) => r.id)).toEqual(["b"]);
+  });
+
+  it("does not flash the take back while the list reloads", () => {
+    const stub = api();
+    const bar = undoBar();
+    const store = storeWith(stub, bar);
+    store.refresh();
+    store.remove(meta("a"));
+    // The reload never answers, so only the local drop can hide it.
+    stub.list.mockImplementation(() => new Observable<RecordingMeta[]>());
+    bar.offered[0]?.onCommit();
+    expect(store.recordings().map((r) => r.id)).toEqual(["b"]);
+  });
+
+  it("brings the take back, and says so, when the server refuses the delete", () => {
+    const bar = undoBar();
+    const store = storeWith(api({ delete: vi.fn(() => refusal("server", "disk")) }), bar);
+    store.refresh();
+    store.remove(meta("a"));
+    bar.offered[0]?.onCommit();
+    expect(store.recordings().map((r) => r.id)).toEqual(["a", "b"]);
+    expect(store.error()).toContain("storage_io");
+  });
+
+  it("does not reopen a hidden take as the newest", () => {
+    // A refresh inside the undo window still lists it, and would open it.
+    const store = storeWith(api());
+    store.refresh();
+    store.remove(meta("a"));
+    store.selected.set(null);
+    store.refresh();
     expect(store.selected()?.meta.id).toBe("b");
   });
 });

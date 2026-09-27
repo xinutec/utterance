@@ -1,7 +1,8 @@
-import { Injectable, inject, signal } from "@angular/core";
+import { Injectable, computed, inject, signal } from "@angular/core";
 
 import type { RecordingDetail, RecordingMeta, Role, SpeakerCorner } from "./models";
 import { ApiError, RecordingsApi, type ApiFailure } from "./recordings-api";
+import { Feedback } from "./shared/feedback";
 
 /**
  * The collection of takes, root-provided so it outlives any page — a
@@ -10,8 +11,12 @@ import { ApiError, RecordingsApi, type ApiFailure } from "./recordings-api";
 @Injectable({ providedIn: "root" })
 export class RecordingsStore {
   private readonly api = inject(RecordingsApi);
+  private readonly feedback = inject(Feedback);
 
-  readonly recordings = signal<readonly RecordingMeta[]>([]);
+  private readonly stored = signal<readonly RecordingMeta[]>([]);
+  /** Takes deleted but still inside their Undo window: hidden, not yet gone. */
+  private readonly leaving = signal<ReadonlySet<string>>(new Set());
+  readonly recordings = computed(() => this.stored().filter((take) => !this.leaving().has(take.id)));
   readonly selected = signal<RecordingDetail | null>(null);
 
   /**
@@ -26,9 +31,9 @@ export class RecordingsStore {
   refresh(): void {
     this.api.list().subscribe({
       next: (list) => {
-        this.recordings.set(list);
+        this.stored.set(list);
         // Open the newest take: usually the one just recorded.
-        const [newest] = list;
+        const [newest] = this.recordings();
         if (!this.selected() && newest) this.select(newest);
       },
       error: (err: unknown) => {
@@ -99,15 +104,42 @@ export class RecordingsStore {
     });
   }
 
+  /**
+   * Hide a take and delete it only once Undo has not been taken: the audio is
+   * the one thing here that cannot be re-derived.
+   */
   remove(meta: RecordingMeta): void {
-    this.api.delete(meta.id).subscribe({
-      next: () => {
-        if (this.selected()?.meta.id === meta.id) this.selected.set(null);
-        this.refresh();
+    this.leaving.update((ids) => new Set(ids).add(meta.id));
+    if (this.selected()?.meta.id === meta.id) this.selected.set(null);
+    this.feedback.undo(
+      `Deleted ${meta.label}`,
+      () => {
+        this.release(meta.id);
       },
-      error: (err: unknown) => {
-        this.fail(err);
+      () => {
+        this.api.delete(meta.id).subscribe({
+          next: () => {
+            // Dropped before it is released, so it does not flash back
+            // while the list reloads.
+            this.stored.update((list) => list.filter((take) => take.id !== meta.id));
+            this.release(meta.id);
+            this.refresh();
+          },
+          error: (err: unknown) => {
+            this.release(meta.id);
+            this.fail(err);
+          },
+        });
       },
+    );
+  }
+
+  /** End `id`'s Undo window, whichever way it ended. */
+  private release(id: string): void {
+    this.leaving.update((ids) => {
+      const rest = new Set(ids);
+      rest.delete(id);
+      return rest;
     });
   }
 
