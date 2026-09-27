@@ -1,4 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+import { expect, test, type Page, type Route } from "@playwright/test";
 // The fleet-shared layout harness (@xinutec/ui-harness), from node_modules.
 import {
   expectNoTextOverlaps,
@@ -150,8 +152,9 @@ function score(offset: number): ScoreView {
   const points = 600;
   const at = (i: number) => i / points;
   return {
-    durationS: 46.4,
-    stepS: 46.4 / points,
+    // As long as the audio the renders are served as, so a seek is not clamped.
+    durationS: 2.4,
+    stepS: 2.4 / points,
     colour: Array.from({ length: points }, (_, i) => 0.4 + 0.3 * Math.sin(at(i) * 12 + offset)),
     breath: Array.from({ length: points }, (_, i) => 0.05 + 0.03 * Math.cos(at(i) * 20 + offset)),
     level: Array.from({ length: points }, (_, i) => 0.5 + 0.4 * Math.sin(at(i) * 7 + offset)),
@@ -174,6 +177,29 @@ const CORNERS: SpeakerCorners = {
     { step: "vowel-oo", corner: "closeBack", f1Hz: 320, f2Hz: 850, f1SpreadHz: 18, f2SpreadHz: 40, frames: 360 },
   ],
 };
+
+/** Three seconds of silence: loaded, so a page that plays is tested playing. */
+const SILENCE = readFileSync("e2e/silence.wav");
+
+/**
+ * The audio, served as the backend serves it: `accept-ranges: bytes`, and a
+ * range answered with 206. Without the header Chromium treats the stream as
+ * unseekable and snaps a seek back to 0 — the chart-click test fails that way.
+ */
+function silence(route: Route): Promise<void> {
+  const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers()["range"] ?? "");
+  if (!range) {
+    return route.fulfill({ contentType: "audio/wav", headers: { "accept-ranges": "bytes" }, body: SILENCE });
+  }
+  const start = Number(range[1]);
+  const end = range[2] ? Number(range[2]) : SILENCE.length - 1;
+  return route.fulfill({
+    status: 206,
+    contentType: "audio/wav",
+    headers: { "accept-ranges": "bytes", "content-range": `bytes ${start}-${end}/${SILENCE.length}` },
+    body: SILENCE.subarray(start, end + 1),
+  });
+}
 
 /**
  * GETs no route answered. A catch-all that answered them quietly is how the
@@ -200,11 +226,8 @@ async function mockApi(page: Page): Promise<void> {
   const detail: RecordingDetail = { meta: META, voiceprint: voiceprint() };
   await page.route("**/api/recordings/0123456789abcdef", (r) => r.fulfill({ json: detail }));
   await page.route("**/api/speaker/corners", (r) => r.fulfill({ json: CORNERS }));
-  // The recording and its renders, as a quarter second of silence: loaded, so a
-  // page that plays is tested playing rather than in its error state.
-  await page.route(/\/api\/recordings\/[^/]+\/(audio|render)/, (r) =>
-    r.fulfill({ contentType: "audio/wav", path: "e2e/silence.wav" }),
-  );
+  // The recording and its renders: anything that plays.
+  await page.route(/\/api\/recordings\/[^/]+\/(audio|render)/, silence);
   // Trailing wildcard: the summary carries settings in its query, and a glob
   // without one would silently fall through to the catch-all.
   await page.route("**/api/voice*", (r) => r.fulfill({ json: VOICE }));
@@ -414,6 +437,35 @@ test("compare — two renders side by side lay out cleanly @ phone", async ({ pa
   await expectNoOccludedControls(page, testInfo);
 });
 
+test("compare — a click on the chart moves both players there", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/compare");
+  await page.getByRole("button", { name: "Render both" }).click();
+  await expect(page.getByRole("button", { name: "Play both" })).toBeEnabled();
+  const chart = page.locator("app-compare-chart canvas");
+  const box = await chart.boundingBox();
+  if (!box) throw new Error("the chart has no box");
+
+  // Halfway across a 2.4 s score.
+  await chart.click({ position: { x: box.width / 2, y: box.height / 2 } });
+
+  await expect(page.locator("app-ab-player .clock")).toHaveText("1.2s");
+});
+
+test("compare — hearing B mutes A and leaves B audible", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/compare");
+  await page.getByRole("button", { name: "Render both" }).click();
+  await expect(page.getByRole("button", { name: "Play both" })).toBeEnabled();
+
+  await page.getByRole("radio", { name: "Hearing B" }).click();
+
+  const muted = await page.locator("app-ab-player audio").evaluateAll((els) =>
+    els.map((el) => (el as HTMLAudioElement).muted),
+  );
+  expect(muted).toEqual([true, false]);
+});
+
 test("compare — both settings panels open lay out cleanly @ phone", async ({ page }, testInfo) => {
   // Both settings panels open: the grid must drop to one column.
   await mockApi(page);
@@ -435,6 +487,55 @@ test("compare — both settings panels open lay out cleanly @ phone", async ({ p
  * tokens compute to `light-dark(…)`, which no canvas parses, so black text on a
  * dark background reports nothing. Only reading the pixels can see it.
  */
+/**
+ * The brightest marks' contrast against the page, from the canvas's own pixels:
+ * only reading them can see a colour the canvas silently refused.
+ */
+async function expectLegible(page: Page, selector: string, scheme: string): Promise<void> {
+  const contrast = await page.locator(selector).evaluate((canvas: HTMLCanvasElement) => {
+    const relativeLuminance = (r: number, g: number, b: number): number => {
+      const channel = (v: number): number => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    };
+
+    const background = getComputedStyle(document.body).backgroundColor;
+    const [br, bg, bb] = background.match(/\d+/g)?.map(Number) ?? [];
+    // A background that did not parse must stop the check, not default to
+    // black, against which light marks pass.
+    if (br === undefined || bg === undefined || bb === undefined) {
+      throw new Error(`body background is not an rgb() colour: ${background}`);
+    }
+    const backgroundLuminance = relativeLuminance(br, bg, bb);
+
+    const ctx = canvas.getContext("2d")!;
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    // Solid pixels only: antialiased edges blend toward the background.
+    const ratios: number[] = [];
+    // RGBA stride 4, so these reads are in bounds.
+    const at = (i: number): number => data[i] ?? 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (at(i + 3) < 200) continue;
+      const l = relativeLuminance(at(i), at(i + 1), at(i + 2));
+      const [hi, lo] = l > backgroundLuminance ? [l, backgroundLuminance] : [backgroundLuminance, l];
+      ratios.push((hi + 0.05) / (lo + 0.05));
+    }
+    if (ratios.length === 0) return { painted: 0, best: 0 };
+    ratios.sort((a, b) => a - b);
+    // `ratios` is non-empty, so the index is in bounds.
+    return { painted: ratios.length, best: ratios[Math.floor(ratios.length * 0.9)] ?? 0 };
+  });
+
+  expect(contrast.painted, `${selector} painted nothing at all`).toBeGreaterThan(200);
+  expect(
+    contrast.best,
+    `${selector} in ${scheme} mode: brightest marks reach only ${contrast.best.toFixed(1)}:1 against the page`,
+  ).toBeGreaterThan(3);
+}
+
 for (const scheme of ["light", "dark"] as const) {
   test(`canvases stay legible in ${scheme} mode`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
@@ -444,51 +545,27 @@ for (const scheme of ["light", "dark"] as const) {
     await page.locator("app-vowel-space canvas").waitFor();
 
     for (const selector of ["app-voiceprint-chart canvas", "app-vowel-space canvas"]) {
-      const contrast = await page.locator(selector).evaluate((canvas: HTMLCanvasElement) => {
-        const relativeLuminance = (r: number, g: number, b: number): number => {
-          const channel = (v: number): number => {
-            const s = v / 255;
-            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-          };
-          return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-        };
-
-        const background = getComputedStyle(document.body).backgroundColor;
-        const [br, bg, bb] = background.match(/\d+/g)?.map(Number) ?? [];
-        // A background that did not parse must stop the check, not default to
-        // black, against which light marks pass.
-        if (br === undefined || bg === undefined || bb === undefined) {
-          throw new Error(`body background is not an rgb() colour: ${background}`);
-        }
-        const backgroundLuminance = relativeLuminance(br, bg, bb);
-
-        const ctx = canvas.getContext("2d")!;
-        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        // Solid pixels only: antialiased edges blend toward the background.
-        const ratios: number[] = [];
-        // RGBA stride 4, so these reads are in bounds.
-        const at = (i: number): number => data[i] ?? 0;
-        for (let i = 0; i < data.length; i += 4) {
-          if (at(i + 3) < 200) continue;
-          const l = relativeLuminance(at(i), at(i + 1), at(i + 2));
-          const [hi, lo] = l > backgroundLuminance ? [l, backgroundLuminance] : [backgroundLuminance, l];
-          ratios.push((hi + 0.05) / (lo + 0.05));
-        }
-        if (ratios.length === 0) return { painted: 0, best: 0 };
-        ratios.sort((a, b) => a - b);
-        // `ratios` is non-empty, so the index is in bounds.
-        return { painted: ratios.length, best: ratios[Math.floor(ratios.length * 0.9)] ?? 0 };
-      });
-
-      expect(contrast.painted, `${selector} painted nothing at all`).toBeGreaterThan(200);
-      expect(
-        contrast.best,
-        `${selector} in ${scheme} mode: brightest marks reach only ${contrast.best.toFixed(1)}:1 against the page`,
-      ).toBeGreaterThan(3);
+      await expectLegible(page, selector, scheme);
     }
   });
 }
+
+test("canvases repaint when the colour scheme flips", async ({ page }) => {
+  // Nothing repaints a canvas by itself. Compared by pixels, not by contrast:
+  // some light-theme marks clear the contrast bar on a dark page too.
+  await page.emulateMedia({ colorScheme: "light" });
+  await mockApi(page);
+  await page.goto(TAKE);
+  const chart = page.locator("app-voiceprint-chart canvas");
+  await chart.waitFor();
+  const pixels = (): Promise<string> => chart.evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+  const light = await pixels();
+
+  await page.emulateMedia({ colorScheme: "dark" });
+
+  await expect.poll(pixels, { timeout: 5_000 }).not.toBe(light);
+  await expectLegible(page, "app-voiceprint-chart canvas", "dark");
+});
 
 /**
  * A comparison is a link. Checked end to end because the failure is in the

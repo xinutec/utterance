@@ -1,16 +1,7 @@
-import {
-  AfterViewInit,
-  Component,
-  ElementRef,
-  OnDestroy,
-  ChangeDetectionStrategy,
-  effect,
-  input,
-  viewChild,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, type ElementRef, input, viewChild } from "@angular/core";
 
 import type { Voiceprint } from "../../models";
-import { onColourSchemeChange, resolveThemeColours } from "./theme-colours";
+import { type Surface, paintCanvas } from "../../shared/canvas";
 
 /** Lowest and highest frequency drawn on the pitch panel — the tracker's range. */
 const PITCH_MIN_HZ = 70;
@@ -44,54 +35,20 @@ const FORMANT_MAX_HZ = 4000;
   styleUrl: "./voiceprint-chart.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class VoiceprintChart implements AfterViewInit, OnDestroy {
+export class VoiceprintChart {
   readonly voiceprint = input.required<Voiceprint>();
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
-  private observer?: ResizeObserver;
-  private stopWatchingScheme?: () => void;
 
   constructor() {
-    // Redraw on input change; the first draw waits for the canvas to exist.
-    effect(() => {
-      const vp = this.voiceprint();
-      if (this.observer) this.draw(vp);
+    paintCanvas(this.canvasRef, (surface) => {
+      this.draw(surface);
     });
   }
 
-  ngAfterViewInit(): void {
-    this.observer = new ResizeObserver(() => {
-      this.draw(this.voiceprint());
-    });
-    this.observer.observe(this.canvasRef().nativeElement);
-    this.stopWatchingScheme = onColourSchemeChange(() => {
-      this.draw(this.voiceprint());
-    });
-    this.draw(this.voiceprint());
-  }
-
-  ngOnDestroy(): void {
-    this.observer?.disconnect();
-    this.stopWatchingScheme?.();
-  }
-
-  private draw(vp: Voiceprint): void {
-    const canvas = this.canvasRef().nativeElement;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Backing store at the device pixel ratio, or lines blur.
-    const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (width === 0 || height === 0) return;
-
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    const { ink, muted, accent, warm } = resolveThemeColours(canvas.parentElement ?? canvas);
+  private draw({ ctx, width, height, theme }: Surface): void {
+    const vp = this.voiceprint();
+    const { ink, muted, accent, warm } = theme;
 
     const count = vp.frame.count;
     if (count === 0) return;

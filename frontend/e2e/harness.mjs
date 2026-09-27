@@ -7,6 +7,6 @@
 export default {
   app: 'utterance',
   dist: 'dist/utterance-web/browser',
-  // No API stub: the specs page.route everything, and anything they leave
-  // unrouted answers `[]`, which is enough to stay in the app shell.
+  // No API stub: the specs page.route everything, and a GET they leave
+  // unrouted fails the test that made it.
 };

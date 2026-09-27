@@ -46,9 +46,6 @@
     <p class="refusal" role="alert">{{ why }}</p>
   }
 
-  @if (loading()) {
-    <mat-progress-bar mode="indeterminate" aria-label="Rendering both"></mat-progress-bar>
-  }
   @if (stale()) {
     <p class="note stale-note">
       The charts are current; the <strong>audio</strong> is still the previous settings — press
@@ -57,54 +54,16 @@
   }
 
   @if (urlA(); as srcA) {
-    <div class="transport">
-      <button matButton="filled" type="button" (click)="toggle()">
-        <mat-icon>{{ playing() ? "pause" : "play_arrow" }}</mat-icon>
-        {{ playing() ? "Pause" : "Play both" }}
-      </button>
-
-      <mat-button-toggle-group
-        aria-label="Which side you are hearing"
-        [value]="side()"
-        (change)="chooseSide($event.value)"
-      >
-        <mat-button-toggle value="a">Hearing A</mat-button-toggle>
-        <mat-button-toggle value="b">Hearing B</mat-button-toggle>
-      </mat-button-toggle-group>
-
-      <span class="clock">{{ playhead() | number: "1.1-1" }}s</span>
-
-      @if (mostDifferent(); as at) {
-        <button matButton type="button" (click)="seekTo(at)">
-          <mat-icon>my_location</mat-icon>
-          Jump to the biggest difference ({{ at | number: "1.1-1" }}s)
-        </button>
-      }
-    </div>
-
-    <p class="note">
-      Both are playing at once and one is muted, so switching is instant and at the same moment of
-      the piece. Click the chart to move both.
-    </p>
-
-    <audio
-      #playerA
-      preload="auto"
-      [src]="srcA"
-      (canplay)="onReady('a')"
-      (error)="onFailed('a')"
-      (timeupdate)="onTimeUpdate()"
-      (ended)="onEnded()"
-    ></audio>
     @if (urlB(); as srcB) {
-      <audio
-        #playerB
-        preload="auto"
-        [src]="srcB"
-        (canplay)="onReady('b')"
-        (error)="onFailed('b')"
-        (ended)="onEnded()"
-      ></audio>
+      <app-ab-player
+        [a]="srcA"
+        [b]="srcB"
+        [jump]="mostDifferent()"
+        [(side)]="side"
+        [(playhead)]="playhead"
+        [(loading)]="loading"
+        (failed)="error.set($event)"
+      ></app-ab-player>
     }
   }
 
@@ -115,7 +74,7 @@
         [b]="viewB"
         [playhead]="playhead()"
         [audible]="side()"
-        (seek)="seekTo($event)"
+        (seek)="player()?.seekTo($event)"
       ></app-compare-chart>
       <p class="legend">
         <span class="swatch a"></span> A

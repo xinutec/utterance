@@ -61,7 +61,9 @@ export default tseslint.config(
     files: ["e2e/**/*.ts", "playwright.config.ts"],
     extends: [...tseslint.configs.recommendedTypeChecked, ...tseslint.configs.stylisticTypeChecked],
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      // The e2e program itself, so lint sees what `typecheck:e2e` checks —
+      // Node's types among it — rather than a default project without them.
+      parserOptions: { project: "./tsconfig.e2e.json", tsconfigRootDir: import.meta.dirname },
     },
     rules: {
       // Same reasoning as the specs above: `page.evaluate` hands back whatever

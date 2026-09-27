@@ -1,0 +1,51 @@
+@if (pending()) {
+  <mat-progress-bar mode="indeterminate" aria-label="Rendering both"></mat-progress-bar>
+}
+
+<div class="transport">
+  <button matButton="filled" type="button" (click)="toggle()">
+    <mat-icon>{{ playing() ? "pause" : "play_arrow" }}</mat-icon>
+    {{ playing() ? "Pause" : "Play both" }}
+  </button>
+
+  <mat-button-toggle-group
+    aria-label="Which side you are hearing"
+    [value]="side()"
+    (change)="choose($event.value)"
+  >
+    <mat-button-toggle value="a">Hearing A</mat-button-toggle>
+    <mat-button-toggle value="b">Hearing B</mat-button-toggle>
+  </mat-button-toggle-group>
+
+  <span class="clock">{{ playhead() | number: "1.1-1" }}s</span>
+
+  @if (jump(); as at) {
+    <button matButton type="button" (click)="seekTo(at)">
+      <mat-icon>my_location</mat-icon>
+      Jump to the biggest difference ({{ at | number: "1.1-1" }}s)
+    </button>
+  }
+</div>
+
+<p class="note">
+  Both are playing at once and one is muted, so switching is instant and at the same moment of
+  the piece. Click the chart to move both.
+</p>
+
+<audio
+  #playerA
+  preload="auto"
+  [src]="a()"
+  (canplay)="ready('a')"
+  (error)="broken('a')"
+  (timeupdate)="onTimeUpdate()"
+  (ended)="onEnded()"
+></audio>
+<audio
+  #playerB
+  preload="auto"
+  [src]="b()"
+  (canplay)="ready('b')"
+  (error)="broken('b')"
+  (ended)="onEnded()"
+></audio>

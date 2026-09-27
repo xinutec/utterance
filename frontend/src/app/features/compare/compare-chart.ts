@@ -1,17 +1,7 @@
-import {
-  AfterViewInit,
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  OnDestroy,
-  effect,
-  input,
-  output,
-  viewChild,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, type ElementRef, input, output, viewChild } from "@angular/core";
 
 import type { ScoreView } from "../../models";
-import { onColourSchemeChange, resolveThemeColours } from "../studio/theme-colours";
+import { type Surface, paintCanvas } from "../../shared/canvas";
 import { PANELS, summarise, type Panel } from "./compare-panels";
 
 /** Height reserved above each panel for its caption. */
@@ -38,7 +28,7 @@ const SILENT_ALPHA = 0.4;
   styleUrl: "./compare-chart.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CompareChart implements AfterViewInit, OnDestroy {
+export class CompareChart {
   readonly a = input.required<ScoreView>();
   readonly b = input.required<ScoreView>();
   /** Where the players are, in seconds, so the chart can show a playhead. */
@@ -50,27 +40,11 @@ export class CompareChart implements AfterViewInit, OnDestroy {
   readonly seek = output<number>();
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
-  private observer?: ResizeObserver;
-  private stopWatchingScheme?: () => void;
 
   constructor() {
-    effect(() => {
-      // Read every input, so the effect re-runs when any moves.
-      const inputs = [this.a(), this.b(), this.playhead(), this.audible()] as const;
-      if (this.observer) this.draw(...inputs);
+    paintCanvas(this.canvasRef, (surface) => {
+      this.draw(surface);
     });
-  }
-
-  ngAfterViewInit(): void {
-    this.observer = new ResizeObserver(() => this.redraw());
-    this.observer.observe(this.canvasRef().nativeElement);
-    this.stopWatchingScheme = onColourSchemeChange(() => this.redraw());
-    this.redraw();
-  }
-
-  ngOnDestroy(): void {
-    this.observer?.disconnect();
-    this.stopWatchingScheme?.();
   }
 
   onClick(event: MouseEvent): void {
@@ -83,26 +57,8 @@ export class CompareChart implements AfterViewInit, OnDestroy {
     return Math.max(this.a().durationS, this.b().durationS, 0.001);
   }
 
-  private redraw(): void {
-    this.draw(this.a(), this.b(), this.playhead(), this.audible());
-  }
-
-  private draw(a: ScoreView, b: ScoreView, playhead: number, audible: "a" | "b"): void {
-    const canvas = this.canvasRef().nativeElement;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (width === 0 || height === 0) return;
-
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    const theme = resolveThemeColours(canvas.parentElement ?? canvas);
+  private draw({ ctx, width, height, theme }: Surface): void {
+    const [a, b, playhead, audible] = [this.a(), this.b(), this.playhead(), this.audible()];
     const panelHeight = height / PANELS.length;
 
     PANELS.forEach((panel, index) => {

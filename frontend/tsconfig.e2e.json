@@ -17,7 +17,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    // TypeScript 6 includes no @types by default; the specs read a fixture off
+    // disk with Node.
+    "types": ["node"]
   },
   "include": ["playwright.config.ts", "e2e/**/*.ts", "e2e/**/*.d.mts"]
 }

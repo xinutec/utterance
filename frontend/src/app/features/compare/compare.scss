@@ -18,18 +18,6 @@
   min-width: 14rem;
 }
 
-.transport {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.clock {
-  font-variant-numeric: tabular-nums;
-  color: var(--mat-sys-on-surface-variant);
-}
-
 .differing {
   margin: 0;
   display: flex;
@@ -114,13 +102,6 @@
     background: var(--mat-sys-on-surface);
     opacity: 0.45;
   }
-}
-
-// Two players, both hidden: the transport above drives them, and a pair of
-// native control bars would invite someone to scrub one out of step with the
-// other, which is the one thing this page exists to prevent.
-audio {
-  display: none;
 }
 
 .settings {

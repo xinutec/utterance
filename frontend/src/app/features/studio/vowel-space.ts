@@ -1,16 +1,7 @@
-import {
-  AfterViewInit,
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  OnDestroy,
-  effect,
-  input,
-  viewChild,
-} from "@angular/core";
+import { ChangeDetectionStrategy, Component, type ElementRef, input, viewChild } from "@angular/core";
 
 import type { SpeakerCorner, Voiceprint } from "../../models";
-import { onColourSchemeChange, resolveThemeColours } from "./theme-colours";
+import { type Surface, paintCanvas } from "../../shared/canvas";
 
 /**
  * Axis bounds, in Hz: the analyser's own formant ranges (`formant::RANGES`), so
@@ -51,57 +42,23 @@ const CORNER_LABELS: Record<SpeakerCorner["corner"], string> = {
   styleUrl: "./vowel-space.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class VowelSpace implements AfterViewInit, OnDestroy {
+export class VowelSpace {
   readonly voiceprint = input.required<Voiceprint>();
 
   /** This speaker's own corners from the guided vowels; empty until recorded. */
   readonly corners = input<readonly SpeakerCorner[]>([]);
 
   private readonly canvasRef = viewChild.required<ElementRef<HTMLCanvasElement>>("canvas");
-  private observer?: ResizeObserver;
-  private stopWatchingScheme?: () => void;
 
   constructor() {
-    effect(() => {
-      const vp = this.voiceprint();
-      // Read so the effect re-runs when the corners arrive after the first draw.
-      this.corners();
-      if (this.observer) this.draw(vp);
+    paintCanvas(this.canvasRef, (surface) => {
+      this.draw(surface);
     });
   }
 
-  ngAfterViewInit(): void {
-    this.observer = new ResizeObserver(() => {
-      this.draw(this.voiceprint());
-    });
-    this.observer.observe(this.canvasRef().nativeElement);
-    this.stopWatchingScheme = onColourSchemeChange(() => {
-      this.draw(this.voiceprint());
-    });
-    this.draw(this.voiceprint());
-  }
-
-  ngOnDestroy(): void {
-    this.observer?.disconnect();
-    this.stopWatchingScheme?.();
-  }
-
-  private draw(vp: Voiceprint): void {
-    const canvas = this.canvasRef().nativeElement;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (width === 0 || height === 0) return;
-
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    const { ink, muted } = resolveThemeColours(canvas.parentElement ?? canvas);
+  private draw({ ctx, width, height, theme }: Surface): void {
+    const vp = this.voiceprint();
+    const { ink, muted } = theme;
 
     const pad = { top: 18, right: 14, bottom: 28, left: 44 };
     const plot = {
