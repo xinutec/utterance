@@ -4,7 +4,7 @@ mod common;
 
 use common::bursts;
 use utterance_analysis::energy;
-use utterance_analysis::frame::{self, HOP};
+use utterance_analysis::frame;
 use utterance_analysis::onset::{self, pick};
 use utterance_analysis::resample::ANALYSIS_RATE;
 
@@ -16,7 +16,7 @@ fn flux(x: &[f32]) -> Vec<f32> {
 fn onset_times(x: &[f32]) -> Vec<f32> {
     pick(&flux(x))
         .into_iter()
-        .map(|i| (i * HOP) as f32 / ANALYSIS_RATE as f32)
+        .map(|f| f.sample() as f32 / ANALYSIS_RATE as f32)
         .collect()
 }
 

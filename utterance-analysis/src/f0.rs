@@ -33,8 +33,8 @@ pub fn track(samples: &[f32]) -> Vec<F0Frame> {
     let tau_min = (ANALYSIS_RATE as f32 / F0_MAX_HZ).floor() as usize;
     let tau_max = (ANALYSIS_RATE as f32 / F0_MIN_HZ).ceil() as usize;
 
-    (0..frame::count(samples.len()))
-        .map(|i| estimate(&frame::windowed(samples, i, PITCH_WINDOW), tau_min, tau_max))
+    frame::frames(samples.len())
+        .map(|f| estimate(&frame::windowed(samples, f, PITCH_WINDOW), tau_min, tau_max))
         .collect()
 }
 

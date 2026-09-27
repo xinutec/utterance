@@ -4,7 +4,7 @@ mod common;
 
 use common::resonated_vowel;
 use utterance_analysis::formant;
-use utterance_analysis::frame::{self, SPECTRAL_WINDOW};
+use utterance_analysis::frame::{self, Frame, SPECTRAL_WINDOW};
 
 /// Median of a per-frame formant series, ignoring frames with no estimate.
 fn median(values: &[Option<f32>]) -> Option<f32> {
@@ -107,7 +107,7 @@ fn estimates_are_ordered_and_plausible() {
         &[(730.0, 80.0), (1090.0, 90.0), (2440.0, 120.0)],
         0.3,
     );
-    let window = frame::windowed(&samples, 10, SPECTRAL_WINDOW);
+    let window = frame::windowed(&samples, Frame(10), SPECTRAL_WINDOW);
     let found = formant::estimate(&window);
 
     let (f1, f2, f3) = (found.f1.unwrap(), found.f2.unwrap(), found.f3.unwrap());

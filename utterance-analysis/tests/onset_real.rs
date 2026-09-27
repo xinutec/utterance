@@ -6,6 +6,7 @@
 //! material. Accuracy needs labelled speech.
 
 use utterance_analysis::analyse_wav;
+use utterance_analysis::frame::Frame;
 
 /// A real held vowel — see `tests/fixtures/README.md`.
 const SUSTAINED_VOWEL: &[u8] = include_bytes!("fixtures/sustained-vowel.wav");
@@ -102,7 +103,7 @@ fn the_loudest_spectral_change_is_still_reported() {
         .expect("flux curve is empty");
 
     assert!(
-        vp.events.onset_frames.contains(&peak_frame),
+        vp.events.onset_frames.contains(&Frame(peak_frame)),
         "the largest flux peak (frame {peak_frame}) was not reported as an onset: {:?}",
         vp.events.onset_frames
     );

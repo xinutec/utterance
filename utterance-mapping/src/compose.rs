@@ -14,6 +14,7 @@
 //! Colour follows the speaker's formant movement, but on derived pitches at
 //! derived times: the mouth shapes the tone, it does not utter it.
 
+use utterance_analysis::frame::Frame;
 use utterance_analysis::stats::median;
 use utterance_analysis::voiceprint::Voiceprint;
 
@@ -87,16 +88,18 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Score {
         // Inverted: an open vowel is the big, low end of the register.
         let register = ((1.0 - open).clamp(0.0, 1.0) * REGISTER_OCTAVES).floor();
 
-        let start_s = frame as f32 * vp.frame.hop_s;
+        let start_s = frame.time_s(vp.frame.hop_s);
         let next_s = onsets
             .get(n + 1)
-            .map_or(vp.source.duration_s, |&f| f as f32 * vp.frame.hop_s);
+            .map_or(vp.source.duration_s, |f| f.time_s(vp.frame.hop_s));
         let duration_s = (next_s - start_s).clamp(MIN_NOTE_S, MAX_NOTE_S);
 
         // Colour tracks the vowel across the note, clamped to the last frame so
         // a note held to the end keeps its movement too.
-        let end_frame = (frame + (duration_s / vp.frame.hop_s) as usize)
-            .min(vp.formants.f1.len().saturating_sub(1));
+        let end_frame = Frame(
+            (frame.0 + (duration_s / vp.frame.hop_s) as usize)
+                .min(vp.formants.f1.len().saturating_sub(1)),
+        );
         let colour_from = front.clamp(0.0, 1.0);
         let colour_to = vowel_near(vp, end_frame).map_or(colour_from, |(a, b)| {
             voice.space.normalise(a, b).1.clamp(0.0, 1.0)
@@ -158,8 +161,8 @@ fn empty(vp: &Voiceprint, voice: &Voice) -> Score {
 /// frames it spans. A single onset frame measures the transition, several times
 /// as aperiodic, and unvoiced frames are consonants the noise stream already
 /// sounds.
-fn breath_at(vp: &Voiceprint, from: usize, to: usize) -> f32 {
-    let voiced: Vec<f32> = (from..to.min(vp.pitch.hz.len()))
+fn breath_at(vp: &Voiceprint, from: Frame, to: Frame) -> f32 {
+    let voiced: Vec<f32> = (from.0..to.0.min(vp.pitch.hz.len()))
         .filter(|&i| vp.pitch.hz[i].is_some())
         .map(|i| vp.pitch.aperiodicity[i])
         .collect();
@@ -179,14 +182,14 @@ fn index_of(position: f32, count: usize) -> usize {
 }
 
 /// F1 and F2 at or shortly after `frame`, if any frame there knows them.
-fn vowel_near(vp: &Voiceprint, frame: usize) -> Option<(f32, f32)> {
-    (frame..(frame + VOWEL_SEARCH_FRAMES).min(vp.formants.f1.len()))
+fn vowel_near(vp: &Voiceprint, frame: Frame) -> Option<(f32, f32)> {
+    (frame.0..(frame.0 + VOWEL_SEARCH_FRAMES).min(vp.formants.f1.len()))
         .find_map(|i| Some((vp.formants.f1[i]?, vp.formants.f2[i]?)))
 }
 
 /// Loudness at a frame, relative to the loudest moment in the take.
-fn amplitude_at(vp: &Voiceprint, frame: usize, loudest_db: f32) -> f32 {
-    let db = vp.rms_db.get(frame).copied().unwrap_or(f32::NEG_INFINITY);
+fn amplitude_at(vp: &Voiceprint, frame: Frame, loudest_db: f32) -> f32 {
+    let db = vp.rms_db.get(frame.0).copied().unwrap_or(f32::NEG_INFINITY);
     streams::relative_amplitude(db, loudest_db)
 }
 
@@ -267,7 +270,7 @@ fn noise_run(
 
     // Loudest frame, not the mean: a plosive is a burst followed by nothing.
     let amplitude = (start..end)
-        .map(|i| amplitude_at(vp, i, loudest_db))
+        .map(|i| amplitude_at(vp, Frame(i), loudest_db))
         .fold(0.0f32, f32::max);
     if amplitude < NOISE_FLOOR {
         return None;

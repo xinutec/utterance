@@ -3,6 +3,7 @@
 mod common;
 
 use common::{sine, vowel, wav_bytes};
+use utterance_analysis::frame::Frame;
 use utterance_analysis::resample::ANALYSIS_RATE;
 use utterance_analysis::voiceprint::{Source, Voiceprint};
 use utterance_analysis::{AnalysisError, analyse, analyse_wav, energy};
@@ -33,7 +34,7 @@ fn every_series_is_the_length_the_grid_declares() {
 fn onset_frames_and_times_agree() {
     let vp = analyse(&vowel(120.0, 2.0), source(2.0));
     assert_eq!(vp.events.onset_frames.len(), vp.events.onset_times_s.len());
-    for (&f, &t) in vp.events.onset_frames.iter().zip(&vp.events.onset_times_s) {
+    for (&Frame(f), &t) in vp.events.onset_frames.iter().zip(&vp.events.onset_times_s) {
         assert!((t - f as f32 * vp.frame.hop_s).abs() < 1e-6);
         assert!(
             f < vp.frame.count,

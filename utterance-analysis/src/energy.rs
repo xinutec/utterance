@@ -12,9 +12,9 @@ pub const SILENCE_DB: f32 = -100.0;
 
 /// Root-mean-square level per frame, in dBFS.
 pub fn track(samples: &[f32]) -> Vec<f32> {
-    (0..frame::count(samples.len()))
-        .map(|i| {
-            let w = frame::windowed(samples, i, SPECTRAL_WINDOW);
+    frame::frames(samples.len())
+        .map(|f| {
+            let w = frame::windowed(samples, f, SPECTRAL_WINDOW);
             let rms = (w.iter().map(|s| s * s).sum::<f32>() / (w.len() as f32)).sqrt();
             to_db(rms)
         })

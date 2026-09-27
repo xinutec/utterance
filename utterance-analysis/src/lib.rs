@@ -128,7 +128,7 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
         },
         rms_db,
         events: Events {
-            onset_times_s: onset_frames.iter().map(|&i| i as f32 * hop_s).collect(),
+            onset_times_s: onset_frames.iter().map(|f| f.time_s(hop_s)).collect(),
             onset_frames,
             flux,
         },

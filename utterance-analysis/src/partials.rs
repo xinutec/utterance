@@ -12,7 +12,7 @@ use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 use serde::{Deserialize, Serialize};
 
-use crate::frame;
+use crate::frame::{self, Frame};
 use crate::resample::ANALYSIS_RATE;
 use crate::stats::median;
 
@@ -86,10 +86,10 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
     };
 
     let tolerance = 2f32.powf(PITCH_TOLERANCE_SEMITONES / 12.0);
-    let usable: Vec<(usize, f32)> = pitch
+    let usable: Vec<(Frame, f32)> = pitch
         .iter()
         .enumerate()
-        .filter_map(|(i, hz)| Some((i, (*hz)?)))
+        .filter_map(|(i, hz)| Some((Frame(i), (*hz)?)))
         .filter(|(_, hz)| *hz < median_f0 * tolerance && *hz > median_f0 / tolerance)
         .collect();
 
@@ -111,8 +111,8 @@ pub fn measure(samples: &[f32], pitch: &[Option<f32>]) -> Partials {
     let mut amplitudes: Vec<Vec<f32>> = vec![Vec::new(); MAX_PARTIAL + 1];
 
     let mut buf = vec![Complex32::new(0.0, 0.0); PARTIAL_WINDOW];
-    for &(index, f0) in &usable {
-        let block = frame::windowed(samples, index, PARTIAL_WINDOW);
+    for &(at, f0) in &usable {
+        let block = frame::windowed(samples, at, PARTIAL_WINDOW);
         for (b, (s, w)) in buf.iter_mut().zip(block.iter().zip(&window)) {
             *b = Complex32::new(s * w, 0.0);
         }

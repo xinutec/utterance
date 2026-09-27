@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::frame::Frame;
+
 /// Identifies the analyser. **Bump it for any change that alters the output —
 /// the algorithm as much as the shape**: a shape change fails on deserialise, an
 /// algorithm change is silent.
@@ -111,7 +113,7 @@ pub struct Events {
     /// Normalised spectral flux per frame, 0..1 — the continuous curve.
     pub flux: Vec<f32>,
     /// Frame indices picked as onsets from that curve.
-    pub onset_frames: Vec<usize>,
+    pub onset_frames: Vec<Frame>,
     /// The same onsets in seconds, so a consumer does not have to know the hop.
     pub onset_times_s: Vec<f32>,
 }
@@ -142,7 +144,7 @@ impl Voiceprint {
     /// the grid.
     pub fn frame_times_s(&self) -> Vec<f32> {
         (0..self.frame.count)
-            .map(|i| i as f32 * self.frame.hop_s)
+            .map(|i| Frame(i).time_s(self.frame.hop_s))
             .collect()
     }
 }

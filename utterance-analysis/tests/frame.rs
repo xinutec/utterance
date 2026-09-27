@@ -1,11 +1,21 @@
 //! The frame grid every per-frame series is indexed by.
 
-use utterance_analysis::frame::{HOP, count, hann, time_s, windowed};
+use utterance_analysis::frame::{Frame, HOP, count, frames, hann, windowed};
+use utterance_analysis::resample::ANALYSIS_RATE;
 
 #[test]
-fn frame_times_advance_by_the_hop() {
-    assert_eq!(time_s(0), 0.0);
-    assert!((time_s(100) - 1.0).abs() < 1e-6);
+fn frames_advance_by_the_hop() {
+    assert_eq!(Frame(0).sample(), 0);
+    // 10 ms: a hundred frames to the second.
+    assert_eq!(Frame(100).sample(), ANALYSIS_RATE as usize);
+}
+
+#[test]
+fn frames_enumerate_the_count() {
+    assert_eq!(
+        frames(HOP + 1).collect::<Vec<_>>(),
+        vec![Frame(0), Frame(1)]
+    );
 }
 
 #[test]
@@ -24,14 +34,17 @@ fn windows_are_centred_on_their_frame() {
     let samples: Vec<f32> = (0..1000).map(|i| i as f32).collect();
     // Frame 2 starts at sample 320; a window of 8 spans 316..324.
     assert_eq!(
-        windowed(&samples, 2, 8),
+        windowed(&samples, Frame(2), 8),
         vec![316.0, 317.0, 318.0, 319.0, 320.0, 321.0, 322.0, 323.0]
     );
 }
 
 #[test]
 fn windows_zero_pad_at_the_edges() {
-    assert_eq!(windowed(&[1.0, 2.0, 3.0], 0, 4), vec![0.0, 0.0, 1.0, 2.0]);
+    assert_eq!(
+        windowed(&[1.0, 2.0, 3.0], Frame(0), 4),
+        vec![0.0, 0.0, 1.0, 2.0]
+    );
 }
 
 #[test]

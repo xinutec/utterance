@@ -3,6 +3,7 @@
 
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
+use serde::{Deserialize, Serialize};
 
 use crate::resample::ANALYSIS_RATE;
 
@@ -17,20 +18,42 @@ pub const PITCH_WINDOW: usize = 1024;
 /// onset detection wants time resolution, not frequency resolution.
 pub const SPECTRAL_WINDOW: usize = 512;
 
+/// A position on the frame grid, and an index into every per-frame series.
+///
+/// Its own type because a frame number, a sample offset and a window length are
+/// all `usize`, and one passed as another still compiles. A newtype, so JSON
+/// carries the bare number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+pub struct Frame(pub usize);
+
+impl Frame {
+    /// The sample this frame is centred on.
+    pub fn sample(self) -> usize {
+        self.0 * HOP
+    }
+
+    /// Start time in seconds on a grid `hop_s` apart.
+    pub fn time_s(self, hop_s: f32) -> f32 {
+        self.0 as f32 * hop_s
+    }
+}
+
 /// Number of frames covering `len` samples.
 pub fn count(len: usize) -> usize {
     if len == 0 { 0 } else { len.div_ceil(HOP) }
 }
 
-/// Start time of frame `i`, in seconds.
-pub fn time_s(i: usize) -> f32 {
-    (i * HOP) as f32 / ANALYSIS_RATE as f32
+/// Every frame covering `len` samples, in order.
+pub fn frames(len: usize) -> impl Iterator<Item = Frame> {
+    (0..count(len)).map(Frame)
 }
 
-/// Copy the `window`-sample window centred on frame `i`, zero-padded at the
+/// Copy the `window`-sample window centred on `frame`, zero-padded at the
 /// edges. Centred, so measurements describe the audio *at* the timestamp.
-pub fn windowed(samples: &[f32], i: usize, window: usize) -> Vec<f32> {
-    let center = (i * HOP) as isize;
+pub fn windowed(samples: &[f32], frame: Frame, window: usize) -> Vec<f32> {
+    let center = frame.sample() as isize;
     let start = center - (window as isize) / 2;
     (0..window)
         .map(|k| {
@@ -51,12 +74,13 @@ pub fn spectra(samples: &[f32]) -> Vec<Vec<Complex32>> {
     let window = hann(SPECTRAL_WINDOW);
     let bins = SPECTRAL_WINDOW / 2 + 1;
     let mut buf = vec![Complex32::new(0.0, 0.0); SPECTRAL_WINDOW];
-    (0..count(samples.len()))
-        .map(|i| {
-            for (b, (s, w)) in buf
-                .iter_mut()
-                .zip(windowed(samples, i, SPECTRAL_WINDOW).iter().zip(&window))
-            {
+    frames(samples.len())
+        .map(|frame| {
+            for (b, (s, w)) in buf.iter_mut().zip(
+                windowed(samples, frame, SPECTRAL_WINDOW)
+                    .iter()
+                    .zip(&window),
+            ) {
                 *b = Complex32::new(s * w, 0.0);
             }
             fft.process(&mut buf);

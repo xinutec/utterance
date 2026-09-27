@@ -1,6 +1,7 @@
 //! Composition, checked against the rules its module documents — not whether it
 //! is musical. A rule changed on purpose should change its test, not delete it.
 
+use utterance_analysis::frame::Frame;
 use utterance_analysis::partials::{Partial, Partials};
 use utterance_analysis::speaker::VowelSpace;
 use utterance_analysis::texture::Texture;
@@ -93,7 +94,7 @@ fn take(onsets: &[usize], vowels: &[(f32, f32)], frames: usize, loud: bool) -> V
         rms_db: vec![if loud { -6.0 } else { -60.0 }; frames],
         events: Events {
             flux: vec![0.0; frames],
-            onset_frames: onsets.to_vec(),
+            onset_frames: onsets.iter().copied().map(Frame).collect(),
             onset_times_s: onsets.iter().map(|&i| i as f32 * 0.01).collect(),
         },
         partials: Partials {
@@ -120,7 +121,7 @@ fn sounds_a_note_at_every_onset_that_has_a_vowel() {
     let vp = take(&[0, 50, 100], &[BACK, MIDDLE, FRONT], 200, true);
     let score = compose(&vp, &voice());
     assert_eq!(score.events.len(), 3);
-    for (event, &frame) in score.events.iter().zip(&vp.events.onset_frames) {
+    for (event, &Frame(frame)) in score.events.iter().zip(&vp.events.onset_frames) {
         assert!((event.start_s - frame as f32 * 0.01).abs() < 1e-6);
     }
 }

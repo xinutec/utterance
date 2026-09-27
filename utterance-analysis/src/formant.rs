@@ -40,12 +40,12 @@ pub struct Resonance {
 /// Track formants across every frame. `voiced` gates the estimate: without a
 /// periodic source the poles describe noise, and would invent vowels.
 pub fn track(samples: &[f32], voiced: &[bool]) -> Vec<FormantFrame> {
-    (0..frame::count(samples.len()))
-        .map(|i| {
-            if !voiced.get(i).copied().unwrap_or(false) {
+    frame::frames(samples.len())
+        .map(|f| {
+            if !voiced.get(f.0).copied().unwrap_or(false) {
                 return FormantFrame::default();
             }
-            let window = frame::windowed(samples, i, SPECTRAL_WINDOW);
+            let window = frame::windowed(samples, f, SPECTRAL_WINDOW);
             estimate(&window)
         })
         .collect()

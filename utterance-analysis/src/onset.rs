@@ -12,6 +12,7 @@
 
 use rustfft::num_complex::Complex32;
 
+use crate::frame::Frame;
 use crate::stats::median;
 
 /// Minimum gap between reported onsets, in frames (50 ms) — below any syllable
@@ -154,8 +155,8 @@ fn normalise(mut x: Vec<f32>) -> Vec<f32> {
 
 /// Pick onset frames from a flux curve: local maxima that clear the local
 /// threshold, at least `MIN_SEPARATION` apart.
-pub fn pick(flux: &[f32]) -> Vec<usize> {
-    let mut picked: Vec<usize> = Vec::new();
+pub fn pick(flux: &[f32]) -> Vec<Frame> {
+    let mut picked: Vec<Frame> = Vec::new();
     for i in 1..flux.len().saturating_sub(1) {
         if !is_local_maximum(flux, i) {
             continue;
@@ -165,13 +166,13 @@ pub fn pick(flux: &[f32]) -> Vec<usize> {
         }
         match picked.last() {
             // Within the refractory window, keep the stronger peak.
-            Some(&last) if i - last < MIN_SEPARATION => {
-                if flux[i] > flux[last] {
+            Some(&last) if i - last.0 < MIN_SEPARATION => {
+                if flux[i] > flux[last.0] {
                     let n = picked.len();
-                    picked[n - 1] = i;
+                    picked[n - 1] = Frame(i);
                 }
             }
-            _ => picked.push(i),
+            _ => picked.push(Frame(i)),
         }
     }
     picked
