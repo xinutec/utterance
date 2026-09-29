@@ -63,7 +63,7 @@ fn gate() -> WebAuth {
         "a-test-secret",
         "client",
         "shh",
-        ["pippijn".to_string(), "michiel".to_string()],
+        ["user".to_string(), "guest".to_string()],
     )
 }
 
@@ -146,7 +146,7 @@ async fn uploading_and_deleting_are_gated_too() {
 #[tokio::test]
 async fn a_signed_in_user_is_let_through() {
     let auth = gate();
-    let cookie = signed_in_as(&auth, "pippijn");
+    let cookie = signed_in_as(&auth, "user");
     let app = TestApp::new(Some(auth));
 
     // `/api/controls` needs no data, so a 200 means the gate opened.
@@ -171,7 +171,7 @@ async fn a_nextcloud_user_who_is_not_on_the_list_is_refused() {
 async fn a_cookie_signed_by_someone_else_does_not_open_the_gate() {
     // The cookie's shape without the secret must not pass.
     let forger = WebAuth::new("a-different-secret", "client", "shh", []);
-    let cookie = signed_in_as(&forger, "pippijn");
+    let cookie = signed_in_as(&forger, "user");
     let app = TestApp::new(Some(gate()));
 
     let (status, _) = get(&app, "/api/controls", Some(&cookie)).await;
@@ -246,13 +246,13 @@ async fn with_no_sign_in_configured_there_is_nothing_to_sign_in_to() {
 #[tokio::test]
 async fn who_am_i_answers_for_a_signed_in_user() {
     let auth = gate();
-    let cookie = signed_in_as(&auth, "michiel");
+    let cookie = signed_in_as(&auth, "guest");
     let app = TestApp::new(Some(auth));
 
     let (status, body) = get(&app, "/api/me", Some(&cookie)).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let json: Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(json["uid"], "michiel");
+    assert_eq!(json["uid"], "guest");
 }
 
 // ---- the credential itself ------------------------------------------------
@@ -276,8 +276,8 @@ fn session(user: &str) -> Session {
 async fn a_cookie_reads_back_as_the_person_it_was_issued_to() {
     let auth = gate();
     let now = a_moment();
-    let token = auth.issue_session(&session("pippijn"), now);
-    assert_eq!(auth.read_session(&token, now), Some(session("pippijn")));
+    let token = auth.issue_session(&session("user"), now);
+    assert_eq!(auth.read_session(&token, now), Some(session("user")));
 }
 
 #[tokio::test]
@@ -293,7 +293,7 @@ async fn a_cookie_stops_being_accepted_once_it_expires() {
     // Seven days, checked by stepping over it rather than reading the constant.
     let auth = gate();
     let now = a_moment();
-    let token = auth.issue_session(&session("pippijn"), now);
+    let token = auth.issue_session(&session("user"), now);
     let a_week = Duration::from_hours(168);
 
     assert!(
@@ -311,8 +311,8 @@ async fn a_payload_swapped_under_a_good_signature_is_refused() {
     // An edited payload under a valid MAC would let anyone become anyone.
     let auth = gate();
     let now = a_moment();
-    let mine = auth.issue_session(&session("michiel"), now);
-    let theirs = auth.issue_session(&session("pippijn"), now);
+    let mine = auth.issue_session(&session("guest"), now);
+    let theirs = auth.issue_session(&session("user"), now);
     let (my_payload, my_mac) = mine.split_once('.').expect("a two-part token");
     let (their_payload, their_mac) = theirs.split_once('.').expect("a two-part token");
 
@@ -370,7 +370,7 @@ async fn an_empty_allowlist_admits_any_nextcloud_user() {
     // the other way.
     let open = WebAuth::new("secret", "client", "shh", []);
     assert!(open.permits("anyone"));
-    assert!(gate().permits("pippijn"));
+    assert!(gate().permits("user"));
     assert!(!gate().permits("anyone"));
 }
 
@@ -544,10 +544,10 @@ fn the_allowlist_is_split_trimmed_and_stripped_of_blanks() {
     // Hand-written in a manifest: spaces and a trailing comma must not refuse
     // the person named.
     let mut set = configured();
-    set.push((webauth::ALLOWED_USERS_ENV, " pippijn, michiel ,, "));
+    set.push((webauth::ALLOWED_USERS_ENV, " user, guest ,, "));
     let auth = WebAuth::from_vars(vars(&set)).expect("configured");
-    assert!(auth.permits("pippijn"));
-    assert!(auth.permits("michiel"));
+    assert!(auth.permits("user"));
+    assert!(auth.permits("guest"));
     assert!(!auth.permits(""));
     assert!(!auth.permits("someone-else"));
 }

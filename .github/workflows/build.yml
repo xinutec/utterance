@@ -6,8 +6,8 @@ name: build
 # xinutec/utterance:latest to Docker Hub. Between them these are the gate
 # (`gate.dhall`) minus the three rows waived below.
 #
-# The k8s manifests live in the home monorepo (xinutec/pippijn,
-# code/kubes/utterance/k8s); the image tag is the only contract between this
+# The k8s manifests live in the home monorepo
+# (code/kubes/utterance/k8s); the image tag is the only contract between this
 # repo and the deploy.
 #
 # dev-lint: gate-parity

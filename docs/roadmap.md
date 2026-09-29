@@ -252,7 +252,7 @@ daily work.
   can, so real-time remains reachable. The speaker profile is measured once per
   person, not per take, so it is not a violation.
 
-- **Freedom is a feature** (Pippijn, on hearing the Lattice against the field and
+- **Freedom is a feature** (the user, on hearing the Lattice against the field and
   liking both). Keeping alternatives is worth something in itself: a mapping is
   not on probation waiting to be beaten. The same instinct runs through the code
   — nothing clamps `density` where the lattice refuses, anything arguable is a
