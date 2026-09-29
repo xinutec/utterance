@@ -4,11 +4,8 @@ import {
   type PagePort,
   type ServiceWorkerPort,
   SwUpdates as SwUpdatePolicy,
-  type UpdateOutcome,
 } from '@xinutec/ui-harness/sw-updates';
 import { filter } from 'rxjs';
-
-export type { UpdateOutcome };
 
 /**
  * Marks that we have already auto-reloaded out of an unrecoverable service
@@ -64,11 +61,6 @@ export class SwUpdates {
 
   start(): void {
     this.policy.start();
-  }
-
-  /** Manual "Check for updates". Never rejects: failure comes back `'failed'`. */
-  checkNow(): Promise<UpdateOutcome> {
-    return this.policy.checkNow();
   }
 
   /** The one place the page is thrown away, a method so tests can assert it. */

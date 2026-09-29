@@ -12,7 +12,6 @@ import type {
   Role,
   ScoreView,
   SpeakerCorners,
-  TelemetryEvent,
   VoiceSummary,
 } from "./models";
 
@@ -158,14 +157,6 @@ export class RecordingsApi {
     return this.http
       .put<RecordingMeta>(`/api/recordings/${id}/role`, { role })
       .pipe(catchError(rethrow));
-  }
-
-  /**
-   * Send a batch of client events to be logged. The caller ignores failures: a
-   * trace must not interfere with the app it observes.
-   */
-  sendTelemetry(events: readonly TelemetryEvent[]): Observable<void> {
-    return this.http.post<void>("/api/telemetry", events);
   }
 
   delete(id: string): Observable<Deleted> {

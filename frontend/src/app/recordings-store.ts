@@ -148,10 +148,6 @@ export class RecordingsStore {
     return this.api.audioUrl(id);
   }
 
-  setError(message: string): void {
-    this.error.set(message);
-  }
-
   clearError(): void {
     this.error.set(null);
   }
