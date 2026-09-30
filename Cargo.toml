@@ -64,6 +64,7 @@ workspace = true
 ts = ["dep:ts-rs", "utterance-analysis/ts", "utterance-mapping/ts"]
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
 utterance-analysis = { path = "utterance-analysis" }
 # The composition root: this crate is where the three layers are wired together,
 # and the only one that may depend on all of them.

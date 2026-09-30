@@ -19,6 +19,7 @@
 //! cargo run --bin beating -- 0356e27885ef254c 0.9  # a take, and a hold
 //! ```
 
+use clap::Parser;
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
 
@@ -178,21 +179,24 @@ fn samples(
     synth::render(&mapping.score_with(vp, voice, params))
 }
 
+/// Whether there is anything to hear when the tuning changes.
+#[derive(Parser)]
+struct Cli {
+    /// A take's label or id [default: the sung take from the listening test,
+    /// which is where the chords hold].
+    #[arg(default_value = "0356e27885ef254c")]
+    take: String,
+    /// The hold [default: the default parameters'].
+    hold: Option<f32>,
+}
+
 fn main() -> anyhow::Result<()> {
     let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".into());
     let store = Store::open(&data_dir)?;
     let calibrated = voice::calibrate(&store, None).map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    // The sung take from the listening test, which is where the chords hold.
-    let take = args
-        .first()
-        .cloned()
-        .unwrap_or_else(|| "0356e27885ef254c".into());
-    let hold: f32 = match args.get(1) {
-        Some(h) => h.parse()?,
-        None => Params::default().hold,
-    };
+    let Cli { take, hold } = Cli::parse();
+    let hold = hold.unwrap_or(Params::default().hold);
 
     let meta = store
         .list()?

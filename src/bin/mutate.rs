@@ -29,6 +29,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use clap::Parser;
+
 /// What the suite is supposed to do with a mutant.
 enum Expect {
     /// Something must fail. The normal case.
@@ -151,9 +153,16 @@ const MUTANTS: &[Mutant] = &[
     },
 ];
 
+/// Would the tests notice? Break the code on purpose and find out.
+#[derive(Parser)]
+struct Cli {
+    /// Only the mutants whose claim or file contains this.
+    filter: Option<String>,
+}
+
 fn main() -> std::process::ExitCode {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let filter = std::env::args().nth(1);
+    let filter = Cli::parse().filter;
 
     // Start clean, so a mutant left by a kill -9 is whatever `git status` shows.
     if !git_is_clean(&root) {

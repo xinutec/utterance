@@ -22,6 +22,7 @@
 
 use std::collections::BTreeMap;
 
+use clap::Parser;
 use utterance::store::Store;
 use utterance::voice;
 use utterance_analysis::voiceprint::Voiceprint;
@@ -236,12 +237,19 @@ fn voice_at(store: &Store, params: Params) -> anyhow::Result<Voice> {
         .voice)
 }
 
+/// What each knob actually changes, on each continuous mapping.
+#[derive(Parser)]
+struct Cli {
+    /// A take's label or id [default: the calibration take].
+    take: Option<String>,
+}
+
 fn main() -> anyhow::Result<()> {
     let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".into());
     let store = Store::open(&data_dir)?;
     let calibrated = voice::calibrate(&store, None).map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    let wanted = std::env::args().nth(1);
+    let wanted = Cli::parse().take;
     let takes = store.list()?;
     let meta = match &wanted {
         Some(label) => takes

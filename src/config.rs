@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use clap::{CommandFactory, Parser};
+
 /// Defaults, named once so the help text and the code cannot disagree.
 ///
 /// A usage message that lists a default the program does not use is worse than
@@ -44,27 +46,47 @@ pub enum Invocation {
     Print(String),
 }
 
-/// Read the command line. Installed and run by name, `utterance --help` is how
+/// The command line. Help and version are ordinary flags rather than clap's,
+/// which answer the moment they are seen: `--help --sereve` must report the
+/// typo, since every argument is checked before any is honoured.
+#[derive(Parser)]
+#[command(
+    name = env!("CARGO_PKG_NAME"),
+    about = "Derive music from the structure of a voice. Runs an HTTP server.",
+    disable_help_flag = true,
+    disable_version_flag = true,
+    after_help = environment()
+)]
+struct Cli {
+    /// Print help.
+    #[arg(short, long)]
+    help: bool,
+    /// Print the version.
+    #[arg(short = 'V', long)]
+    version: bool,
+}
+
+/// Read the process's command line; see [`invocation`].
+pub fn invocation_from_env() -> Result<Invocation, String> {
+    answer(Cli::try_parse())
+}
+
+/// Read a command line. Installed and run by name, `utterance --help` is how
 /// anyone learns it is configured by environment; an unknown argument is an
 /// error, and every argument is checked, so `--version --sereve` reports the
 /// typo.
 pub fn invocation<I: IntoIterator<Item = String>>(args: I) -> Result<Invocation, String> {
-    let args: Vec<String> = args.into_iter().collect();
-    let is = |arg: &String, short: &str, long: &str| arg == short || arg == long;
+    let name = env!("CARGO_PKG_NAME").to_string();
+    answer(Cli::try_parse_from(std::iter::once(name).chain(args)))
+}
 
-    // Complained about before anything is honoured, so a command line that is
-    // part sense and part nonsense is refused rather than half-obeyed.
-    if let Some(unknown) = args
-        .iter()
-        .find(|a| !is(a, "-h", "--help") && !is(a, "-V", "--version"))
-    {
-        return Err(format!("unrecognised argument {unknown}\n\n{}", usage()));
+fn answer(parsed: Result<Cli, clap::Error>) -> Result<Invocation, String> {
+    let cli =
+        parsed.map_err(|e| format!("{}\nTry `{} --help`.", e.render(), env!("CARGO_PKG_NAME")))?;
+    if cli.help {
+        return Ok(Invocation::Print(Cli::command().render_help().to_string()));
     }
-
-    if args.iter().any(|a| is(a, "-h", "--help")) {
-        return Ok(Invocation::Print(usage()));
-    }
-    if args.iter().any(|a| is(a, "-V", "--version")) {
+    if cli.version {
         return Ok(Invocation::Print(format!(
             "{} {}",
             env!("CARGO_PKG_NAME"),
@@ -74,36 +96,22 @@ pub fn invocation<I: IntoIterator<Item = String>>(args: I) -> Result<Invocation,
     Ok(Invocation::Serve)
 }
 
-/// What the program accepts, in the form someone reads when they are stuck.
-///
-/// Every setting is an environment variable, so the help is mostly a list of
-/// them. That is unusual enough to be worth saying out loud rather than leaving
-/// someone to conclude the program is unconfigurable.
-fn usage() -> String {
+/// There are no options: everything is configured by the environment, so that
+/// one launcher can set it and every way of starting the program agrees. That
+/// is unusual enough to say out loud rather than leave someone to conclude the
+/// program is unconfigurable.
+fn environment() -> String {
     format!(
         "\
-{name} {version} — derive music from the structure of a voice.
-
-Usage: {name} [--help] [--version]
-
-Runs an HTTP server. There are no options: everything is configured by the
-environment, so that one launcher can set it and every way of starting the
-program agrees.
-
 Environment:
-  BIND_ADDR   (default {bind})
+  BIND_ADDR   (default {DEFAULT_BIND_ADDR})
               address to listen on
-  DATA_DIR    (default {data})
+  DATA_DIR    (default {DEFAULT_DATA_DIR})
               where recordings and their voiceprints are kept
   STATIC_DIR  (default unset)
               built Angular bundle to serve. Unset serves the API alone,
               which is what `ng serve` expects
   RUST_LOG    (default info)
-              tracing filter
-",
-        name = env!("CARGO_PKG_NAME"),
-        version = env!("CARGO_PKG_VERSION"),
-        bind = DEFAULT_BIND_ADDR,
-        data = DEFAULT_DATA_DIR,
+              tracing filter"
     )
 }

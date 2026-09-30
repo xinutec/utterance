@@ -14,6 +14,7 @@
 
 use std::collections::BTreeSet;
 
+use clap::Parser;
 use utterance::store::Store;
 use utterance::voice;
 use utterance_mapping::lattice::Triangle;
@@ -89,6 +90,15 @@ fn dwells(path: &[Triangle], sounding: &[bool], hop_s: f32) -> Dwells {
     }
 }
 
+/// How long a chord actually rings, across every take in the store.
+#[derive(Parser)]
+struct Cli {
+    /// One hold to judge [default: the range's ends, middle and the default].
+    hold: Option<f32>,
+    /// The settle, in seconds [default: the default parameters'].
+    settle: Option<f32>,
+}
+
 fn main() -> anyhow::Result<()> {
     let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "data".into());
     let store = Store::open(&data_dir)?;
@@ -101,8 +111,9 @@ fn main() -> anyhow::Result<()> {
 
     // The range's ends and middle plus the default: a knob is judged across its
     // travel.
-    let holds: Vec<f32> = if let Some(one) = std::env::args().nth(1) {
-        vec![one.parse()?]
+    let cli = Cli::parse();
+    let holds: Vec<f32> = if let Some(one) = cli.hold {
+        vec![one]
     } else {
         let mut set: BTreeSet<u32> = [0.0f32, 0.25, 0.5, 0.75, 0.9, 1.0]
             .iter()
@@ -114,10 +125,7 @@ fn main() -> anyhow::Result<()> {
 
     // `settle` catches what `hold` cannot: a mouth that crosses and comes
     // straight back.
-    let settle: f32 = match std::env::args().nth(2) {
-        Some(s) => s.parse()?,
-        None => Params::default().settle,
-    };
+    let settle = cli.settle.unwrap_or(Params::default().settle);
 
     let takes = store.list()?;
     for hold in holds {

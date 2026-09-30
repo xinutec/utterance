@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 use tracing_subscriber::EnvFilter;
 use utterance::{
-    config::{Config, Invocation, invocation},
+    config::{Config, Invocation, invocation_from_env},
     routes,
     state::AppState,
     store::Store,
@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     // Read before anything is opened or bound, and before the logger is set up.
     // Someone asking what the flags are should get an answer rather than a
     // startup log, and a bad argument should cost nothing.
-    match invocation(std::env::args().skip(1)) {
+    match invocation_from_env() {
         Ok(Invocation::Print(text)) => {
             println!("{text}");
             return Ok(());
