@@ -139,10 +139,20 @@ In rough order of how much each unlocks.
   mapping reads, over the sounding frames of every take. Tilt earns admission —
   it moves where brightness does not — but no mapping reads it yet; what it
   should *drive* is a question for the ear. Flatness tracks aperiodicity closely
-  enough to add nothing and stays unread. Harmonic-to-noise per band is not
-  measured: its distinct claim is that periodicity varies *across* bands (a
-  breathy voice is periodic low and noisy high), and that is testable with the
-  same tool before any of it is built.
+  enough to add nothing and stays unread.
+
+  **Periodicity in the high band earns admission too** (`utterance-analysis/src/bands.rs`,
+  read by the same tool as `*ap-high`). A breathy voice is periodic low and noisy
+  high, which YIN's one full-band figure barely registers: the two correlate at
+  only 0.35, and nothing a mapping reads exceeds 0.4. Independence alone would
+  also describe measurement noise, so two checks: the band's halves, 2–4 and
+  4–6 kHz, measured separately, agree at 0.76, and still at 0.73 with the high
+  band's own level partialled out — so it is one signal shared across the band,
+  not a noise floor read as breath. What it does *not* establish is that the
+  signal is breath rather than roughness: irregular closure scatters the
+  envelope's pulses the same way. Where to wire it is, like tilt, a question for
+  the ear; the difference high minus low restates the high band (0.95) and adds
+  nothing.
 
 - **Nothing operates above the phrase.** The field moves at three timescales —
   level, articulation, prosodic drift — and the longest is two seconds. A piece

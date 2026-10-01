@@ -20,6 +20,7 @@
     clippy::while_float
 )]
 
+pub mod bands;
 pub mod energy;
 pub mod f0;
 pub mod formant;

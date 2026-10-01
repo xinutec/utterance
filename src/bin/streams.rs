@@ -12,7 +12,10 @@
 
 use utterance::store::Store;
 use utterance::voice;
+use utterance_analysis::bands::{self, BandAperiodicity};
+use utterance_analysis::resample::{self, ANALYSIS_RATE};
 use utterance_analysis::voiceprint::Voiceprint;
+use utterance_analysis::wav;
 use utterance_mapping::streams;
 use utterance_mapping::voice::Voice;
 
@@ -59,7 +62,7 @@ fn correlation(a: &[f32], b: &[f32]) -> Option<f32> {
 /// Every stream a continuous mapping reads, plus the candidates for admission,
 /// smoothed as the mapping sees them: two series can correlate weakly per frame
 /// and strongly over a syllable.
-fn collect(vp: &Voiceprint, voice: &Voice) -> Vec<Stream> {
+fn collect(vp: &Voiceprint, voice: &Voice, band: &BandAperiodicity) -> Vec<Stream> {
     let (open, front) = streams::vowel(vp, voice);
     let peak = vp.rms_db.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     let sounding: Vec<bool> = vp
@@ -117,7 +120,27 @@ fn collect(vp: &Voiceprint, voice: &Voice) -> Vec<Stream> {
             name: "*flatness",
             values: heard(vp.texture.flatness.clone(), streams::ROOT_FRAMES),
         },
+        // Periodicity by band, measured from the audio rather than the voiceprint.
+        Stream {
+            name: "*ap-low",
+            values: heard(streams::filled(&band.low), streams::LEVEL_FRAMES),
+        },
+        Stream {
+            name: "*ap-high",
+            values: heard(streams::filled(&band.high), streams::LEVEL_FRAMES),
+        },
     ]
+}
+
+/// A take's audio as the analyser saw it: mono, at the analysis rate.
+fn analysis_samples(bytes: &[u8]) -> anyhow::Result<Vec<f32>> {
+    let decoded = wav::decode(bytes)?;
+    let mono = resample::to_mono(&decoded.samples, decoded.channels);
+    Ok(resample::resample(
+        &mono,
+        decoded.sample_rate,
+        ANALYSIS_RATE,
+    ))
 }
 
 fn main() -> anyhow::Result<()> {
@@ -136,7 +159,12 @@ fn main() -> anyhow::Result<()> {
         let Ok(vp) = store.voiceprint(&meta.id) else {
             continue;
         };
-        let here = collect(&vp, &calibrated.voice);
+        let samples = analysis_samples(&store.audio(&meta.id)?)?;
+        let here = collect(
+            &vp,
+            &calibrated.voice,
+            &bands::track(&samples, &vp.pitch.hz),
+        );
         if pooled.is_empty() {
             pooled = here;
         } else {
