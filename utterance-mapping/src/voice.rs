@@ -60,10 +60,6 @@ impl Voice {
 
     /// The same, choosing how dense the derived scale is — decided here, since a
     /// finished tuning cannot regain degrees the derivation discarded.
-    #[allow(
-        clippy::too_many_arguments,
-        reason = "the calibration's knobs, each named; the doc above says why density is one of them"
-    )]
     pub fn from_calibration_with(
         tuning_from: &Partials,
         palette_from: &[&Partials],

@@ -8,7 +8,7 @@
 
 // Each test binary compiles this module in full but uses only the generators it
 // needs, so anything another binary uses reads as dead code here.
-#![allow(
+#![expect(
     dead_code,
     reason = "each test binary uses only the generators it needs"
 )]
