@@ -67,6 +67,7 @@ fn take(frames: usize) -> Voiceprint {
         pitch: Pitch {
             hz: vec![Some(120.0); frames],
             aperiodicity: vec![0.05; frames],
+            high_band_aperiodicity: vec![None; frames],
         },
         formants: Formants {
             f1: vec![Some(550.0); frames],

@@ -3,4 +3,4 @@
 /**
  * Which knob, as a value, so a name that is not a knob cannot be written.
  */
-export type KnobName = "bind" | "density" | "voices" | "spacing" | "drift" | "reach" | "hold" | "settle" | "voicing" | "articulation" | "consonants";
+export type KnobName = "bind" | "density" | "voices" | "spacing" | "drift" | "reach" | "hold" | "settle" | "voicing" | "articulation" | "air" | "consonants";

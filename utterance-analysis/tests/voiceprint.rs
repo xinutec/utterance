@@ -25,9 +25,21 @@ fn every_series_is_the_length_the_grid_declares() {
     let vp = analyse(&vowel(120.0, 2.0), source(2.0));
     assert_eq!(vp.pitch.hz.len(), vp.frame.count);
     assert_eq!(vp.pitch.aperiodicity.len(), vp.frame.count);
+    assert_eq!(vp.pitch.high_band_aperiodicity.len(), vp.frame.count);
     assert_eq!(vp.rms_db.len(), vp.frame.count);
     assert_eq!(vp.events.flux.len(), vp.frame.count);
     assert_eq!(vp.frame_times_s().len(), vp.frame.count);
+}
+
+#[test]
+fn the_high_band_is_measured_exactly_where_the_voice_is() {
+    // A period is needed to measure against, so an unvoiced frame has no value
+    // rather than a guess.
+    let vp = analyse(&vowel(120.0, 2.0), source(2.0));
+    for (hz, high) in vp.pitch.hz.iter().zip(&vp.pitch.high_band_aperiodicity) {
+        assert_eq!(hz.is_some(), high.is_some());
+    }
+    assert!(vp.pitch.high_band_aperiodicity.iter().any(Option::is_some));
 }
 
 #[test]

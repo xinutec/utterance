@@ -8,7 +8,8 @@
 //! - **spectral flux** stirs the texture: rhythm without notes.
 //! - **energy** sets loudness and how many voices are audible.
 //! - **spectral centroid** sets the colour, in the speaker's brightness range.
-//! - **aperiodicity** sets how much is breath.
+//! - **aperiodicity** sets how much is breath — the whole voice's, and with
+//!   `air` the high band's, where a breathy vowel shows.
 //!
 //! **Each stream moves one thing**, so the count is how many things can move
 //! independently. And the voice moves the law, not the notes: the speaker's
@@ -63,7 +64,7 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
     let mut voices = vec![vec![0.0f32; frames]; params.voices];
     let mut gains = vec![vec![0.0f32; frames]; params.voices];
     let mut colour = vec![0.0f32; frames];
-    let mut breath = vec![0.0f32; frames];
+    let breath = streams::breath(vp, params.air);
 
     for i in 0..frames {
         // The speaker's prosody as a slow transposition, against their habitual
@@ -95,7 +96,6 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
         }
 
         colour[i] = bright[i].clamp(0.0, 1.0);
-        breath[i] = streams::breath_at(vp, i);
     }
 
     Some(Field {

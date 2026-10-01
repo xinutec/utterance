@@ -109,6 +109,7 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
     let pitch_hz: Vec<Option<f32>> = pitch_frames.iter().map(|f| f.hz).collect();
     let partials = partials::measure(samples, &pitch_hz);
     let texture = texture::track(&spectra);
+    let high_band_aperiodicity = bands::high(samples, &pitch_hz);
 
     Voiceprint {
         schema_version: voiceprint::SCHEMA_VERSION,
@@ -121,6 +122,7 @@ pub fn analyse(samples: &[f32], source: Source) -> Voiceprint {
         pitch: Pitch {
             hz: pitch_hz,
             aperiodicity: pitch_frames.iter().map(|f| f.aperiodicity).collect(),
+            high_band_aperiodicity,
         },
         formants: Formants {
             f1: formant_frames.iter().map(|f| f.f1).collect(),

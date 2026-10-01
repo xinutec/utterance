@@ -59,6 +59,7 @@ fn take(frames: usize) -> Voiceprint {
         pitch: Pitch {
             hz: vec![Some(120.0); frames],
             aperiodicity: vec![0.05; frames],
+            high_band_aperiodicity: vec![None; frames],
         },
         formants: Formants {
             f1: vec![Some(550.0); frames],
@@ -410,4 +411,65 @@ fn articulation_at_zero_ignores_the_flux() {
     )
     .unwrap();
     assert_eq!(f.gains[VOICES - 1][250], f.gains[VOICES - 1][50]);
+}
+
+/// A take whose high band is noisy over frames 200..300 and periodic elsewhere,
+/// with the whole voice periodic throughout — a breathy stretch YIN cannot see.
+fn breathy_middle() -> Voiceprint {
+    let mut vp = take(400);
+    vp.pitch.high_band_aperiodicity = (0..400)
+        .map(|i| Some(if (200..300).contains(&i) { 0.9 } else { 0.1 }))
+        .collect();
+    vp
+}
+
+#[test]
+fn air_at_zero_leaves_the_breath_to_the_whole_voice() {
+    let vp = breathy_middle();
+    let f = field::compose(&vp, &voice()).unwrap();
+    assert_eq!(f.breath[250], f.breath[50]);
+}
+
+#[test]
+fn air_lets_a_noisy_high_band_breathe_through_a_vowel() {
+    let vp = breathy_middle();
+    let still = field::compose(&vp, &voice()).unwrap();
+    let f = field::compose_with(
+        &vp,
+        &voice(),
+        Params {
+            air: 1.0,
+            ..Params::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        f.breath[250] > f.breath[50],
+        "breathy {} vs clear {}",
+        f.breath[250],
+        f.breath[50]
+    );
+    assert!(f.breath[250] > still.breath[250]);
+}
+
+#[test]
+fn air_never_takes_breath_away() {
+    // A consonant: aperiodic everywhere, so no period to measure the band at.
+    let mut vp = take(400);
+    for i in 200..300 {
+        vp.pitch.hz[i] = None;
+        vp.pitch.aperiodicity[i] = 0.9;
+    }
+    vp.pitch.high_band_aperiodicity = vp.pitch.hz.iter().map(|h| h.map(|_| 0.0)).collect();
+    let still = field::compose(&vp, &voice()).unwrap();
+    let f = field::compose_with(
+        &vp,
+        &voice(),
+        Params {
+            air: 1.0,
+            ..Params::default()
+        },
+    )
+    .unwrap();
+    assert!(f.breath[250] >= still.breath[250]);
 }

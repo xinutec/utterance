@@ -10,7 +10,7 @@ use crate::frame::Frame;
 /// Identifies the analyser. **Bump it for any change that alters the output —
 /// the algorithm as much as the shape**: a shape change fails on deserialise, an
 /// algorithm change is silent.
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 /// What the recording was before analysis normalised it.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -66,6 +66,10 @@ pub struct Pitch {
     /// YIN's normalised difference at the chosen lag, for every frame — the
     /// continuous measurement behind the voicing decision.
     pub aperiodicity: Vec<f32>,
+    /// The same question asked of 2–6 kHz alone, on voiced frames only — `null`
+    /// elsewhere. A breathy voice is periodic low and noisy high, which the
+    /// full-band figure, dominated by the low harmonics, barely registers.
+    pub high_band_aperiodicity: Vec<Option<f32>>,
 }
 
 impl Pitch {

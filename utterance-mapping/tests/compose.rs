@@ -85,6 +85,7 @@ fn take(onsets: &[usize], vowels: &[(f32, f32)], frames: usize, loud: bool) -> V
         pitch: Pitch {
             hz: vec![Some(120.0); frames],
             aperiodicity: vec![0.1; frames],
+            high_band_aperiodicity: vec![None; frames],
         },
         formants: Formants {
             f3: vec![None; frames],

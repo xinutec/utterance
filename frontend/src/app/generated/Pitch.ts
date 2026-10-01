@@ -13,4 +13,10 @@ hz: Array<number | null>,
  * YIN's normalised difference at the chosen lag, for every frame — the
  * continuous measurement behind the voicing decision.
  */
-aperiodicity: Array<number>, };
+aperiodicity: Array<number>, 
+/**
+ * The same question asked of 2–6 kHz alone, on voiced frames only — `null`
+ * elsewhere. A breathy voice is periodic low and noisy high, which the
+ * full-band figure, dominated by the low harmonics, barely registers.
+ */
+highBandAperiodicity: Array<number | null>, };

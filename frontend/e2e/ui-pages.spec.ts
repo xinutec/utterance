@@ -53,13 +53,15 @@ function voiceprint(): Voiceprint {
   const count = 400;
   const frames = Array.from({ length: count }, (_, i) => i);
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     source: { sampleRateHz: 48_000, channels: 1, durationS: 28.4, peak: 0.71, clippedFraction: 0 },
     frame: { analysisRateHz: 16_000, hopS: 0.01, count },
     pitch: {
       // A contour with unvoiced gaps, so the multi-stroke path is exercised.
       hz: frames.map((i) => (i % 50 < 30 ? 120 + 40 * Math.sin(i / 12) : null)),
       aperiodicity: frames.map((i) => (i % 50 < 30 ? 0.08 : 0.9)),
+      // Measured on voiced frames only, as the analyser writes it.
+      highBandAperiodicity: frames.map((i) => (i % 50 < 30 ? 0.3 : null)),
     },
     formants: {
       f1: frames.map((i) => (i % 50 < 30 ? 300 + 300 * Math.sin(i / 30) : null)),

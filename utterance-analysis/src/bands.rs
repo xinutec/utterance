@@ -6,8 +6,8 @@
 //! fully close — which a full-band figure barely registers. This measures each
 //! band on its own terms.
 //!
-//! A probe, not yet part of the voiceprint: `cargo run --bin streams` decides
-//! whether it says anything the existing streams do not.
+//! Only the high band is kept in the voiceprint; the low band is the reference
+//! it was checked against, and says what YIN already does.
 
 use rustfft::FftPlanner;
 use rustfft::num_complex::Complex32;
@@ -27,38 +27,23 @@ pub const HIGH_HZ: (f32, f32) = (2000.0, 6000.0);
 /// whole take after every onset.
 const SKIRT_HZ: f32 = 100.0;
 
-/// Aperiodicity per frame in each band, 0 (periodic) to 1, on voiced frames
-/// only — a period is needed to measure against.
-#[derive(Clone, Debug, PartialEq)]
-pub struct BandAperiodicity {
-    pub low: Vec<Option<f32>>,
-    pub high: Vec<Option<f32>>,
+/// Aperiodicity of the low band per frame, 0 (periodic) to 1, on voiced frames
+/// only — a period is needed to measure against. Read as a waveform.
+pub fn low(samples: &[f32], pitch_hz: &[Option<f32>]) -> Vec<Option<f32>> {
+    let x: Vec<f32> = analytic(samples, LOW_HZ).iter().map(|z| z.re).collect();
+    per_frame(&x, pitch_hz, |w, _| w.to_vec())
 }
 
-/// Measure both bands across `samples` (mono, at [`ANALYSIS_RATE`]) at the
-/// periods `pitch_hz` gives.
-///
-/// The low band is read as a waveform. The high band is read as its envelope:
+/// Aperiodicity of the high band per frame, as [`low`]. Read as its envelope:
 /// jitter of a fraction of a percent shifts a 3 kHz harmonic by a sizeable part
 /// of its cycle from one period to the next, but every glottal closure still
 /// excites the high band at once, so a periodic voice pulses there at f0 while
 /// breath noise does not.
-pub fn track(samples: &[f32], pitch_hz: &[Option<f32>]) -> BandAperiodicity {
-    BandAperiodicity {
-        low: waveform(samples, pitch_hz, LOW_HZ),
-        high: envelope(samples, pitch_hz, HIGH_HZ),
-    }
-}
-
-/// Aperiodicity of the waveform in `band`, per frame.
-fn waveform(samples: &[f32], pitch_hz: &[Option<f32>], band: (f32, f32)) -> Vec<Option<f32>> {
-    let x: Vec<f32> = analytic(samples, band).iter().map(|z| z.re).collect();
-    per_frame(&x, pitch_hz, |w, _| w.to_vec())
-}
-
-/// Aperiodicity of the envelope in `band`, per frame.
-fn envelope(samples: &[f32], pitch_hz: &[Option<f32>], band: (f32, f32)) -> Vec<Option<f32>> {
-    let x: Vec<f32> = analytic(samples, band).iter().map(|z| z.norm()).collect();
+pub fn high(samples: &[f32], pitch_hz: &[Option<f32>]) -> Vec<Option<f32>> {
+    let x: Vec<f32> = analytic(samples, HIGH_HZ)
+        .iter()
+        .map(|z| z.norm())
+        .collect();
     per_frame(&x, pitch_hz, detrend)
 }
 

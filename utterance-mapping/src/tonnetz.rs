@@ -111,7 +111,7 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
     let mut voices = vec![vec![0.0f32; frames]; params.voices];
     let mut gains = vec![vec![0.0f32; frames]; params.voices];
     let mut colour = vec![0.0f32; frames];
-    let mut breath = vec![0.0f32; frames];
+    let breath = streams::breath(vp, params.air);
 
     for i in 0..frames {
         let here = path[i];
@@ -165,7 +165,6 @@ pub fn compose_with(vp: &Voiceprint, voice: &Voice, params: Params) -> Option<Fi
         }
 
         colour[i] = bright[i].clamp(0.0, 1.0);
-        breath[i] = streams::breath_at(vp, i);
     }
 
     Some(Field {

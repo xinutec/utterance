@@ -25,6 +25,7 @@ fn voiceprint(f1: Vec<Option<f32>>, f2: Vec<Option<f32>>, hz: Vec<Option<f32>>) 
         },
         pitch: Pitch {
             aperiodicity: vec![0.1; hz.len()],
+            high_band_aperiodicity: vec![None; hz.len()],
             hz,
         },
         formants: Formants {

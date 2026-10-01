@@ -141,18 +141,24 @@ In rough order of how much each unlocks.
   should *drive* is a question for the ear. Flatness tracks aperiodicity closely
   enough to add nothing and stays unread.
 
-  **Periodicity in the high band earns admission too** (`utterance-analysis/src/bands.rs`,
-  read by the same tool as `*ap-high`). A breathy voice is periodic low and noisy
-  high, which YIN's one full-band figure barely registers: the two correlate at
-  only 0.35, and nothing a mapping reads exceeds 0.4. Independence alone would
-  also describe measurement noise, so two checks: the band's halves, 2–4 and
-  4–6 kHz, measured separately, agree at 0.76, and still at 0.73 with the high
-  band's own level partialled out — so it is one signal shared across the band,
-  not a noise floor read as breath. What it does *not* establish is that the
+  **Periodicity in the high band earned admission, and is read** — the
+  voiceprint's `highBandAperiodicity` (`utterance-analysis/src/bands.rs`), `air`
+  in the streams table. A breathy voice is periodic low and noisy high, which
+  YIN's one full-band figure barely registers: the two correlated at only 0.35
+  when admitted, and nothing a mapping read exceeded 0.4. Independence alone
+  would also describe measurement noise, so two checks: the band's halves, 2–4
+  and 4–6 kHz, measured separately, agreed at 0.76, and still at 0.73 with the
+  high band's own level partialled out — one signal shared across the band, not
+  a noise floor read as breath. What that does *not* establish is that the
   signal is breath rather than roughness: irregular closure scatters the
-  envelope's pulses the same way. Where to wire it is, like tilt, a question for
-  the ear; the difference high minus low restates the high band (0.95) and adds
-  nothing.
+  envelope's pulses the same way. The difference high minus low restated the
+  high band (0.95) and was dropped.
+
+  On voiced frames YIN's aperiodicity is near zero, so the field's breath came
+  almost entirely from consonants and pauses. The `air` knob adds the high band's
+  breath through the vowels, taking whichever of the two is more breathy per
+  frame; it defaults to 0, reproducing the sound from before. Where it should sit
+  is a question for the ear.
 
 - **Nothing operates above the phrase.** The field moves at three timescales —
   level, articulation, prosodic drift — and the longest is two seconds. A piece

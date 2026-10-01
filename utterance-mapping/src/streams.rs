@@ -112,8 +112,36 @@ pub fn level(vp: &Voiceprint) -> Vec<f32> {
 
 /// Breath fraction at one frame, from how periodic the voice was there.
 pub fn breath_at(vp: &Voiceprint, i: usize) -> f32 {
-    let aperiodicity = vp.pitch.aperiodicity.get(i).copied().unwrap_or_default();
+    breath_from(vp.pitch.aperiodicity.get(i).copied().unwrap_or_default())
+}
+
+/// An aperiodicity as a breath fraction: none when periodic, at most 0.3 so a
+/// tone stays a tone.
+fn breath_from(aperiodicity: f32) -> f32 {
     (aperiodicity / 0.6).clamp(0.0, 1.0) * 0.3
+}
+
+/// Breath per frame. The whole voice's aperiodicity sets it, which is breath in
+/// the consonants and pauses and next to none in a vowel; `air` adds the high
+/// band's, where a breathy vowel shows. Each frame takes the more breathy of the
+/// two, so `air` can only add breath, and at 0 nothing changes.
+pub fn breath(vp: &Voiceprint, air: f32) -> Vec<f32> {
+    // Carried across unvoiced gaps, from none: a take that opens on a consonant
+    // has no vowel to borrow breath from yet.
+    let mut last = 0.0f32;
+    let high: Vec<f32> = (0..vp.frame.count)
+        .map(|i| {
+            if let Some(Some(a)) = vp.pitch.high_band_aperiodicity.get(i) {
+                last = *a;
+            }
+            last
+        })
+        .collect();
+    smooth(&high, LEVEL_FRAMES)
+        .iter()
+        .enumerate()
+        .map(|(i, a)| breath_at(vp, i).max(air * breath_from(*a)))
+        .collect()
 }
 
 /// Centred moving average over `window` frames: trailing would make the music

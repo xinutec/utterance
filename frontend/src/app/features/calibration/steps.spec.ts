@@ -45,7 +45,7 @@ function goodTake(overrides: Partial<Fixture> = {}): RecordingDetail {
         clippedFraction: f.clippedFraction,
       },
       frame: { analysisRateHz: 16000, hopS: 0.01, count: f.hz.length },
-      pitch: { hz: f.hz, aperiodicity: f.hz.map(() => 0.1) },
+      pitch: { hz: f.hz, aperiodicity: f.hz.map(() => 0.1), highBandAperiodicity: f.hz.map(() => null) },
       formants: { f1: [], f2: [], f3: [] },
       rmsDb: [],
       events: { flux: [], onsetFrames: [], onsetTimesS: [] },

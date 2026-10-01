@@ -112,6 +112,7 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
         settle: 9.0,
         voicing: 9.0,
         articulation: -4.0,
+        air: 3.0,
         consonants: -2.0,
     }
     .sane();
@@ -126,14 +127,15 @@ fn a_knob_out_of_range_is_brought_back_rather_than_refused() {
     assert!(wild.settle <= 0.5);
     assert!(wild.voicing <= 1.0);
     assert!(wild.articulation >= 0.0);
+    assert!(wild.air <= 1.0);
     assert!(wild.consonants >= 0.0);
 }
 
 /// Invariants of the knob table, which the UI builds a slider per row from.
 mod table {
     use utterance_mapping::params::{
-        ARTICULATION, BIND, CONSONANTS, DENSITY, DRIFT, HOLD, KNOBS, KnobName, KnobQuery, Params,
-        REACH, SETTLE, SPACING, VOICES, VOICING,
+        AIR, ARTICULATION, BIND, CONSONANTS, DENSITY, DRIFT, HOLD, KNOBS, KnobName, KnobQuery,
+        Params, REACH, SETTLE, SPACING, VOICES, VOICING,
     };
 
     #[test]
@@ -200,6 +202,7 @@ mod table {
                 ..d
             }
         );
+        assert_eq!(d.with(AIR.name, 0.6), Params { air: 0.6, ..d });
         assert_eq!(
             d.with(CONSONANTS.name, 0.0),
             Params {

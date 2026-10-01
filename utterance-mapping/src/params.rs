@@ -369,6 +369,23 @@ knobs! {
         primary: false,
     }
 
+    /// How much the high band's noise breathes through the vowels. The whole
+    /// voice's aperiodicity is near zero in a vowel, so without this the field
+    /// breathes only in the consonants. At 0, as it did before the band was
+    /// measured.
+    AIR air: f32 = {
+        label: "Air",
+        min: 0.0,
+        max: 1.0,
+        step: 0.05,
+        default: 0.0,
+        about: "How much a breathy voice breathes through the tones. Breath shows \
+                as noise above the harmonics while the pitch stays clear; at 0 the \
+                field breathes only in the consonants.",
+        mappings: CONTINUOUS,
+        primary: false,
+    }
+
     /// How loud the consonants are against the pitched material. At 0 they are
     /// silent.
     CONSONANTS consonants: f32 = {
