@@ -14,6 +14,7 @@ import {
 
 import type {
   Controls,
+  ErrorBody,
   RecordingDetail,
   RecordingMeta,
   ScoreView,
@@ -320,7 +321,8 @@ test("take — its voiceprint and controls lay out cleanly @ phone", async ({ pa
 
 test("studio — empty state lays out cleanly @ phone", async ({ page }, testInfo) => {
   // The record button must be reachable without scrolling.
-  await page.route("**/api/**", (r) => r.fulfill({ json: [] }));
+  await page.route("**/api/**", (r) => r.fulfill({ status: 204, body: "" }));
+  await page.route("**/api/recordings", (r) => r.fulfill({ json: [] satisfies RecordingMeta[] }));
   await page.goto("/");
   await page.getByText("Nothing recorded yet.").waitFor();
 
@@ -379,7 +381,7 @@ test("studio — a scale that carries no lattice says so @ phone", async ({ page
   // Without this message the player would play consonants over silence; it is
   // also the prose likeliest to overflow a phone.
   await mockApi(page);
-  await page.route("**/api/voice*", (r) => r.fulfill({ json: { ...VOICE, refusal: REFUSAL } }));
+  await page.route("**/api/voice*", (r) => r.fulfill({ json: { ...VOICE, refusal: REFUSAL } satisfies VoiceSummary }));
   await page.goto(TAKE);
   await page.getByRole("button", { name: "Render as music" }).click();
   await page.getByRole("alert").filter({ hasText: "Lattice cannot be played" }).waitFor();
@@ -404,7 +406,7 @@ test("the sign-in wall lays out cleanly @ phone", async ({ page }, testInfo) => 
   await page.route("**/api/**", (r) =>
     r.fulfill({
       status: 401,
-      json: { code: "not_authenticated", message: "sign in to continue" },
+      json: { code: "not_authenticated", message: "sign in to continue" } satisfies ErrorBody,
     }),
   );
   await page.goto("/");
@@ -761,7 +763,7 @@ test("studio — with no voice yet, the page offers the way to make one", async 
   // The next move is offered before anything is refused.
   await mockApi(page);
   await page.route("**/api/recordings", (r) =>
-    r.fulfill({ json: [{ ...META, role: "material" }] }),
+    r.fulfill({ json: [{ ...META, role: "material" }] satisfies RecordingMeta[] }),
   );
   await page.goto("/");
 
@@ -788,7 +790,7 @@ test("a question mark opens the explanation, and it is not there until asked", a
   await mockApi(page);
   // The studio's one explanation is on the no-voice card.
   await page.route("**/api/recordings", (r) =>
-    r.fulfill({ json: [{ ...META, role: "material" }] }),
+    r.fulfill({ json: [{ ...META, role: "material" }] satisfies RecordingMeta[] }),
   );
   await page.goto("/");
 
