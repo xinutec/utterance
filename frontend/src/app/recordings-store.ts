@@ -50,6 +50,7 @@ export class RecordingsStore {
       next: (speaker) => {
         this.corners.set(speaker.corners);
       },
+      // dev-lint: allow-ignored-error keeps the old corners; the chart falls back to generic positions and says so
       error: () => {},
     });
   }
