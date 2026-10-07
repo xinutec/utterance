@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Page, type Route } from "@playwright/test";
 // The fleet-shared layout harness (@xinutec/ui-harness), from node_modules.
 import {
-  expectNoTextOverlaps,
-  expectNoHorizontalOverflow,
+  expectCleanLayout,
   expectNoStarvedText,
   expectNoOccludedControls,
   expectViewportIsPhone,
@@ -276,8 +275,7 @@ test("studio — the take list lays out cleanly @ phone", async ({ page }, testI
   await page.goto("/");
   await page.getByText("brother — take 1").first().waitFor();
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -312,8 +310,7 @@ test("take — its voiceprint and controls lay out cleanly @ phone", async ({ pa
   // The knobs are the densest thing on the page.
   await page.locator("app-mapping-controls mat-slider").last().waitFor();
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
   await expectSomewhereToScrollFrom(page);
@@ -326,8 +323,7 @@ test("studio — empty state lays out cleanly @ phone", async ({ page }, testInf
   await page.goto("/");
   await page.getByText("Nothing recorded yet.").waitFor();
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -339,8 +335,7 @@ test("calibration — the guided steps lay out cleanly @ phone", async ({ page }
   await page.goto("/calibrate");
   await page.getByText('Hold "ah" for about ten seconds, as steady as you can.').waitFor();
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -352,8 +347,7 @@ test("calibration — the longest step still fits @ phone", async ({ page }, tes
   await page.getByRole("button", { name: "Talk normally" }).click();
   await page.getByText("Talk about anything for about a minute.").waitFor();
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -371,8 +365,7 @@ test("studio — the derived scale lays out cleanly @ phone", async ({ page }, t
     window.scrollTo(0, 0);
   });
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -393,8 +386,7 @@ test("studio — a scale that carries no lattice says so @ phone", async ({ page
   await page.evaluate(() => {
     window.scrollTo(0, 0);
   });
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -415,8 +407,7 @@ test("the sign-in wall lays out cleanly @ phone", async ({ page }, testInfo) => 
   // Replaced, not covered: a rendered app behind it would already have fetched.
   await expect(page.locator("mat-toolbar")).toHaveCount(0);
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -435,8 +426,7 @@ test("compare — two renders side by side lay out cleanly @ phone", async ({ pa
     window.scrollTo(0, 0);
   });
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
@@ -501,8 +491,7 @@ test("compare — both settings panels open lay out cleanly @ phone", async ({ p
     window.scrollTo(0, 0);
   });
 
-  await expectNoTextOverlaps(page, testInfo);
-  await expectNoHorizontalOverflow(page, testInfo);
+  await expectCleanLayout(page, testInfo);
   await expectNoStarvedText(page, testInfo);
   await expectNoOccludedControls(page, testInfo);
 });
