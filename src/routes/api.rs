@@ -21,11 +21,13 @@ use utterance_mapping::params::{Knob, KnobQuery};
 ///
 /// An `<audio>` element only moves its playhead to a position it can fetch, and
 /// without `Accept-Ranges` it cannot ask — so a seek is silently dropped and the
-/// page looks broken. Both audio endpoints go through here.
-fn audio_response(bytes: Vec<u8>, range: Option<&str>) -> Response {
+/// page looks broken. Both audio endpoints go through here, each saying how the
+/// client may keep what it got.
+fn audio_response(bytes: Vec<u8>, range: Option<&str>, cache: &str) -> Response {
     let total = bytes.len() as u64;
     let common = [
         (header::CONTENT_TYPE, "audio/wav".to_string()),
+        (header::CACHE_CONTROL, cache.to_string()),
         // Advertised even on a full response: it is how the element learns that
         // seeking is available.
         (header::ACCEPT_RANGES, "bytes".to_string()),
@@ -185,6 +187,8 @@ pub async fn audio(
     Ok(audio_response(
         bytes,
         headers.get(header::RANGE).and_then(|v| v.to_str().ok()),
+        // A recording's file never changes under its id.
+        "private, max-age=31536000, immutable",
     ))
 }
 
@@ -555,6 +559,7 @@ pub async fn render(
     Ok(audio_response(
         bytes,
         headers.get(header::RANGE).and_then(|v| v.to_str().ok()),
+        "private, no-cache",
     ))
 }
 

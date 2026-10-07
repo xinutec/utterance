@@ -231,6 +231,11 @@ async fn a_recording_can_be_listed_fetched_and_deleted() {
         .unwrap();
     assert_eq!(audio.status(), StatusCode::OK);
     assert_eq!(audio.headers()["content-type"], "audio/wav");
+    // A recording's file never changes under its id.
+    assert_eq!(
+        audio.headers()["cache-control"],
+        "private, max-age=31536000, immutable"
+    );
     assert_eq!(
         &audio.into_body().collect().await.unwrap().to_bytes()[..4],
         b"RIFF"
@@ -432,6 +437,27 @@ async fn fetch(app: &TestApp, path: &str) -> (StatusCode, String, Vec<u8>) {
         .to_string();
     let bytes = res.into_body().collect().await.unwrap().to_bytes().to_vec();
     (status, content_type, bytes)
+}
+
+/// A render follows the mapping, which changes with the code: revalidate.
+#[tokio::test]
+async fn a_render_is_revalidated_not_replayed() {
+    let app = TestApp::new();
+    let (status, body) = upload(&app, "calibration", wav_fixture_moving_vowel(8.0)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let id = body["meta"]["id"].as_str().unwrap().to_string();
+    let render = app
+        .router
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/recordings/{id}/render"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(render.status(), StatusCode::OK);
+    assert_eq!(render.headers()["cache-control"], "private, no-cache");
 }
 
 #[tokio::test]
