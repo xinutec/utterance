@@ -218,7 +218,8 @@ async fn a_callback_nobody_started_is_refused() {
     let app = TestApp::new(Some(gate()));
     let (status, body) = get(&app, "/auth/callback?code=abc&state=forged", None).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
-    assert!(body.contains("bad_login_state"), "{body}");
+    // A page for the browser Nextcloud sent here, not the API's JSON.
+    assert!(body.contains("Sign-in did not finish"), "{body}");
 }
 
 #[tokio::test]

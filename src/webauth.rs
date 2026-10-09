@@ -411,6 +411,7 @@ pub fn routes<S: Clone + Send + Sync + 'static>(auth: Arc<WebAuth>) -> Router<S>
     let me_auth = auth;
 
     Router::new()
+        // dev-lint: allow-nav-not-page its one bare status is the response builder's failure, which a valid Location cannot reach
         .route(
             "/login",
             get(move |Query(query): Query<LoginQuery>| {
@@ -474,14 +475,14 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
         .as_deref()
         .and_then(|s| verify::<LoginState>(&auth.session_secret, s, now))
     else {
-        return problem(
+        return callback_problem(
             StatusCode::FORBIDDEN,
             ErrorCode::BadLoginState,
             "that sign-in link has expired — start again",
         );
     };
     let Some(code) = query.code.filter(|c| !c.is_empty()) else {
-        return problem(
+        return callback_problem(
             StatusCode::BAD_REQUEST,
             ErrorCode::NoAuthorizationCode,
             "Nextcloud returned no authorization code",
@@ -493,7 +494,7 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
         Err(why) => {
             // Logged, not returned: the detail means nothing to the person.
             tracing::error!("nextcloud sign-in failed: {why:#}");
-            return problem(
+            return callback_problem(
                 StatusCode::BAD_GATEWAY,
                 ErrorCode::SignInFailed,
                 "could not complete the sign-in with Nextcloud",
@@ -501,7 +502,7 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
         }
     };
     if !auth.permits(&session.user_id) {
-        return problem(
+        return callback_problem(
             StatusCode::FORBIDDEN,
             ErrorCode::NotPermitted,
             &format!("{} is not on the list for this app", session.user_id),
@@ -520,6 +521,40 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
 
 /// A 302 with an optional cookie. Every cookie is `Secure`: a session in clear
 /// text on a shared network is what the gate exists to prevent.
+/// A sign-in that could not be finished, drawn for the browser: `/auth/callback`
+/// is where Nextcloud sends it, and JSON there reads as the app being broken.
+fn sign_in_problem(status: StatusCode, said: &str) -> Response {
+    let said = said
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;");
+    let body = format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
+         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+         <title>Sign-in did not finish</title><style>\
+         body{{font:16px/1.5 system-ui,-apple-system,sans-serif;margin:0;\
+         min-height:100vh;display:grid;place-items:center;padding:1.5rem;color:#1a1a1a}}\
+         main{{max-width:26rem}}h1{{font-size:1.2rem;margin:0 0 .5rem}}\
+         p{{margin:0 0 1.5rem;color:#555}}\
+         a{{display:inline-block;padding:.65rem 1.1rem;border-radius:.5rem;\
+         background:#1b6ac9;color:#fff;text-decoration:none}}\
+         </style></head><body><main><h1>Sign-in did not finish</h1>\
+         <p>{said}</p><a href=\"/login\">Try again</a></main></body></html>"
+    );
+    (
+        status,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        body,
+    )
+        .into_response()
+}
+
+/// A refused callback: logged under its code, shown to the person as a page.
+fn callback_problem(status: StatusCode, code: ErrorCode, said: &str) -> Response {
+    tracing::warn!(code = code.name(), "sign-in refused: {said}");
+    sign_in_problem(status, said)
+}
+
 fn redirect(location: &str, set_cookie: Option<String>) -> Response {
     let mut response = Response::builder()
         .status(StatusCode::FOUND)
