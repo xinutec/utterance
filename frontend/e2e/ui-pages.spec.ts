@@ -481,6 +481,46 @@ test("compare — hearing B mutes A and leaves B audible", async ({ page }) => {
   expect(muted).toEqual([true, false]);
 });
 
+/** A 3 s, 440 Hz tone at `amplitude` of full scale, as 16-bit mono WAV. */
+function tone(amplitude: number): Buffer {
+  const rate = 8_000;
+  const samples = rate * 3;
+  const wav = Buffer.alloc(44 + samples * 2);
+  wav.write("RIFF", 0);
+  wav.writeUInt32LE(36 + samples * 2, 4);
+  wav.write("WAVEfmt ", 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24);
+  wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write("data", 36);
+  wav.writeUInt32LE(samples * 2, 40);
+  for (let i = 0; i < samples; i++) {
+    wav.writeInt16LE(Math.round(amplitude * 32_767 * Math.sin((2 * Math.PI * 440 * i) / rate)), 44 + i * 2);
+  }
+  return wav;
+}
+
+test("compare — the louder render is turned down to the quieter one's loudness", async ({ page }) => {
+  await mockApi(page);
+  // A twice B's amplitude: 6 dB louder, which would decide the comparison.
+  await page.route(/\/render/, (r) =>
+    r.fulfill({ contentType: "audio/wav", body: tone(r.request().url().includes("bind=0") ? 0.25 : 0.5) }),
+  );
+  await page.goto("/compare");
+  await page.getByRole("button", { name: "Render both" }).click();
+
+  await expect(page.locator("app-ab-player .note")).toContainText("A is turned down 6.0 dB");
+  const volumes = await page.locator("app-ab-player audio").evaluateAll((els) =>
+    els.map((el) => (el as HTMLAudioElement).volume),
+  );
+  expect(volumes[0]).toBeCloseTo(0.5, 2);
+  expect(volumes[1]).toBe(1);
+});
+
 test("compare — both settings panels open lay out cleanly @ phone", async ({ page }, testInfo) => {
   // Both settings panels open: the grid must drop to one column.
   await mockApi(page);

@@ -9,12 +9,15 @@ import {
   linkedSignal,
   model,
   output,
+  signal,
   viewChild,
 } from "@angular/core";
 import { MatButtonModule } from "@angular/material/button";
 import { MatButtonToggleModule } from "@angular/material/button-toggle";
 import { MatIconModule } from "@angular/material/icon";
 import { MatProgressBarModule } from "@angular/material/progress-bar";
+
+import { integratedLoudness, matchingVolumes } from "../../shared/loudness";
 
 /** Which side is audible. */
 export type Side = "a" | "b";
@@ -23,6 +26,10 @@ export type Side = "a" | "b";
  * Two renders played at once with one muted, so switching sides is instant and
  * lands on the same moment of the piece. One element whose source swaps would
  * reload and reseek, and the gap defeats the comparison.
+ *
+ * The louder side is turned down to the quieter one's loudness: renders are
+ * peak-normalised, so one with more noise in it plays louder, and the louder of
+ * two otherwise equal sounds tends to be the one preferred.
  */
 @Component({
   selector: "app-ab-player",
@@ -73,6 +80,22 @@ export class AbPlayer {
   });
   readonly pending = computed(() => this.waiting().size > 0);
 
+  /**
+   * What each element plays: the fetched render's bytes, so the render is
+   * requested once and the bytes measured are the bytes heard.
+   */
+  readonly source = signal<Record<Side, string | null>>({ a: null, b: null });
+
+  /** Each side's integrated loudness in LUFS; `null` until known or unmeasurable. */
+  private readonly loudness = signal<Record<Side, number | null>>({ a: null, b: null });
+  readonly volumes = computed(() => matchingVolumes(this.loudness().a, this.loudness().b));
+  /** Which side is turned down, and by how many dB, for the note. */
+  readonly matched = computed(() => {
+    const v = this.volumes();
+    const side: Side | null = v.a < 1 ? "a" : v.b < 1 ? "b" : null;
+    return side ? { side, db: -20 * Math.log10(v[side]) } : null;
+  });
+
   private readonly playerA = viewChild<ElementRef<HTMLAudioElement>>("playerA");
   private readonly playerB = viewChild<ElementRef<HTMLAudioElement>>("playerB");
 
@@ -81,6 +104,56 @@ export class AbPlayer {
     effect(() => {
       this.loading.set(this.pending());
     });
+    effect((onCleanup) => this.fetch("a", this.a(), onCleanup));
+    effect((onCleanup) => this.fetch("b", this.b(), onCleanup));
+    effect(() => {
+      const v = this.volumes();
+      const [a, b] = [this.playerA()?.nativeElement, this.playerB()?.nativeElement];
+      if (a) a.volume = v.a;
+      if (b) b.volume = v.b;
+    });
+  }
+
+  /**
+   * Fetch one side's render, hand its bytes to the element and measure them. A
+   * new URL abandons the old fetch, so a slow render cannot land on top of the
+   * one that replaced it.
+   */
+  private fetch(side: Side, url: string, onCleanup: (cleanup: () => void) => void): void {
+    const abort = new AbortController();
+    let objectUrl: string | null = null;
+    onCleanup(() => {
+      abort.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    });
+    this.loudness.update((l) => ({ ...l, [side]: null }));
+    this.source.update((s) => ({ ...s, [side]: null }));
+
+    void (async () => {
+      let bytes: ArrayBuffer;
+      try {
+        const response = await fetch(url, { signal: abort.signal });
+        if (!response.ok) throw new Error(`${response.status}`);
+        bytes = await response.arrayBuffer();
+      } catch {
+        if (!abort.signal.aborted) this.broken(side);
+        return;
+      }
+      if (abort.signal.aborted) return;
+      objectUrl = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+      this.source.update((s) => ({ ...s, [side]: objectUrl }));
+
+      // Decoding detaches its buffer, so it gets a copy. A render that will not
+      // decode still plays if the element can; it just is not level-matched.
+      try {
+        const audio = await new OfflineAudioContext(1, 1, 44_100).decodeAudioData(bytes.slice(0));
+        if (abort.signal.aborted) return;
+        const channels = Array.from({ length: audio.numberOfChannels }, (_, c) => audio.getChannelData(c));
+        this.loudness.update((l) => ({ ...l, [side]: integratedLoudness(channels, audio.sampleRate) }));
+      } catch {
+        // Unmatched levels are shown by the note's absence; nothing to recover.
+      }
+    })();
   }
 
   /** A player has enough of its render to start. */

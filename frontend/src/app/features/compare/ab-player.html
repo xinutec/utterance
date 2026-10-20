@@ -30,12 +30,16 @@
 <p class="note">
   Both are playing at once and one is muted, so switching is instant and at the same moment of
   the piece. Click the chart to move both.
+  @if (matched(); as m) {
+    {{ m.side.toUpperCase() }} is turned down {{ m.db | number: "1.1-1" }} dB to match the other's
+    loudness, so being louder cannot decide.
+  }
 </p>
 
 <audio
   #playerA
   preload="auto"
-  [src]="a()"
+  [attr.src]="source().a"
   (canplay)="ready('a')"
   (error)="broken('a')"
   (timeupdate)="onTimeUpdate()"
@@ -44,7 +48,7 @@
 <audio
   #playerB
   preload="auto"
-  [src]="b()"
+  [attr.src]="source().b"
   (canplay)="ready('b')"
   (error)="broken('b')"
   (ended)="onEnded()"
