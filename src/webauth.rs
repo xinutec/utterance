@@ -273,11 +273,16 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// A redirect target that cannot leave this origin: only a single-slash absolute
-/// path survives, so `?return_to=` cannot become an open redirect.
+/// A redirect target that cannot leave this origin, so `?return_to=` cannot
+/// become an open redirect. Judged where the browser lands, not by the string's
+/// first characters: its URL parser drops tabs and newlines and folds `\` to
+/// `/`, so `/\t/host` is `//host`. Returns the path as that parser resolves it.
 pub fn safe_return_to(raw: Option<&str>) -> String {
-    match raw {
-        Some(path) if path.starts_with('/') && !path.starts_with("//") => path.to_string(),
+    let site = url::Url::parse("https://site.invalid/").expect("a fixed URL");
+    match raw.filter(|p| p.starts_with('/')).map(|p| site.join(p)) {
+        Some(Ok(dest)) if dest.origin() == site.origin() => {
+            dest[url::Position::BeforePath..].to_string()
+        }
         _ => "/".to_string(),
     }
 }

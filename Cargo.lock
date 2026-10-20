@@ -2104,6 +2104,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ts-rs",
+ "url",
  "utterance-analysis",
  "utterance-mapping",
  "utterance-realisation",

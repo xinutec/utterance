@@ -79,6 +79,9 @@ serde_json = "1"
 # Content-addressed recording ids: the same audio must land on the same id.
 sha2 = "0.11"
 anyhow = "1"
+# Judges a sign-in's return target the way the browser will parse it: the WHATWG
+# parser drops tabs and newlines and folds `\` to `/`, so first characters lie.
+url = "2.5"
 # Used only by `src/bin/beating.rs`, which measures the rendered audio rather
 # than the score — the same FFT the analysis layer uses, so there is one
 # implementation in the workspace and not two.

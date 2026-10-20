@@ -365,6 +365,31 @@ async fn only_a_local_path_survives_as_a_return_target() {
     assert_eq!(utterance::webauth::safe_return_to(None), "/");
 }
 
+/// Where a browser goes is decided by its URL parser, which drops tabs and
+/// newlines and folds `\` to `/`: `/\t/evil` is `//evil`. So the check is the
+/// destination as that parser resolves it, not the string's first characters.
+#[test]
+fn every_accepted_return_target_resolves_to_this_site() {
+    let site = url::Url::parse("https://utterance.example/").unwrap();
+    for attempt in [
+        "/\t/evil.example",
+        "/\n/evil.example",
+        "/\r/evil.example",
+        "/\\evil.example",
+        "/\t\\evil.example",
+        "/ /evil.example",
+        "/compare?take=abc",
+    ] {
+        let dest = utterance::webauth::safe_return_to(Some(attempt));
+        let landed = site.join(&dest).unwrap();
+        assert_eq!(
+            landed.host_str(),
+            Some("utterance.example"),
+            "{attempt:?} was let through as {dest:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn an_empty_allowlist_admits_any_nextcloud_user() {
     // An empty list admits anyone — the documented meaning, and a hole if read
