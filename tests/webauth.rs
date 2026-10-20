@@ -577,3 +577,52 @@ fn the_allowlist_is_split_trimmed_and_stripped_of_blanks() {
     assert!(!auth.permits(""));
     assert!(!auth.permits("someone-else"));
 }
+
+/// Login CSRF (RFC 6749 §10.12): a state this server signed, fetched by another
+/// browser from /login, is refused without this browser's sign-in cookie. With
+/// it the callback gets past the state and stops at the missing code, before
+/// any call to Nextcloud.
+#[tokio::test]
+async fn a_valid_state_from_another_browser_is_refused() {
+    let app = TestApp::new(Some(gate()));
+    let response = app
+        .router
+        .clone()
+        .oneshot(Request::get("/login").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let location = response.headers()[header::LOCATION].to_str().unwrap();
+    let state = location
+        .split(['?', '&'])
+        .find_map(|p| p.strip_prefix("state="))
+        .expect("a state")
+        .to_string();
+    let pending = response
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find(|v| v.starts_with("utterance_signin="))
+        .expect("login sets the sign-in cookie")
+        .to_string();
+    assert!(pending.contains("HttpOnly"), "{pending}");
+    let carried = pending.split(';').next().unwrap();
+
+    let callback = format!("/auth/callback?state={state}");
+    let (status, body) = get(&app, &callback, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    let (status, body) = get(&app, &callback, Some(carried)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+}
+
+/// The proof the exchange demands is made only by a present `state` equal to
+/// the one the browser carries.
+#[test]
+fn the_proof_is_made_only_by_a_present_matching_state() {
+    use utterance::webauth::StateMatched;
+    assert!(StateMatched::check("n0nce", "n0nce").is_some());
+    assert!(StateMatched::check("", "").is_none());
+    assert!(StateMatched::check("", "n0nce").is_none());
+    assert!(StateMatched::check("nonce", "n0nce").is_none());
+    assert!(StateMatched::check("n0nc", "n0nce").is_none());
+}

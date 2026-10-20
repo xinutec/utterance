@@ -44,6 +44,9 @@ const DEFAULT_NC_BASE_URL: &str = "https://dash.xinutec.org";
 const DEFAULT_REDIRECT_URI: &str = "https://utterance.xinutec.org/auth/callback";
 
 const COOKIE_NAME: &str = "utterance_session";
+/// The sign-in this browser started: the `state` it was sent with, so the
+/// callback can prove the URL's `state` came back to the same browser.
+const PENDING_COOKIE: &str = "utterance_signin";
 
 /// How long a sign-in lasts: long enough not to interrupt listening.
 const SESSION_TTL: Duration = Duration::from_hours(7 * 24);
@@ -302,12 +305,20 @@ fn urlencode(raw: &str) -> String {
 
 /// The session a request carries, if any.
 fn session_from(auth: &WebAuth, headers: &HeaderMap, now: SystemTime) -> Option<Session> {
+    verify(
+        &auth.session_secret,
+        cookie_named(headers, COOKIE_NAME)?,
+        now,
+    )
+}
+
+/// The value of the cookie called `name`, when the request carries one.
+fn cookie_named<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     let cookies = headers.get(header::COOKIE)?.to_str().ok()?;
-    let token = cookies.split(';').map(str::trim).find_map(|pair| {
-        pair.strip_prefix(COOKIE_NAME)
-            .and_then(|r| r.strip_prefix('='))
-    })?;
-    verify(&auth.session_secret, token, now)
+    cookies
+        .split(';')
+        .map(str::trim)
+        .find_map(|pair| pair.strip_prefix(name).and_then(|r| r.strip_prefix('=')))
 }
 
 /// Refuse anything under `/api` that arrives without a session. The browser is
@@ -371,8 +382,25 @@ struct OcsUser {
     displayname: Option<String>,
 }
 
+/// Proof that a callback's `state` equalled the nonce this server stored for
+/// the sign-in. [`identify`] takes one by value and only
+/// [`StateMatched::check`] makes one, so no code is redeemed on a path that
+/// skipped the comparison (RFC 6749 §10.12; dev-lint
+/// DL-RUST-OAUTH-EXCHANGE-UNPROVEN checks the shape).
+#[derive(Debug, PartialEq, Eq)]
+pub struct StateMatched(());
+
+impl StateMatched {
+    /// The proof, when `url_state` is present and equals `stored`.
+    pub fn check(url_state: &str, stored: &str) -> Option<Self> {
+        use subtle::ConstantTimeEq;
+        let equal: bool = url_state.as_bytes().ct_eq(stored.as_bytes()).into();
+        (!url_state.is_empty() && equal).then_some(Self(()))
+    }
+}
+
 /// Trade the authorization code for a token, then ask who it belongs to.
-async fn identify(auth: &WebAuth, code: &str) -> anyhow::Result<Session> {
+async fn identify(auth: &WebAuth, code: &str, _proof: StateMatched) -> anyhow::Result<Session> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()?;
@@ -430,15 +458,19 @@ pub fn routes<S: Clone + Send + Sync + 'static>(auth: Arc<WebAuth>) -> Router<S>
                         SystemTime::now(),
                         STATE_TTL,
                     );
-                    redirect(&auth.authorize_url(&state), None)
+                    let pending = format!(
+                        "{PENDING_COOKIE}={state}; Path=/; Max-Age={}; HttpOnly; SameSite=Lax; Secure",
+                        STATE_TTL.as_secs()
+                    );
+                    redirect(&auth.authorize_url(&state), Some(pending))
                 }
             }),
         )
         .route(
             "/auth/callback",
-            get(move |Query(query): Query<CallbackQuery>| {
+            get(move |headers: HeaderMap, Query(query): Query<CallbackQuery>| {
                 let auth = callback_auth.clone();
-                async move { callback(auth, query).await }
+                async move { callback(auth, &headers, query).await }
             }),
         )
         .route(
@@ -473,13 +505,17 @@ pub fn routes<S: Clone + Send + Sync + 'static>(auth: Arc<WebAuth>) -> Router<S>
         )
 }
 
-async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
+async fn callback(auth: Arc<WebAuth>, headers: &HeaderMap, query: CallbackQuery) -> Response {
     let now = SystemTime::now();
-    let Some(state) = query
-        .state
-        .as_deref()
-        .and_then(|s| verify::<LoginState>(&auth.session_secret, s, now))
-    else {
+    // A signed state proves this server issued it, not that THIS browser asked:
+    // anyone can fetch one from /login, so it must also equal the one this
+    // browser's cookie carries (login CSRF, RFC 6749 §10.12).
+    let url_state = query.state.as_deref().unwrap_or_default();
+    let pending = cookie_named(headers, PENDING_COOKIE).unwrap_or_default();
+    let (Some(proof), Some(state)) = (
+        StateMatched::check(url_state, pending),
+        verify::<LoginState>(&auth.session_secret, url_state, now),
+    ) else {
         return callback_problem(
             StatusCode::FORBIDDEN,
             ErrorCode::BadLoginState,
@@ -494,7 +530,7 @@ async fn callback(auth: Arc<WebAuth>, query: CallbackQuery) -> Response {
         );
     };
 
-    let session = match identify(&auth, &code).await {
+    let session = match identify(&auth, &code, proof).await {
         Ok(session) => session,
         Err(why) => {
             // Logged, not returned: the detail means nothing to the person.

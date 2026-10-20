@@ -90,6 +90,7 @@ thiserror = "2"
 # Sign-in. All three are used only by `webauth`, which is inert unless the
 # Nextcloud credentials are in the environment — see that module.
 hmac = "0.13"
+subtle = "2"
 base64 = "0.23"
 # `default-tls` is rustls here, so this pulls in no OpenSSL and needs no system
 # library at build time — which is what keeps the container image and the nix
