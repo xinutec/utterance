@@ -280,6 +280,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// become an open redirect. Judged where the browser lands, not by the string's
 /// first characters: its URL parser drops tabs and newlines and folds `\` to
 /// `/`, so `/\t/host` is `//host`. Returns the path as that parser resolves it.
+// dev-lint: sanitises redirect — resolved where the browser lands, and only the same origin passes
 pub fn safe_return_to(raw: Option<&str>) -> String {
     let site = url::Url::parse("https://site.invalid/").expect("a fixed URL");
     match raw.filter(|p| p.starts_with('/')).map(|p| site.join(p)) {
