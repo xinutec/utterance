@@ -21,6 +21,11 @@ allowBuilds:
   msgpackr-extract: true
   "@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/46178d2d0b6781e7bdd5430ecaa0c27bfae386e9": true
 
+overrides:
+  # @angular/build 22.2.3 pins vite 8.3.0, whose launch-editor has three advisories
+  # fixed in 8.3.3. Drop once Angular's own pin passes it.
+  vite: ~8.3.4
+
 # The catalog names only versions a day old (dev-lint tables/deps.dhall);
 # strict, so a younger install fails instead of writing itself an exclusion.
 minimumReleaseAge: 1440
