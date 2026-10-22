@@ -10,6 +10,7 @@ import {
   expectRecoversFromMissingBundle,
   expectUpInTheBar,
 } from "@xinutec/ui-harness";
+import { routesFrom, screens } from "@xinutec/ui-harness/routes";
 
 import type {
   Controls,
@@ -238,6 +239,19 @@ async function mockApi(page: Page): Promise<void> {
   await page.route("**/score*", (r) =>
     r.fulfill({ json: score(r.request().url().includes("bind=0") ? 2 : 0) }),
   );
+}
+
+/** Every screen in the route table (`routes.json`), not only those a test opens. */
+for (const { route, url } of screens(
+  routesFrom("e2e/routes.json"),
+  { id: META.id },
+)) {
+  test(`${route} lays out cleanly @ phone width`, async ({ page }, testInfo) => {
+    await mockApi(page);
+    await page.goto(url);
+    await page.waitForLoadState("networkidle");
+    await expectCleanLayout(page, testInfo);
+  });
 }
 
 /**

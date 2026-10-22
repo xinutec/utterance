@@ -1,0 +1,8 @@
+{
+  "routes": [
+    "/",
+    "/take/:id",
+    "/calibrate",
+    "/compare"
+  ]
+}
