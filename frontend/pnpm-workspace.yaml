@@ -22,8 +22,8 @@ allowBuilds:
   "@xinutec/ui-harness@https://codeload.github.com/xinutec/ui-harness/tar.gz/a3848c2306ba1a67e910baed8dc2870936ad20ea": true
 
 overrides:
-  # @angular/build 22.2.3 pins vite 8.3.0, whose launch-editor has three advisories
-  # fixed in 8.3.3. Drop once Angular's own pin passes it.
+  # One vite for the workspace: @angular/build pins its own exact vite and vitest
+  # resolves another, so without this the lock carries both.
   vite: ~8.3.7
 
 # The catalog names only versions a day old (dev-lint tables/deps.dhall);
