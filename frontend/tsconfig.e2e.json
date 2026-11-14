@@ -1,6 +1,6 @@
 // The layout harness and the Playwright config, type-checked.
 //
-// ⚠ **Nothing else reads these files.** `tsconfig.app.json` reaches only what
+// **Nothing else reads these files.** `tsconfig.app.json` reaches only what
 // `src/main.ts` imports and `tsconfig.spec.json` only `src/**/*.spec.ts`, so the
 // e2e tree is in neither; and Playwright transforms specs with esbuild, which
 // strips types without checking them. A planted `const x: number = "text"`

@@ -35,7 +35,7 @@ name: build
 #
 # dev-lint: allow-gate-row-not-in-ci-the-package-builds-what-this-repo-publishes
 #   `nix build .#default` needs nix, and this job runs in the image's rust
-#   container with no nix in it. ⚠ **CI is not a substitute for that row**, and
+#   container with no nix in it. **CI is not a substitute for that row**, and
 #   the difference is the point of having it: the `tests` step above runs cargo
 #   against the checkout, while the row builds the derivation — committed
 #   lockfile, /nix/store, the source fileset — and a repo can fail that with

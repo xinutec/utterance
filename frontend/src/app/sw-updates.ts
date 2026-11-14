@@ -16,7 +16,7 @@ const RECOVERY_KEY = 'utterance.sw-recovery-attempted';
 
 /**
  * Self-update — the Angular adapter for `@xinutec/ui-harness/sw-updates`, whose
- * policy is tested there against a fake. ⚠ ngsw alone caches a build that never
+ * policy is tested there against a fake. ngsw alone caches a build that never
  * learns a newer one exists, serving yesterday's app while looking fine.
  */
 @Injectable({ providedIn: 'root' })

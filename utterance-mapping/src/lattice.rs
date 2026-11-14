@@ -309,7 +309,7 @@ pub fn settle(previous: Triangle, x: f32, y: f32, hold: f32) -> Triangle {
 /// neighbour for two frames and back: the mouth really crossed, then returned.
 /// So a departure must last `frames` in a row before the harmony follows.
 ///
-/// ⚠ The count is of consecutive frames wanting to leave, not frames in one new
+/// The count is of consecutive frames wanting to leave, not frames in one new
 /// triangle: a glide rests in no cell, and waiting for one would freeze the
 /// harmony for the whole gesture. Counting departures, the walk follows the
 /// mouth, lagging by `frames`.

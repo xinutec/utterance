@@ -96,7 +96,7 @@ pub fn flux(spectra: &[Vec<Complex32>], level_db: &[f32]) -> Vec<f32> {
 ///
 /// Flux is relative, so room tone shuffling between bins scores like an attack,
 /// and the local threshold is most permissive exactly there. Judged against the
-/// take's own floor. ⚠ Over a short window *starting* at the candidate: an onset
+/// take's own floor. Over a short window *starting* at the candidate: an onset
 /// is the moment the level is still climbing, so the frame alone would
 /// attenuate every real one.
 fn silence_gate(level_db: &[f32], floor: f32, i: usize) -> f32 {

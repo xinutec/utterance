@@ -95,7 +95,7 @@ async fn the_content_hashed_bundle_may_be_kept() {
     assert_eq!(cc, "public, max-age=31536000, immutable");
 }
 
-/// ⚠ A 304 must carry the headers a 200 would, or every revalidation becomes a
+/// A 304 must carry the headers a 200 would, or every revalidation becomes a
 /// full fetch — which a `!status.is_success()` guard would cause.
 #[tokio::test]
 async fn a_revalidated_asset_is_still_told_it_may_be_kept() {

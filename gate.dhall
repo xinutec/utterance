@@ -134,7 +134,7 @@ in  { name = "utterance"
         }
       , {-  A green gate has to mean the package this repo PUBLISHES still builds.
 
-            ⚠ This is NOT the same work as the `tests` row above, though it looks
+            This is NOT the same work as the `tests` row above, though it looks
             like it. That row runs cargo in the dev shell against the working
             tree; this one builds the derivation, which resolves dependencies
             from the committed lockfile and compiles inside /nix/store, running

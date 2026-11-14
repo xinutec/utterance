@@ -16,7 +16,7 @@ pub const PROFILE_VERSION: u32 = 2;
 
 /// Percentiles taken as the low and high edge of a measured range.
 ///
-/// ⚠ Not the minimum and maximum: per-frame formant assignment puts a few frames
+/// Not the minimum and maximum: per-frame formant assignment puts a few frames
 /// of any take somewhere the speaker never was, and a true extreme would be
 /// defined by them. A speaker spends far more than 5% of a take near their
 /// corners, so trimming costs nothing real.
